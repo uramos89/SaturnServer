@@ -3,7 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
-import { GoogleGenerativeAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import fs from "fs";
 import crypto from "crypto";
 import { sshAgent, type SSHConnectionConfig, type SystemMetrics } from "./src/lib/ssh-agent.js";
@@ -167,9 +167,11 @@ async function sendNotification(type: string, title: string, message: string, se
 // LLM Adapter Logic
 async function getLLMResponse(provider: string, prompt: string) {
   if (provider === 'gemini') {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    const result = await model.generateContent(prompt);
-    return (await result.response).text();
+    const result = await genAI.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: prompt,
+    });
+    return result.text;
   } else if (provider === 'openai') {
     const axios = (await import("axios")).default;
     const response = await axios.post("https://api.openai.com/v1/chat/completions", {
@@ -256,7 +258,7 @@ if (serverCount.count === 0) {
   insertContext.run("_INDEX/INDEX_MASTER.md", "# Index Master\n- TECH: General documentation\n- SSH: Connection management\n- CONTRACTS: Root rules\n- AUDIT: Execution history", "INDEX", new Date().toISOString());
 }
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 async function startServer() {
   const app = express();

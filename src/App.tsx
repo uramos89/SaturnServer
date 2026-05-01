@@ -702,7 +702,9 @@ export default function App() {
                     </h3>
                     <div className="divide-y divide-slate-800">
                       {servers.map(server => (
-                        <ServerRow key={server.id} server={server} onClick={() => setActiveTab('servers')} t={t} />
+                        <div key={server.id}>
+                          <ServerRow server={server} onClick={() => setActiveTab('servers')} t={t} />
+                        </div>
                       ))}
                     </div>
                   </div>
