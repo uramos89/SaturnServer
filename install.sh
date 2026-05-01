@@ -31,7 +31,7 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/saturn}"
 REPO_URL="${REPO_URL:-https://github.com/uramos89/SaturnServer.git}"
 BRANCH="${BRANCH:-main}"
 NODE_VERSION="${NODE_VERSION:-20}"
-APP_PORT="${APP_PORT:-3000}"
+APP_PORT="${APP_PORT:-80}"
 PM2_APP_NAME="${PM2_APP_NAME:-saturn}"
 
 # ─── ASCII Art: Saturn with Rings ──────────────────────────────────────────
@@ -106,17 +106,18 @@ log "Dependencies installed."
 # ─── 5. Configure environment variables ────────────────────────────────────
 info "Step 5/7: Configuring environment variables..."
 
-# Prompt for GEMINI_API_KEY if missing or placeholder
+# Configure .env — use GEMINI_API_KEY from env if set, otherwise placeholder
 if [[ ! -f .env ]] || ! grep -q "GEMINI_API_KEY=" .env || grep -q 'GEMINI_API_KEY=""' .env || grep -q "GEMINI_API_KEY=\"MY_GEMINI_API_KEY\"" .env; then
-  echo -e "${YELLOW}Enter your GEMINI_API_KEY (get one at https://aistudio.google.com):${NC}"
-  read -rp "> " GEMINI_KEY
+  GEMINI_KEY="${GEMINI_API_KEY:-}"
   if [[ -z "$GEMINI_KEY" ]]; then
-    err "GEMINI_API_KEY is required. Run the script again."
+    warn "GEMINI_API_KEY not set. Using placeholder — AI features will be limited."
+    GEMINI_KEY="placeholder_key_set_during_install"
   fi
   cat > .env <<EOF
 GEMINI_API_KEY="${GEMINI_KEY}"
 NODE_ENV=production
 APP_URL="http://localhost:${APP_PORT}"
+PORT=${APP_PORT}
 EOF
   log ".env file created at $INSTALL_DIR/.env"
 else
