@@ -36,10 +36,8 @@ try {
     $result = Run-Root $session "chown -R saturno:saturno /opt/saturn"
     Write-Output $result.Output
     
-    # 3. Delete existing database (fresh start → onboarding wizard)
-    Write-Output "=== 3. Deleting existing database for fresh onboarding ==="
-    $result = Run-Root $session "rm -f /opt/saturn/saturn.db /opt/saturn/saturn.db-wal /opt/saturn/saturn.db-shm"
-    Write-Output $result.Output
+    # 3. Keep existing database (users, servers, configs persist across deploys)
+    Write-Output "=== 3. Keeping existing database (users persist) ==="
     
     # 4. Ensure .env file exists with secure defaults
     Write-Output "=== 4. Ensuring .env file ==="

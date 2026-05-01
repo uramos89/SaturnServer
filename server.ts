@@ -753,6 +753,19 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
+  // ── Seed default admin user (if no users exist) ────────────────────────────
+  const userCount = db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number };
+  if (userCount.c === 0) {
+    const defaultUsername = "admin";
+    const defaultPassword = "saturn2024";
+    const salt = crypto.randomBytes(16).toString("hex");
+    const hash = crypto.pbkdf2Sync(defaultPassword, salt, 100000, 64, "sha512").toString("hex");
+    const passwordHash = `${salt}:${hash}`;
+    db.prepare("INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run("user-default", defaultUsername, passwordHash, "admin", new Date().toISOString());
+    console.log(`Default admin user created: ${defaultUsername} / ${defaultPassword}`);
+  }
+
   // ── Admin User Creation ────────────────────────────────────────────────────
   app.post("/api/admin/create", (req, res) => {
     const { username, password } = req.body;
@@ -773,6 +786,14 @@ Real-time SSH Metrics (${sshConn.host}):
     db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
       .run(`audit-${Date.now()}`, "USER", "ADMIN_CREATED", `Admin user ${username} created`, createdAt);
     res.json({ success: true, id, message: "Admin user created successfully" });
+  });
+
+  // ── Reset Users (delete all users so onboarding re-creates them) ───────────
+  app.post("/api/admin/reset-users", (req, res) => {
+    db.prepare("DELETE FROM users").run();
+    db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+      .run(`audit-${Date.now()}`, "USER", "USERS_RESET", "All users deleted for fresh onboarding", new Date().toISOString());
+    res.json({ success: true, message: "All users deleted. Onboarding will create a new admin." });
   });
 
   // ── AI Providers & Models (2026 comprehensive list - 50+ providers) ────
