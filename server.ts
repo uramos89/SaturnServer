@@ -340,7 +340,16 @@ async function startServer() {
   const app = express();
   app.use(express.json({ limit: "10mb" }));
 
-  // ── Health Check ──────────────────────────────────────────────────────────
+  // ── Setup & Status ────────────────────────────────────────────────────────
+  app.get("/api/setup/status", (req, res) => {
+    const userCount = db.prepare("SELECT COUNT(*) as c FROM users").get() as any;
+    const aiCount = db.prepare("SELECT COUNT(*) as c FROM ai_providers WHERE enabled = 1").all().length;
+    res.json({ 
+      initialized: userCount.c > 0,
+      aiConfigured: aiCount > 0
+    });
+  });
+
   app.get("/api/health", (req, res) => {
     const sshCount = db.prepare("SELECT COUNT(*) as c FROM ssh_connections WHERE status = 'connected'").get() as any;
     const serverCount = db.prepare("SELECT COUNT(*) as c FROM servers").get() as any;

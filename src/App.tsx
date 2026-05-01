@@ -1122,7 +1122,7 @@ const CredentialCard = ({ cred, onDelete, onScan }: { cred: any, onDelete: (id: 
 // ── Main App Component ─────────────────────────────────────────────────
 export default function App() {
   const { lang, setLang, t } = useLang();
-  const [onboarding, setOnboarding] = useState(true);
+  const [onboarding, setOnboarding] = useState<boolean | null>(null);
   const [servers, setServers] = useState<ManagedServer[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -1175,6 +1175,20 @@ export default function App() {
   const [neuralResult, setNeuralResult] = useState<any>(null);
   const [neuralLoading, setNeuralLoading] = useState(false);
   const [listOutputs, setListOutputs] = useState<Record<string, string>>({ users: '', processes: '', tasks: '', network: '', firewall: '', packages: '', webserver: '', health: '', backups: '', ssl: '', audit: '' });
+
+  // Check setup status on mount
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const res = await fetch('/api/setup/status');
+        const data = await res.json();
+        setOnboarding(!data.initialized);
+      } catch (e) {
+        setOnboarding(true); // Default to onboarding if check fails
+      }
+    };
+    checkStatus();
+  }, []);
 
   // SSE connection for real-time metrics
   useEffect(() => {
@@ -1501,6 +1515,12 @@ export default function App() {
   };
 
   // ── Render ───────────────────────────────────────────────────────────
+  if (onboarding === null) return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }} className="w-12 h-12 rounded-full border-2 border-orange-500/20 border-t-orange-500" />
+    </div>
+  );
+
   if (onboarding) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-8">
