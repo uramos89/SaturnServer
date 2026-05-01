@@ -4,8 +4,21 @@ dist/
 *.db-wal
 *.db-shm
 .env
+# ContextP methodology - track all files except auto-generated logs
 ContextP/
-# Exclude local data but track structure via .gitkeep
-!/ContextP/**/.gitkeep
+!/ContextP/**/
+!ContextP/cpini.md
+!ContextP/_INDEX/
+!ContextP/_INDEX/INDEX_MASTER.md
+!ContextP/CONTRACTS/
+!ContextP/CONTRACTS/*.md
+!ContextP/TECH/
+!ContextP/FUNC/
+!ContextP/STRUCT/
+!ContextP/STRUCT/templates/
+!ContextP/AUDIT/metrics/
+!ContextP/AUDIT/metrics/METRICS_MASTER.md
+!ContextP/PARAMS/
+!ContextP/PARAMS/*.md
 data/
 *.log
