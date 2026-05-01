@@ -43,22 +43,9 @@ try {
     
     # 4. Ensure .env file exists with secure defaults
     Write-Output "=== 4. Ensuring .env file ==="
-    $result = Run-Root $session "if [ ! -f /opt/saturn/.env ]; then
-      PEPPER=\$(date +%s | sha256sum | head -c 64)
-      cat > /opt/saturn/.env << EOF
-PORT=80
-NODE_ENV=production
-SSH_ENCRYPTION_PEPPER=\$PEPPER
-GEMINI_API_KEY=
-OPENAI_API_KEY=
-AI_DEEP_VERIFY=true
-AI_AUTO_REMEDIATE=false
-EOF
-      chmod 600 /opt/saturn/.env
-      echo '.env created with random encryption pepper'
-    else
-      echo '.env already exists, keeping it'
-    fi"
+    # Use a base64-encoded script to avoid PowerShell escaping issues
+    $envScript = "IyEvYmluL2Jhc2gKaWYgWyAhIC1mIC9vcHQvc2F0dXJuLy5lbnYgXTsgdGhlbgogIFBFUFBFUj0kKHRyIC1kYyBBLVphLXowLTkgPC9kZXYvdXJhbmRvbSB8IGhlYWQgLWMgNjQpCiAgZWNobyAiUE9SVD04MCIgPiAvb3B0L3NhdHVybi8uZW52CiAgZWNobyAiTk9ERV9FTlY9cHJvZHVjdGlvbiIgPj4gL29wdC9zYXR1cm4vLmVudgogIGVjaG8gIlNTSF9FTkNSWVBUSU9OX1BFUFBFUj0kUEVQUEVSIiA+PiAvb3B0L3NhdHVybi8uZW52CiAgZWNobyAiR0VNSU5JX0FQSV9LRVk9IiA+PiAvb3B0L3NhdHVybi8uZW52CiAgZWNobyAiT1BFTkFJX0FQSV9LRVk9IiA+PiAvb3B0L3NhdHVybi8uZW52CiAgZWNobyAiQUlfREVFUF9WRVJJRj10cnVlIiA+PiAvb3B0L3NhdHVybi8uZW52CiAgZWNobyAiQUlfQVVUT19SRU1FRElBVEU9ZmFsc2UiID4+IC9vcHQvc2F0dXJuLy5lbnYKICBjaG1vZCA2MDAgL29wdC9zYXR1cm4vLmVudgogIGVjaG8gIi5lbnYgY3JlYXRlZCB3aXRoIHJhbmRvbSBlbmNyeXB0aW9uIHBlcHBlciIKZWxzZQogIGVjaG8gIi5lbnYgYWxyZWFkeSBleGlzdHMsIGtlZXBpbmcgaXQiCmZp"
+    $result = Run-Root $session "echo '$envScript' | base64 -d | bash"
     Write-Output $result.Output
     
     # 5. Install dependencies
