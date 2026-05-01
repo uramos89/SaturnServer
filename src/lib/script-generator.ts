@@ -985,6 +985,7 @@ else
 fi
 `;
     return this.buildResponse(script, `Run backup job ${backupId}`, ["Executes backup script"], "varies");
+  }
   // ═══════════════════════════════════════════════════════════════════════
   // SEC02 - Security Hardening
   // ═══════════════════════════════════════════════════════════════════════
