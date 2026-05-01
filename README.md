@@ -4,11 +4,6 @@
 
 Saturn is an open-source platform for centralized, intelligent management of heterogeneous servers (Linux, Windows, Unix). It not only monitors — it **diagnoses, learns, and remediates** failures autonomously, powered by the **Ares neural engine** and **ContextP organizational memory**.
 
-> 🌍 **International**: Full English UI with Español toggle. Default: English.
-> 🧠 **Neural Engine**: Ares v1.0 — isolated, self-updating, multi-provider LLM.
-> 📚 **Memory**: ContextP — Git-versioned knowledge base with semantic search.
-> 🔒 **Security**: SSH/WinRM with AES-256 encrypted credentials at rest.
-
 ---
 
 ## Architecture
