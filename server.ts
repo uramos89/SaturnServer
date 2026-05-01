@@ -813,9 +813,6 @@ async function startServer() {
       res.json({ success: true, ...result, status, skill: skill.name });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
-    const configs = db.prepare("SELECT * FROM notification_configs").all();
-    res.json(configs);
-  });
 
   app.post("/api/notifications/config", (req, res) => {
     const { type, destination, config, enabled } = req.body;
