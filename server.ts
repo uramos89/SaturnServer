@@ -7,6 +7,8 @@ import { GoogleGenAI } from "@google/genai";
 import fs from "fs";
 import crypto from "crypto";
 import { sshAgent, type SSHConnectionConfig, type SystemMetrics } from "./src/lib/ssh-agent.js";
+import { ScriptGenerator } from "./src/lib/script-generator.js";
+import { createAdminRouter } from "./src/lib/admin-router.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -895,6 +897,10 @@ Real-time SSH Metrics (${sshConn.host}):
     
     res.json({ success: true, message: "AI configuration updated successfully" });
   });
+
+  // ── Fase 2: Admin Router (Server Administration) ──────────────────────────
+  const adminRouter = createAdminRouter(db, sshAgent, ScriptGenerator);
+  app.use(adminRouter);
 
   // ── Background SSH Metrics Scheduler ──────────────────────────────────────
   if (process.env.NODE_ENV === "production") {
