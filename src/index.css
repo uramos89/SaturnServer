@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-saturno-accent: #f97316; /* Orange 500 */
+  --color-saturno-emerald: #34d399; /* Emerald 400 */
+}
+
+body {
+  @apply bg-[#050507] text-[#e0e0e5] font-sans selection:bg-orange-500/30 overflow-hidden;
+}
+
+.ambient-glow-1 {
+  @apply absolute top-[-100px] left-[-100px] w-[500px] h-[500px] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none;
+}
+
+.ambient-glow-2 {
+  @apply absolute bottom-[-100px] right-[-100px] w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-black/40;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+}
+
+.immersive-card {
+  @apply bg-white/[0.03] border border-white/10 rounded-2xl backdrop-blur-sm;
+}
