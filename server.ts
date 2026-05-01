@@ -156,8 +156,14 @@ async function startServer() {
   const app = express();
   app.use(express.json());
 
+  // Health Check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString(), version: "2.0.0" });
+  });
+
   // API Routes
   app.get("/api/servers", (req, res) => {
+
     const servers = db.prepare("SELECT * FROM servers").all();
     res.json(servers.map((s: any) => ({ ...s, tags: s.tags.split(",") })));
   });
