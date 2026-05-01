@@ -1129,13 +1129,15 @@ export default function App() {
   const [notifications, setNotifications] = useState<NotificationConfig[]>([]);
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
   const [sshConnections, setSshConnections] = useState<SshConnection[]>([]);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [selectedServer, setSelectedServer] = useState<ManagedServer | null>(null);
-  const [showConnectModal, setShowConnectModal] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
   const [cloudCreds, setCloudCreds] = useState<any[]>([]);
   const [skills, setSkills] = useState<any[]>([]);
+  const [proactiveActivities, setProactiveActivities] = useState<any[]>([]);
+  const [contextPFiles, setContextPFiles] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedServer, setSelectedServer] = useState<ManagedServer | null>(null);
+  const [serverDetailTab, setServerDetailTab] = useState('summary');
   const [remediationConfigs, setRemediationConfigs] = useState<any[]>([]);
   const [globalConfig, setGlobalConfig] = useState<any>({ mode: 'auto', threshold: 0.7 });
   const [selectedSkillId, setSelectedSkillId] = useState<string>('ps_remediation_v1');
@@ -1195,7 +1197,7 @@ export default function App() {
     if (onboarding) return;
     const fetchData = async () => {
       try {
-        const [sRes, iRes, aRes, nRes, aiRes, sshRes, cRes, skRes, rRes] = await Promise.all([
+        const [sRes, iRes, aRes, nRes, aiRes, sshRes, cRes, skRes, rRes, pRes, cpRes] = await Promise.all([
           fetch('/api/servers'),
           fetch('/api/incidents'),
           fetch('/api/audit'),
@@ -1204,7 +1206,9 @@ export default function App() {
           fetch('/api/ssh/connections'),
           fetch('/api/credentials'),
           fetch('/api/skills'),
-          fetch('/api/remediation/config')
+          fetch('/api/remediation/config'),
+          fetch('/api/proactive'),
+          fetch('/api/contextp/files')
         ]);
         setServers(await sRes.json());
         setIncidents(await iRes.json());
@@ -1214,6 +1218,8 @@ export default function App() {
         setSshConnections(await sshRes.json());
         setCloudCreds(await cRes.json());
         setSkills(await skRes.json());
+        setProactiveActivities(await pRes.json());
+        setContextPFiles(await cpRes.json());
         const configs = await rRes.json();
         setRemediationConfigs(configs);
         setGlobalConfig(configs.find((c: any) => c.serverId === 'global') || { mode: 'auto', threshold: 0.7 });
@@ -1261,7 +1267,7 @@ export default function App() {
       });
       const data = await res.json();
       if (data.success) {
-        setShowConnectModal(false);
+        // setShowConnectModal(false);
         setConnHost('');
         setConnUser('');
         setConnKey('');
@@ -1337,21 +1343,6 @@ export default function App() {
     } catch {}
   };
 
-  const handleAiConfigSave = async () => {
-    await fetch('/api/ai/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: aiProvider,
-        apiKey: aiApiKey,
-        deepVerify: aiDeepVerify,
-        autoRemediate: aiAutoRemediate
-      })
-    });
-    const aiRes = await fetch('/api/ai/config');
-    setAiConfig(await aiRes.json());
-  };
-
   const handleLogout = () => {
     localStorage.removeItem('saturn-user');
     setUser(null);
@@ -1360,144 +1351,6 @@ export default function App() {
   const handleLogin = (u: UserData) => {
     localStorage.setItem('saturn-user', JSON.stringify(u));
     setUser(u);
-  };
-
-  const handleFetchLogs = async () => {
-    if (!selectedServer) return;
-    setLogLoading(true);
-    try {
-      const res = await fetch(`/api/servers/${selectedServer.id}/logs`);
-      const data = await res.json();
-      setServerLogs(data.logs || data.error || 'No logs found');
-    } catch (e: any) {
-      setServerLogs(`Error: ${e.message}`);
-    } finally {
-      setLogLoading(false);
-    }
-  };
-
-  const handleGenerateNeuralScript = async () => {
-    if (!selectedServer || !neuralPrompt) return;
-    setNeuralLoading(true);
-    setNeuralResult(null);
-    try {
-      const res = await fetch('/api/neural/generate-script', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: neuralPrompt,
-          os: selectedServer.os,
-          context: { serverName: selectedServer.name, ip: selectedServer.ip }
-        })
-      });
-      const data = await res.json();
-      setNeuralResult(data);
-    } catch (e: any) {
-      alert(`AI Generation failed: ${e.message}`);
-    } finally {
-      setNeuralLoading(false);
-    }
-  };
-
-  const handleExecuteNeuralScript = async () => {
-    if (!selectedServer || !neuralPrompt) return;
-    setNeuralLoading(true);
-    try {
-      const res = await fetch('/api/skills/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          skillId: selectedSkillId,
-          prompt: neuralPrompt,
-          serverId: selectedServer.id
-        })
-      });
-      const data = await res.json();
-      setNeuralResult({ script: data.script, explanation: `Generated using ${data.skill} skill.` });
-    } catch (e: any) { alert(e.message); }
-    finally { setNeuralLoading(false); }
-  };
-
-  const handleApproveAndRun = async () => {
-    if (!selectedServer || !neuralResult) return;
-    setCmdLoading(true);
-    try {
-      const res = await fetch(`/api/servers/${selectedServer.id}/exec`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: neuralResult.script })
-      });
-      const data = await res.json();
-      setCmdResult(data);
-      if (data.success) {
-        setNeuralResult(null);
-        setNeuralPrompt('');
-        setDetailTab('overview');
-      }
-    } catch (e: any) {
-      alert(`Execution failed: ${e.message}`);
-    } finally {
-      setCmdLoading(false);
-    }
-  };
-
-  const handleFetchList = async (category: 'users' | 'tasks' | 'processes' | 'network' | 'firewall' | 'packages' | 'webserver' | 'health' | 'backups' | 'ssl' | 'audit') => {
-    if (!selectedServer) return;
-    try {
-      const res = await fetch(`/api/servers/${selectedServer.id}/${category}`);
-      const data = await res.json();
-      setListOutputs(prev => ({ ...prev, [category]: data.output || data.error }));
-    } catch (e: any) {
-      setListOutputs(prev => ({ ...prev, [category]: `Error: ${e.message}` }));
-    }
-  };
-
-  const handleResolveIncident = async (id: string) => {
-    try {
-      await fetch(`/api/incidents/${id}/resolve`, { method: 'POST' });
-      const iRes = await fetch('/api/incidents');
-      const iData = await iRes.json();
-      setIncidents(iData);
-    } catch (e: any) {
-      alert(`Failed to resolve incident: ${e.message}`);
-    }
-  };
-
-  const handleImportCredential = async () => {
-    try {
-      await fetch('/api/credentials/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(importData)
-      });
-      setShowImportModal(false);
-      setImportData({ name: '', provider: 'aws', type: 'key', content: '' });
-      const res = await fetch('/api/credentials');
-      setCloudCreds(await res.json());
-    } catch (e: any) { alert(e.message); }
-  };
-
-  const handleDeleteCredential = async (id: string) => {
-    if (!confirm('Are you sure? This will revoke access to associated servers.')) return;
-    try {
-      await fetch(`/api/credentials/${id}`, { method: 'DELETE' });
-      const res = await fetch('/api/credentials');
-      setCloudCreds(await res.json());
-    } catch (e: any) { alert(e.message); }
-  };
-
-  const handleCloudScan = async (credId: string) => {
-    try {
-      const res = await fetch('/api/cloud/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credId })
-      });
-      const data = await res.json();
-      alert(`Scan complete. Discovered ${data.discovered} new servers.`);
-      const sRes = await fetch('/api/servers');
-      setServers(await sRes.json());
-    } catch (e: any) { alert(e.message); }
   };
 
   const handleUpdateRemediationMode = async (serverId: string | null, mode: string, skillId?: string) => {
@@ -1513,6 +1366,383 @@ export default function App() {
       if (!serverId || serverId === 'global') setGlobalConfig(configs.find((c: any) => c.serverId === 'global'));
     } catch (e: any) { alert(e.message); }
   };
+
+  // ── Components ──────────────────────────────────────────────────────
+  // ── View Components ────────────────────────────────────────────────
+  const DashboardView = () => {
+    const stats = {
+      total: servers.length,
+      online: servers.filter(s => s.status === 'online').length,
+      incidents: incidents.filter(i => i.status === 'open').length,
+      sshConnected: sshConnections.filter(c => c.status === 'connected').length
+    };
+
+    return (
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard label={t('stats.totalServers')} value={stats.total} icon={Server} color="text-blue-500" />
+          <StatCard label={t('stats.online')} value={stats.online} icon={CheckCircle} color="text-emerald-500" />
+          <StatCard label={t('stats.incidents')} value={stats.incidents} icon={AlertTriangle} color="text-rose-500" />
+          <StatCard label="SSH Connected" value={stats.sshConnected} icon={Zap} color="text-orange-500" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-black uppercase tracking-widest text-slate-500">Recent Servers</h2>
+                <button onClick={() => setActiveTab('servers')} className="text-[10px] font-black uppercase text-orange-500 hover:underline">View All</button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {servers.slice(0, 4).map(server => (
+                  <ServerCard key={server.id} server={server} onClick={() => { setSelectedServer(server); setServerDetailTab('summary'); setActiveTab('servers'); }} />
+                ))}
+              </div>
+            </section>
+          </div>
+          <div className="space-y-8">
+            <section className="space-y-4">
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-500">Open Incidents</h2>
+              <div className="space-y-3">
+                {incidents.filter(i => i.status === 'open').length > 0 ? (
+                  incidents.filter(i => i.status === 'open').slice(0, 5).map(incident => <IncidentCard key={incident.id} incident={incident} t={t} />)
+                ) : (
+                  <div className="p-8 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 text-center">
+                    <p className="text-[10px] font-black uppercase text-emerald-500">All systems clear</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ServersListView = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+            <input 
+              type="text" 
+              placeholder="Filter servers..." 
+              className="bg-black/40 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs focus:ring-1 focus:ring-orange-500 outline-none w-64"
+            />
+          </div>
+        </div>
+        <button onClick={() => {}} className="px-4 py-2 bg-orange-500 text-black text-xs font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all">
+          Add Server
+        </button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {servers.map(server => (
+          <ServerCard key={server.id} server={server} onClick={() => { setSelectedServer(server); setServerDetailTab('summary'); }} />
+        ))}
+      </div>
+    </div>
+  );
+
+  const ServerDetailView = () => {
+    if (!selectedServer) return null;
+
+    const tabs = [
+      { id: 'summary', label: 'Summary', icon: LayoutDashboard },
+      { id: 'system', label: 'System', icon: Cpu },
+      { id: 'network', label: 'Network', icon: Network },
+      { id: 'security', label: 'Security', icon: Shield },
+      { id: 'backups', label: 'Backups', icon: Database },
+      { id: 'tasks', label: 'Tasks', icon: ClipboardList },
+      { id: 'terminal', label: 'Terminal', icon: Terminal }
+    ];
+
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+        {/* Detail Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl transition-all">
+              <ChevronLeft size={18} />
+            </button>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-sm font-black uppercase tracking-widest">{selectedServer.name}</h2>
+                <div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} />
+              </div>
+              <p className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">{selectedServer.ip} • {selectedServer.os}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-white/10 transition-all">
+              <RefreshCw size={14} /> Sync
+            </button>
+            <select 
+              value={remediationConfigs.find(c => c.serverId === selectedServer.id)?.mode || 'global'}
+              onChange={(e) => handleUpdateRemediationMode(selectedServer.id, e.target.value)}
+              className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none"
+            >
+              <option value="global">Mode: Global</option>
+              <option value="auto">Mode: Auto</option>
+              <option value="skill">Mode: Skill</option>
+              <option value="manual">Mode: Manual</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Tabs - Horizontal Scrollable on Mobile */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-2 custom-scrollbar lg:overflow-visible">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setServerDetailTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all",
+                serverDetailTab === tab.id ? "bg-orange-500 text-black" : "text-slate-500 hover:text-white hover:bg-white/5"
+              )}
+            >
+              <tab.icon size={14} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        <div className="min-h-[500px]">
+          {serverDetailTab === 'summary' && <ServerSummaryTab />}
+          {serverDetailTab === 'system' && <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest">System details loading...</div>}
+          {serverDetailTab === 'terminal' && <div className="h-[500px] bg-black rounded-2xl border border-white/5 p-4 font-mono text-xs text-slate-400">Terminal coming soon...</div>}
+        </div>
+      </div>
+    );
+  };
+
+  const ServerSummaryTab = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="lg:col-span-2 space-y-8">
+        {/* Real-time Metrics */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            { label: 'CPU', value: selectedServer?.cpu + '%', icon: Cpu, color: 'text-orange-500' },
+            { label: 'RAM', value: selectedServer?.memory + '%', icon: Database, color: 'text-blue-500' },
+            { label: 'Disk', value: '45%', icon: HardDrive, color: 'text-emerald-500' },
+            { label: 'Uptime', value: '12d 4h', icon: Clock, color: 'text-slate-400' }
+          ].map(m => (
+            <div key={m.label} className="p-4 rounded-2xl bg-black/40 border border-white/5">
+              <div className="flex items-center gap-2 mb-2 text-slate-500">
+                <m.icon size={12} />
+                <span className="text-[9px] font-black uppercase tracking-widest">{m.label}</span>
+              </div>
+              <p className={cn("text-xl font-black", m.color)}>{m.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Neural Actions */}
+        <div className="p-6 rounded-2xl bg-orange-500/5 border border-orange-500/10">
+          <div className="flex items-center gap-2 mb-4">
+            <Brain size={16} className="text-orange-500" />
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-orange-500">Neural Remediation</h3>
+          </div>
+          <div className="flex gap-2">
+            <input 
+              type="text" 
+              placeholder="How can I help you with this server?" 
+              className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+            />
+            <button className="px-6 py-3 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-orange-400 transition-all">Generate</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ContextP Panel */}
+      <div className="space-y-6">
+        <div className="p-6 rounded-2xl bg-black/40 border border-white/5">
+          <div className="flex items-center gap-2 mb-4">
+            <History size={14} className="text-slate-500" />
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">ContextP Insights</h3>
+          </div>
+          <div className="space-y-4">
+            {[
+              { type: 'FIX', date: '2h ago', title: 'SSH Port Hardening' },
+              { type: 'AUDIT', date: '5h ago', title: 'Root login check' },
+              { type: 'PATTERN', date: 'Pattern Match', title: 'Web server recovery' }
+            ].map((i, idx) => (
+              <div key={idx} className="flex gap-3 text-[10px]">
+                <div className="w-1 h-1 rounded-full bg-orange-500 mt-1" />
+                <div>
+                  <p className="font-black text-slate-300 uppercase tracking-tighter">{i.title}</p>
+                  <p className="text-[8px] text-slate-600 mt-0.5 uppercase">{i.type} • {i.date}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setActiveTab('contextp')} className="w-full mt-6 py-2 border border-white/5 rounded-xl text-[9px] font-black uppercase text-slate-500 hover:bg-white/5 transition-all">
+            Explore Memory
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const ProactiveView = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Zap className="text-orange-500" size={20} />
+          <h2 className="text-sm font-black uppercase tracking-[0.2em]">Proactive Activities</h2>
+        </div>
+        <button className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-orange-400 transition-all">New Activity</button>
+      </div>
+      <div className="grid grid-cols-1 gap-4">
+        {proactiveActivities.length > 0 ? (
+          proactiveActivities.map(act => (
+            <div key={act.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500">
+                  <Play size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-white">{act.name}</p>
+                  <p className="text-[8px] font-medium text-slate-500 uppercase tracking-widest">{act.condition} • {act.schedule}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="px-3 py-1 bg-white/5 rounded-lg text-[8px] font-black uppercase tracking-widest text-slate-400">Target: {act.targetType}</div>
+                <div className={cn("px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest", act.enabled ? "bg-emerald-500/10 text-emerald-500" : "bg-white/5 text-slate-600")}>
+                  {act.enabled ? 'Active' : 'Paused'}
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="p-12 rounded-2xl border border-dashed border-white/10 text-center space-y-4">
+            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">No proactive activities defined</p>
+            <button className="text-[9px] font-black uppercase text-orange-500 hover:underline">Create your first automation</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const SkillsView = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Brain className="text-orange-500" size={20} />
+          <h2 className="text-sm font-black uppercase tracking-[0.2em]">AI Skills Library</h2>
+        </div>
+        <button className="px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-white/10 transition-all">Add Custom Skill</button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {skills.map(skill => (
+          <div key={skill.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 hover:border-orange-500/30 transition-all group">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 group-hover:bg-orange-500 group-hover:text-black transition-all">
+                {skill.language === 'powershell' ? <Terminal size={20} /> : <FileCode size={20} />}
+              </div>
+              <div className="px-3 py-1 bg-white/5 rounded-lg text-[8px] font-black uppercase text-slate-500">v{skill.version}</div>
+            </div>
+            <h3 className="text-xs font-black uppercase tracking-widest mb-1">{skill.name}</h3>
+            <p className="text-[10px] text-slate-500 mb-6 line-clamp-2">{skill.description}</p>
+            <div className="flex items-center justify-between pt-4 border-t border-white/5">
+              <span className="text-[8px] font-black uppercase text-slate-600">{skill.language}</span>
+              <button className="text-[9px] font-black uppercase text-orange-500 hover:underline">Manage Rules</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const CredentialsView = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Key className="text-orange-500" size={20} />
+          <h2 className="text-sm font-black uppercase tracking-[0.2em]">Credential Vault</h2>
+        </div>
+        <button className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-orange-400 transition-all">Import Key</button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {cloudCreds.map(cred => (
+          <div key={cred.id} className="p-4 rounded-2xl bg-black/40 border border-white/5 hover:border-orange-500/30 transition-all group relative">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500">
+                <Shield size={18} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">{cred.name}</p>
+                <p className="text-[8px] font-medium text-slate-500 uppercase">{cred.provider} • {cred.type}</p>
+              </div>
+            </div>
+            <button className="absolute top-4 right-4 p-2 text-slate-600 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const ContextPView = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Database className="text-orange-500" size={20} />
+          <h2 className="text-sm font-black uppercase tracking-[0.2em]">ContextP Explorer</h2>
+        </div>
+        <div className="flex bg-black/40 border border-white/10 p-1 rounded-xl">
+          <button className="px-4 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest bg-orange-500/10 text-orange-500">Files</button>
+          <button className="px-4 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-400">Semantic Search</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div className="lg:col-span-1 bg-black/40 border border-white/5 rounded-2xl p-4 overflow-y-auto max-h-[600px] custom-scrollbar">
+          <div className="space-y-2">
+            {contextPFiles.map((node, i) => (
+              <div key={i} className="space-y-1">
+                <div className="flex items-center gap-2 p-2 hover:bg-white/5 rounded-lg cursor-pointer text-slate-400">
+                  <Folder size={14} className="text-orange-500/50" />
+                  <span className="text-[10px] font-black uppercase tracking-tighter">{node.name}</span>
+                </div>
+                {node.children && (
+                  <div className="ml-4 border-l border-white/5 pl-4 space-y-1">
+                    {node.children.map((child: any, j: number) => (
+                      <div key={j} className="flex items-center gap-2 p-2 hover:bg-white/5 rounded-lg cursor-pointer text-slate-500">
+                        <FileText size={12} />
+                        <span className="text-[9px] font-medium truncate">{child.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="lg:col-span-3 bg-black/60 border border-white/5 rounded-2xl p-8 flex flex-col items-center justify-center text-center space-y-4">
+          <Brain size={48} className="text-slate-800" />
+          <div>
+            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Select a file to view or analyze its contents</p>
+            <p className="text-[8px] text-slate-700 mt-1 uppercase">Persistent memory is encrypted at rest</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const SidebarItem = ({ id, label, icon: Icon }: any) => (
+    <button
+      onClick={() => { setActiveTab(id); setMobileMenuOpen(false); }}
+      className={cn(
+        "flex items-center gap-3 w-full p-3 rounded-xl transition-all group",
+        activeTab === id ? "bg-orange-500/10 text-orange-400" : "text-slate-500 hover:text-white hover:bg-white/5"
+      )}
+    >
+      <Icon size={20} className={cn("transition-transform group-hover:scale-110", activeTab === id ? "text-orange-500" : "text-slate-500")} />
+      {(!sidebarCollapsed || mobileMenuOpen) && <span className="text-xs font-black uppercase tracking-widest">{label}</span>}
+    </button>
+  );
 
   // ── Render ───────────────────────────────────────────────────────────
   if (onboarding === null) return (
@@ -1545,54 +1775,95 @@ export default function App() {
     );
   }
 
-  const stats = {
-    total: servers.length,
-    online: servers.filter(s => s.status === 'online').length,
-    degraded: servers.filter(s => s.status === 'degraded').length,
-    offline: servers.filter(s => s.status === 'offline' || s.status === 'pending').length,
-    incidents: incidents.filter(i => i.status === 'open').length,
-    sshConnected: sshConnections.filter(c => c.status === 'connected').length
-  };
-
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Top Navigation */}
-      <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-8">
+    <div className="min-h-screen bg-black text-white flex overflow-hidden">
+      {/* Mobile Menu Backdrop */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMobileMenuOpen(false)}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar */}
+      <aside 
+        className={cn(
+          "fixed inset-y-0 left-0 z-[70] bg-black border-r border-white/5 transition-all duration-300 flex flex-col",
+          mobileMenuOpen ? "translate-x-0 w-64" : "-translate-x-full lg:translate-x-0",
+          sidebarCollapsed ? "lg:w-20" : "lg:w-64"
+        )}
+      >
+        <div className="p-6 flex items-center justify-between">
+          {(!sidebarCollapsed || mobileMenuOpen) && (
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full border border-orange-500 flex items-center justify-center">
                 <div className="w-4 h-0.5 bg-orange-500 rounded-full" />
               </div>
               <span className="font-black text-sm tracking-widest">SATURN</span>
             </div>
-            <nav className="hidden md:flex items-center gap-1">
-              {[
-                { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
-                { id: 'servers', label: t('nav.servers'), icon: Server },
-                { id: 'incidents', label: t('nav.incidents'), icon: AlertTriangle },
-                { id: 'terminal', label: t('nav.terminal'), icon: Terminal },
-                { id: 'credentials', label: 'Credentials', icon: Key },
-                { id: 'contextp', label: 'ContextP', icon: Brain },
-                { id: 'users', label: 'Users', icon: User },
-                { id: 'audit', label: t('nav.audit'), icon: Logs },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all",
-                    activeTab === tab.id
-                      ? "bg-orange-500/10 text-orange-400"
-                      : "text-slate-500 hover:text-white hover:bg-white/5"
-                  )}
-                >
-                  <tab.icon size={14} />
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
-            <div className="hidden lg:flex bg-black/40 border border-white/10 p-1 rounded-xl ml-4">
+          )}
+          <button 
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="hidden lg:block text-slate-500 hover:text-white"
+          >
+            <ChevronLeft size={18} className={cn("transition-transform", sidebarCollapsed && "rotate-180")} />
+          </button>
+        </div>
+
+        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
+          <SidebarItem id="dashboard" label={t('nav.dashboard')} icon={LayoutDashboard} />
+          <SidebarItem id="servers" label={t('nav.servers')} icon={Server} />
+          <SidebarItem id="skills" label="Skills" icon={Brain} />
+          <SidebarItem id="proactive" label="Proactive" icon={Zap} />
+          <SidebarItem id="credentials" label="Credentials" icon={Key} />
+          <SidebarItem id="contextp" label="ContextP" icon={Database} />
+          <SidebarItem id="settings" label="Settings" icon={Settings} />
+          <SidebarItem id="admin" label="Admin" icon={User} />
+        </nav>
+
+        <div className="p-4 border-t border-white/5 space-y-4">
+          <div className="flex items-center gap-3 px-3">
+            <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-black font-black text-[10px]">AD</div>
+            {(!sidebarCollapsed || mobileMenuOpen) && (
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase text-white truncate">Admin User</p>
+                <p className="text-[8px] font-medium text-slate-500 truncate">admin@saturn.io</p>
+              </div>
+            )}
+          </div>
+          <button onClick={handleLogout} className="flex items-center gap-3 w-full p-3 text-rose-500 hover:bg-rose-500/5 rounded-xl transition-all">
+            <LogOut size={18} />
+            {(!sidebarCollapsed || mobileMenuOpen) && <span className="text-[10px] font-black uppercase tracking-widest">Logout</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main 
+        className={cn(
+          "flex-1 flex flex-col min-w-0 transition-all duration-300",
+          sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"
+        )}
+      >
+        {/* Header */}
+        <header className="h-16 border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-slate-500 hover:text-white">
+              <Menu size={20} />
+            </button>
+            <h1 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+              {activeTab} <span className="text-white/20 mx-2">/</span> <span className="text-white">{selectedServer ? selectedServer.name : 'Overview'}</span>
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-6">
+            {/* Global Remediation Mode */}
+            <div className="hidden sm:flex bg-black/40 border border-white/10 p-1 rounded-xl">
               {[
                 { id: 'auto', label: '🤖 AUTO', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
                 { id: 'skill', label: '🧠 SKILL', color: 'text-blue-500', bg: 'bg-blue-500/10' },
@@ -1602,7 +1873,7 @@ export default function App() {
                   key={m.id}
                   onClick={() => handleUpdateRemediationMode('global', m.id)}
                   className={cn(
-                    "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                    "px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
                     globalConfig.mode === m.id ? `${m.bg} ${m.color}` : "text-slate-600 hover:text-slate-400"
                   )}
                 >

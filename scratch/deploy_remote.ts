@@ -20,6 +20,9 @@ async function deploy() {
       return result;
     };
 
+    console.log('Stopping existing server on port 3000...');
+    await ssh.execCommand('fuser -k 3000/tcp || true');
+    
     await run('rm -rf saturn');
     await run('git clone https://github.com/uramos89/SaturnServer saturn');
     await run('npm install', 'saturn');

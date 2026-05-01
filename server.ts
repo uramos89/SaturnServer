@@ -172,6 +172,29 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS proactive_activities (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    skillId TEXT NOT NULL,
+    condition TEXT NOT NULL, -- e.g. "cpu > 80"
+    schedule TEXT NOT NULL, -- cron or interval
+    targetType TEXT NOT NULL, -- servers, groups, all
+    targets TEXT, -- JSON array of server IDs or tags
+    enabled INTEGER DEFAULT 1,
+    last_run DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS skill_assignments (
+    id TEXT PRIMARY KEY,
+    skillId TEXT NOT NULL,
+    targetId TEXT NOT NULL, -- serverId or groupId
+    targetType TEXT DEFAULT 'server', -- server or group
+    isPreferred INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(skillId, targetId)
+  );
+
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
@@ -821,6 +844,79 @@ async function startServer() {
 
       res.json({ success: true, ...result, status, skill: skill.name });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  // ── Proactive Activities ───────────────────────────────────────────
+  app.get("/api/proactive", (req, res) => {
+    const activities = db.prepare("SELECT * FROM proactive_activities").all();
+    res.json(activities);
+  });
+
+  app.post("/api/proactive", (req, res) => {
+    const { id, name, skillId, condition, schedule, targetType, targets, enabled } = req.body;
+    const actId = id || crypto.randomUUID();
+    db.prepare(`
+      INSERT OR REPLACE INTO proactive_activities (id, name, skillId, condition, schedule, targetType, targets, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(actId, name, skillId, condition, schedule, targetType, JSON.stringify(targets), enabled ? 1 : 0);
+    res.json({ success: true, id: actId });
+  });
+
+  app.delete("/api/proactive/:id", (req, res) => {
+    db.prepare("DELETE FROM proactive_activities WHERE id = ?").run(req.params.id);
+    res.json({ success: true });
+  });
+
+  // ── Skill Assignments ───────────────────────────────────────────────
+  app.get("/api/skills/assignments", (req, res) => {
+    const assignments = db.prepare("SELECT * FROM skill_assignments").all();
+    res.json(assignments);
+  });
+
+  app.post("/api/skills/assignments", (req, res) => {
+    const { skillId, targetId, targetType, isPreferred } = req.body;
+    db.prepare(`
+      INSERT OR REPLACE INTO skill_assignments (id, skillId, targetId, targetType, isPreferred)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(crypto.randomUUID(), skillId, targetId, targetType || 'server', isPreferred ? 1 : 0);
+    res.json({ success: true });
+  });
+
+  // ── ContextP Explorer ───────────────────────────────────────────────
+  app.get("/api/contextp/files", (req, res) => {
+    const getFiles = (dir: string): any[] => {
+      let results: any[] = [];
+      if (!fs.existsSync(dir)) return [];
+      const list = fs.readdirSync(dir);
+      list.forEach(file => {
+        const filePath = path.join(dir, file);
+        const stat = fs.statSync(filePath);
+        if (stat && stat.isDirectory()) {
+          results.push({ name: file, type: 'dir', children: getFiles(filePath) });
+        } else {
+          results.push({ name: file, type: 'file', size: stat.size, mtime: stat.mtime });
+        }
+      });
+      return results;
+    };
+    try {
+      const tree = [
+        { name: 'SKILLS', type: 'dir', children: getFiles('SKILLS') },
+        { name: 'PARAMS', type: 'dir', children: getFiles('PARAMS') },
+        { name: 'IDENTITY', type: 'dir', children: getFiles('IDENTITY') },
+        { name: 'AUDIT', type: 'dir', children: getFiles('AUDIT') }
+      ];
+      res.json(tree);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/contextp/read", (req, res) => {
+    const filePath = req.query.path as string;
+    if (!filePath || filePath.includes('..')) return res.status(400).json({ error: "Invalid path" });
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      res.json({ content });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   app.post("/api/notifications/config", (req, res) => {
