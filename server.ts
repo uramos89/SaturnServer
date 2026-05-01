@@ -9,6 +9,7 @@ import crypto from "crypto";
 import { sshAgent, type SSHConnectionConfig, type SystemMetrics } from "./src/lib/ssh-agent.js";
 import { ScriptGenerator } from "./src/lib/script-generator.js";
 import { createAdminRouter } from "./src/lib/admin-router.js";
+import { getStatus as getContextPStatus, getContractContent, getIndexContent, getMetricsContent, writeAuditLog, getAuditLogs, getParams, getCpiniContent } from "./src/lib/contextp-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -917,6 +918,92 @@ Real-time SSH Metrics (${sshConn.host}):
         new Date().toISOString());
     
     res.json({ success: true, message: "AI configuration updated successfully" });
+  });
+
+  // ── ContextP Integration (OBPA Methodology) ───────────────────────────────
+
+  // GET /api/contextp/status - SHOW STATUS command
+  app.get("/api/contextp/status", (req, res) => {
+    const status = getContextPStatus();
+    res.json(status);
+  });
+
+  // GET /api/contextp/cpini - Read cpini.md
+  app.get("/api/contextp/cpini", (req, res) => {
+    const content = getCpiniContent();
+    res.json({ content, exists: !!content });
+  });
+
+  // GET /api/contextp/contracts - SHOW CONTRACTS command
+  app.get("/api/contextp/contracts", (req, res) => {
+    const contracts = ["ROOT_CONTRACT", "TECH_CONTRACT", "FUNC_CONTRACT", "STRUCT_CONTRACT", "AUDIT_CONTRACT"];
+    const result = contracts.map(name => ({
+      name,
+      content: getContractContent(name),
+      exists: !!getContractContent(name)
+    }));
+    res.json(result);
+  });
+
+  // GET /api/contextp/contract/:name - Get specific contract
+  app.get("/api/contextp/contract/:name", (req, res) => {
+    const { name } = req.params;
+    const content = getContractContent(name.toUpperCase().replace(/-/g, "_"));
+    if (!content) return res.status(404).json({ error: "Contract not found" });
+    res.json({ name, content });
+  });
+
+  // GET /api/contextp/index - Read INDEX_MASTER.md
+  app.get("/api/contextp/index", (req, res) => {
+    const content = getIndexContent();
+    res.json({ content, exists: !!content });
+  });
+
+  // GET /api/contextp/metrics - Read METRICS_MASTER.md
+  app.get("/api/contextp/metrics", (req, res) => {
+    const content = getMetricsContent();
+    res.json({ content, exists: !!content });
+  });
+
+  // GET /api/contextp/audit - Get audit logs
+  app.get("/api/contextp/audit", (req, res) => {
+    const logs = getAuditLogs();
+    res.json(logs);
+  });
+
+  // POST /api/contextp/audit - Write audit log entry
+  app.post("/api/contextp/audit", (req, res) => {
+    const { id, date, type, domain, title, detail } = req.body;
+    if (!id || !type || !domain || !title) {
+      return res.status(400).json({ error: "id, type, domain, and title are required" });
+    }
+    const success = writeAuditLog({
+      id,
+      date: date || new Date().toISOString().split("T")[0],
+      type,
+      domain,
+      title,
+      detail: detail || ""
+    });
+    res.json({ success });
+  });
+
+  // GET /api/contextp/params - Read PARAMS
+  app.get("/api/contextp/params", (req, res) => {
+    const params = getParams();
+    res.json(params);
+  });
+
+  // GET /api/contextp/patterns - SHOW PATTERNS command
+  app.get("/api/contextp/patterns", (req, res) => {
+    const status = getContextPStatus();
+    res.json(status.patterns);
+  });
+
+  // GET /api/contextp/debt - SHOW DEBT command
+  app.get("/api/contextp/debt", (req, res) => {
+    const status = getContextPStatus();
+    res.json(status.technicalDebt);
   });
 
   // ── Fase 2: Admin Router (Server Administration) ──────────────────────────
