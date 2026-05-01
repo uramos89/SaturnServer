@@ -751,43 +751,82 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
-  // ── AI Providers & Models (comprehensive list) ─────────────────────────
+  // ── Admin User Creation ────────────────────────────────────────────────────
+  app.post("/api/admin/create", (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password || password.length < 8) {
+      return res.status(400).json({ error: "Username required and password must be at least 8 characters" });
+    }
+    const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
+    if (existing) {
+      return res.status(409).json({ error: "User already exists" });
+    }
+    const id = `user-${Date.now()}`;
+    const salt = crypto.randomBytes(16).toString("hex");
+    const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
+    const passwordHash = `${salt}:${hash}`;
+    const createdAt = new Date().toISOString();
+    db.prepare("INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(id, username, passwordHash, "admin", createdAt);
+    db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+      .run(`audit-${Date.now()}`, "USER", "ADMIN_CREATED", `Admin user ${username} created`, createdAt);
+    res.json({ success: true, id, message: "Admin user created successfully" });
+  });
+
+  // ── AI Providers & Models (2026 comprehensive list - 50+ providers) ────
   const AI_PROVIDERS = [
-    { id: "openai", name: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1", "o1-mini", "o3-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"] },
-    { id: "anthropic", name: "Anthropic", models: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-3.5-sonnet", "claude-3.5-haiku", "claude-4-opus", "claude-4-sonnet"] },
-    { id: "google", name: "Google AI (Gemini)", models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash", "gemma-3-27b", "gemma-3-12b"] },
-    { id: "meta", name: "Meta (Llama)", models: ["llama-4-405b", "llama-4-90b", "llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3-70b", "llama-3-8b", "llama-guard-3"] },
-    { id: "mistral", name: "Mistral AI", models: ["mistral-large-2", "mistral-medium", "mistral-small", "mixtral-8x22b", "mixtral-8x7b", "codestral", "ministral-8b", "ministral-3b"] },
-    { id: "deepseek", name: "DeepSeek", models: ["deepseek-v3", "deepseek-r1", "deepseek-coder-v2", "deepseek-chat", "deepseek-coder", "deepseek-v2"] },
-    { id: "moonshot", name: "Moonshot AI", models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"] },
-    { id: "cohere", name: "Cohere", models: ["command-r-plus", "command-r", "command-light", "command-a", "embed-english-v3", "embed-multilingual-v3", "rerank-v3"] },
-    { id: "xai", name: "xAI (Grok)", models: ["grok-2", "grok-2-mini", "grok-1.5", "grok-1"] },
-    { id: "perplexity", name: "Perplexity", models: ["sonar-pro", "sonar-small", "mixtral-8x7b-instruct", "llama-3-sonar-large"] },
-    { id: "together", name: "Together AI", models: ["mixtral-8x22b", "llama-3-70b", "deepseek-coder-33b", "qwen-72b", "qwen-110b"] },
-    { id: "fireworks", name: "Fireworks AI", models: ["llama-v3-70b", "mixtral-8x7b", "deepseek-coder-33b", "qwen-72b-chat", "yi-34b"] },
-    { id: "groq", name: "Groq", models: ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it", "llama-guard-3-8b"] },
-    { id: "replicate", name: "Replicate", models: ["llama-3-70b", "mixtral-8x7b", "stable-diffusion-3", "whisper", "flux-pro", "musicgen"] },
-    { id: "huggingface", name: "Hugging Face", models: ["mistral-7b", "llama-3-8b", "falcon-7b", "zephyr-7b", "codellama-34b", "phi-3", "qwen2-72b"] },
-    { id: "alibaba", name: "Alibaba (Qwen)", models: ["qwen-110b", "qwen-72b", "qwen-32b", "qwen-14b", "qwen-7b", "qwen2.5-72b", "qwen2.5-32b"] },
-    { id: "baidu", name: "Baidu (ERNIE)", models: ["ernie-4.0", "ernie-3.5", "ernie-bot-turbo", "ernie-lite"] },
-    { id: "tencent", name: "Tencent (Hunyuan)", models: ["hunyuan-large", "hunyuan-standard", "hunyuan-lite"] },
-    { id: "zhipu", name: "Zhipu AI (GLM)", models: ["glm-4", "glm-4v", "glm-3-turbo", "glm-4-plus"] },
-    { id: "minimax", name: "MiniMax", models: ["minimax-abab-6.5", "minimax-abab-5.5", "minimax-abab-5"] },
-    { id: "stepfun", name: "StepFun (Step)", models: ["step-2", "step-1v", "step-1"] },
-    { id: "01ai", name: "01.AI (Yi)", models: ["yi-large", "yi-medium", "yi-vision", "yi-34b", "yi-9b"] },
-    { id: "nvidia", name: "NVIDIA NIM", models: ["llama-3-70b-nim", "mixtral-8x22b-nim", "nemotron-4-340b"] },
-    { id: "ibm", name: "IBM Watsonx", models: ["granite-13b", "granite-8b", "granite-3b", "llama-3-70b-watsonx"] },
-    { id: "aws", name: "AWS Bedrock", models: ["claude-3-sonnet-bedrock", "claude-3-haiku-bedrock", "llama-3-70b-bedrock", "mistral-large-bedrock"] },
-    { id: "azure", name: "Azure OpenAI", models: ["gpt-4o-azure", "gpt-4-turbo-azure", "gpt-35-turbo-azure", "o1-azure"] },
-    { id: "gcp", name: "GCP Vertex AI", models: ["gemini-2.0-pro-vertex", "gemini-2.0-flash-vertex", "claude-3-sonnet-vertex", "llama-3-70b-vertex"] },
-    { id: "ollama", name: "Ollama (Local)", models: ["llama3", "llama3.1", "llama3.2", "mistral", "mixtral", "codellama", "deepseek-coder", "phi-3", "phi-4", "gemma-2", "gemma-3", "qwen2", "qwen2.5", "yi-34b", "falcon2", "starcoder2"] },
-    { id: "vllm", name: "vLLM (Self-Hosted)", models: ["llama-3-70b", "mixtral-8x22b", "qwen-72b", "qwen-110b", "custom-endpoint"] },
-    { id: "localai", name: "LocalAI", models: ["llama-3", "mistral", "phi-3", "phi-4", "falcon", "bert-embeddings", "whisper", "stable-diffusion"] },
-    { id: "lmstudio", name: "LM Studio", models: ["lm-studio-default", "custom-local-model"] },
-    { id: "textgen", name: "Oobabooga TextGen", models: ["textgen-default", "custom-textgen-model"] },
-    { id: "kobold", name: "KoboldCPP", models: ["kobold-default", "custom-kobold-model"] },
-    { id: "tabbyapi", name: "TabbyAPI", models: ["tabby-default", "custom-tabby-model"] },
-    { id: "custom", name: "Custom Endpoint (OpenAI-compatible)", models: ["custom-model"] }
+    // ═══ FRONTIER PROVIDERS (Top Tier - proprietary models) ═══
+    { id: "openai", name: "OpenAI", tier: "frontier", models: ["gpt-5", "gpt-5-mini", "gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "o1", "o1-mini", "o3-mini", "o4", "codex"] },
+    { id: "anthropic", name: "Anthropic", tier: "frontier", models: ["claude-4.7", "claude-4.6", "claude-4-opus", "claude-4-sonnet", "claude-3.5-sonnet", "claude-3.5-haiku", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku"] },
+    { id: "google", name: "Google AI (Gemini)", tier: "frontier", models: ["gemini-3-pro", "gemini-3-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash", "gemma-3-27b", "gemma-3-12b", "gemma-2-27b"] },
+    { id: "xai", name: "xAI (Grok)", tier: "frontier", models: ["grok-3", "grok-3-mini", "grok-2", "grok-2-mini", "grok-1.5", "grok-1"] },
+    { id: "meta", name: "Meta (Llama)", tier: "frontier", models: ["llama-4-405b", "llama-4-90b", "llama-4-70b", "llama-4-8b", "llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3-70b", "llama-3-8b", "llama-guard-3"] },
+
+    // ═══ HYPERSCALERS & AGGREGATORS (multi-model APIs) ═══
+    { id: "azure", name: "Microsoft Azure AI", tier: "hyperscaler", models: ["gpt-5-azure", "gpt-4o-azure", "gpt-4-turbo-azure", "o1-azure", "ma-voice", "ma-image", "ma-transcribe"] },
+    { id: "aws", name: "Amazon AWS Bedrock", tier: "hyperscaler", models: ["claude-4-sonnet-bedrock", "claude-3.5-sonnet-bedrock", "llama-4-70b-bedrock", "mistral-large-bedrock", "titan-text-lite", "titan-embedding"] },
+    { id: "gcp", name: "GCP Vertex AI", tier: "hyperscaler", models: ["gemini-3-pro-vertex", "gemini-2.5-pro-vertex", "claude-4-sonnet-vertex", "llama-4-70b-vertex", "mistral-large-vertex"] },
+    { id: "openrouter", name: "OpenRouter (Multi-Proxy)", tier: "aggregator", models: ["openai/gpt-4o", "anthropic/claude-4-sonnet", "google/gemini-2.5-pro", "meta-llama/llama-4-70b", "mistralai/mistral-large", "deepseek/deepseek-v3", "qwen/qwen-110b"] },
+
+    // ═══ HIGH-PERFORMANCE INFERENCE PROVIDERS ═══
+    { id: "groq", name: "Groq (Ultra-Fast)", tier: "inference", models: ["llama-4-70b-groq", "llama-4-8b-groq", "llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it", "llama-guard-3-8b"] },
+    { id: "together", name: "Together AI", tier: "inference", models: ["llama-4-70b", "llama-3-70b", "mixtral-8x22b", "deepseek-coder-33b", "qwen-110b", "qwen-72b", "yi-34b"] },
+    { id: "fireworks", name: "Fireworks AI", tier: "inference", models: ["llama-4-70b", "llama-v3-70b", "mixtral-8x7b", "deepseek-coder-33b", "qwen-72b-chat", "yi-34b"] },
+    { id: "deepinfra", name: "DeepInfra", tier: "inference", models: ["llama-4-70b", "llama-3-70b", "mixtral-8x22b", "codellama-34b", "mistral-7b"] },
+
+    // ═══ VALUE PROVIDERS (cost-effective) ═══
+    { id: "deepseek", name: "DeepSeek", tier: "value", models: ["deepseek-v4", "deepseek-v3", "deepseek-r1", "deepseek-coder-v2", "deepseek-chat", "deepseek-coder", "deepseek-v2"] },
+    { id: "mistral", name: "Mistral AI", tier: "value", models: ["mistral-large-2", "mistral-medium", "mistral-small", "mixtral-8x22b", "mixtral-8x7b", "codestral", "ministral-8b", "ministral-3b"] },
+    { id: "cohere", name: "Cohere", tier: "value", models: ["command-r-plus", "command-r", "command-a", "command-light", "aya-23", "embed-english-v3", "embed-multilingual-v3", "rerank-v3"] },
+    { id: "perplexity", name: "Perplexity AI", tier: "value", models: ["pplx-70b", "pplx-8b", "sonar-pro", "sonar-small", "mixtral-8x7b-instruct", "llama-3-sonar-large"] },
+
+    // ═══ ASIAN ECOSYSTEM ═══
+    { id: "alibaba", name: "Alibaba (Qwen / DashScope)", tier: "asia", models: ["qwen-3-110b", "qwen-3-72b", "qwen-3-32b", "qwen-2.5-72b", "qwen-2.5-32b", "qwen-110b", "qwen-72b", "qwen-32b", "qwen-14b", "qwen-7b"] },
+    { id: "baidu", name: "Baidu (ERNIE)", tier: "asia", models: ["ernie-4.5", "ernie-4.0", "ernie-3.5", "ernie-bot-turbo", "ernie-lite", "ernie-speed"] },
+    { id: "tencent", name: "Tencent (Hunyuan)", tier: "asia", models: ["hunyuan-large", "hunyuan-standard", "hunyuan-lite", "hunyuan-code"] },
+    { id: "zhipu", name: "Zhipu AI (GLM)", tier: "asia", models: ["glm-5", "glm-4", "glm-4v", "glm-4-plus", "glm-3-turbo", "glm-4v-plus"] },
+    { id: "minimax", name: "MiniMax", tier: "asia", models: ["minimax-abab-7", "minimax-abab-6.5", "minimax-abab-5.5", "minimax-abab-5"] },
+    { id: "moonshot", name: "Moonshot AI (Kimi)", tier: "asia", models: ["kimi-k2", "kimi-k1.5", "moonshot-v1-128k", "moonshot-v1-32k", "moonshot-v1-8k"] },
+    { id: "stepfun", name: "StepFun (Step)", tier: "asia", models: ["step-3", "step-2", "step-1v", "step-1"] },
+    { id: "01ai", name: "01.AI (Yi)", tier: "asia", models: ["yi-large", "yi-medium", "yi-vision", "yi-34b", "yi-9b", "yi-6b"] },
+
+    // ═══ SPECIALIZED / NICHE ═══
+    { id: "nvidia", name: "NVIDIA NIM", tier: "specialized", models: ["llama-4-70b-nim", "mixtral-8x22b-nim", "nemotron-4-340b", "nemotron-mini"] },
+    { id: "ibm", name: "IBM Watsonx", tier: "specialized", models: ["granite-3-13b", "granite-3-8b", "granite-3-3b", "granite-13b", "granite-8b", "llama-4-70b-watsonx"] },
+    { id: "huggingface", name: "Hugging Face Inference", tier: "specialized", models: ["mistral-7b", "llama-3-8b", "falcon-7b", "zephyr-7b", "codellama-34b", "phi-3", "phi-4", "qwen2-72b", "starcoder2"] },
+    { id: "replicate", name: "Replicate", tier: "specialized", models: ["llama-4-70b", "llama-3-70b", "mixtral-8x7b", "stable-diffusion-3.5", "flux-pro", "whisper", "musicgen"] },
+    { id: "stability", name: "Stability AI", tier: "specialized", models: ["stable-diffusion-3.5", "stable-diffusion-3", "sd-xl", "stable-audio"] },
+    { id: "elevenlabs", name: "ElevenLabs", tier: "specialized", models: ["eleven-multilingual-v2", "eleven-turbo-v2", "eleven-monolingual-v1"] },
+
+    // ═══ SELF-HOSTED / LOCAL ═══
+    { id: "ollama", name: "Ollama (Local)", tier: "selfhosted", models: ["llama4", "llama3.2", "llama3.1", "llama3", "mistral", "mixtral", "codellama", "deepseek-coder", "deepseek-r1", "phi-4", "phi-3", "gemma-3", "gemma-2", "qwen2.5", "qwen2", "yi-34b", "falcon2", "starcoder2", "nemotron-mini"] },
+    { id: "vllm", name: "vLLM (Self-Hosted)", tier: "selfhosted", models: ["llama-4-70b", "llama-3-70b", "mixtral-8x22b", "qwen-110b", "qwen-72b", "deepseek-v3", "custom-endpoint"] },
+    { id: "localai", name: "LocalAI", tier: "selfhosted", models: ["llama-4", "llama-3", "mistral", "phi-4", "phi-3", "falcon", "bert-embeddings", "whisper", "stable-diffusion", "text-to-speech"] },
+    { id: "lmstudio", name: "LM Studio", tier: "selfhosted", models: ["lm-studio-default", "custom-local-model"] },
+    { id: "textgen", name: "Oobabooga TextGen", tier: "selfhosted", models: ["textgen-default", "custom-textgen-model"] },
+    { id: "kobold", name: "KoboldCPP", tier: "selfhosted", models: ["kobold-default", "custom-kobold-model"] },
+    { id: "tabbyapi", name: "TabbyAPI", tier: "selfhosted", models: ["tabby-default", "custom-tabby-model"] },
+    { id: "custom", name: "Custom Endpoint (OpenAI-compatible)", tier: "selfhosted", models: ["custom-model"] }
   ];
 
   // GET /api/ai/providers - List all available AI providers and models
