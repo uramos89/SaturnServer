@@ -136,7 +136,25 @@ const translations: Record<Language, Record<string, string>> = {
     'provider.ollama': 'Ollama (Local)',
     'provider.anthropic': 'Anthropic Claude',
     'provider.none': 'None (Monitor Only)',
+    
+    // Onboarding
+    'onboarding.subtitle': 'Configure your AI provider to activate the Ares Neural Engine. Select from 18+ providers and 100+ models.',
+    'onboarding.select': 'Select AI Provider',
+    'onboarding.select.desc': 'Choose your preferred AI provider from the list below. You can change this later in Settings.',
+    'onboarding.configured': 'Configured',
+    'onboarding.next': 'Next Step',
+    'onboarding.back': 'Back',
+    'onboarding.model': 'Select Model',
+    'onboarding.apiKey': 'API Key',
+    'onboarding.apiKey.placeholder': 'Enter your API key...',
+    'onboarding.apiKey.desc': 'Your API key is stored encrypted and never shared.',
+    'onboarding.endpoint': 'Endpoint URL',
+    'onboarding.saving': 'Configuring...',
+    'onboarding.start': 'Initialize Saturn',
+    'onboarding.ready': 'Saturn is Ready',
+    'onboarding.ready.desc': 'Neural engine initialized. Redirecting to dashboard...',
   },
+
   
   es: {
     'app.name': 'SATURN',
@@ -272,6 +290,23 @@ const translations: Record<Language, Record<string, string>> = {
     'provider.ollama': 'Ollama (Local)',
     'provider.anthropic': 'Anthropic Claude',
     'provider.none': 'Ninguno (Solo Monitoreo)',
+    
+    // Onboarding
+    'onboarding.subtitle': 'Configura tu proveedor de IA para activar el Motor Neural Ares. Selecciona entre 18+ proveedores y 100+ modelos.',
+    'onboarding.select': 'Selecciona Proveedor IA',
+    'onboarding.select.desc': 'Elige tu proveedor de IA preferido de la lista. Puedes cambiarlo después en Configuración.',
+    'onboarding.configured': 'Configurado',
+    'onboarding.next': 'Siguiente',
+    'onboarding.back': 'Atrás',
+    'onboarding.model': 'Selecciona Modelo',
+    'onboarding.apiKey': 'API Key',
+    'onboarding.apiKey.placeholder': 'Ingresa tu API key...',
+    'onboarding.apiKey.desc': 'Tu API key se almacena encriptada y nunca se comparte.',
+    'onboarding.endpoint': 'URL del Endpoint',
+    'onboarding.saving': 'Configurando...',
+    'onboarding.start': 'Inicializar Saturn',
+    'onboarding.ready': 'Saturn está Listo',
+    'onboarding.ready.desc': 'Motor neural inicializado. Redirigiendo al dashboard...',
   }
 };
 

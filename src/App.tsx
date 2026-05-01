@@ -45,6 +45,291 @@ import {
   Area
 } from 'recharts';
 
+// ── Provider & Model Types ─────────────────────────────────────────────
+interface AIProvider {
+  id: string;
+  name: string;
+  models: string[];
+}
+
+interface ConfiguredProvider {
+  id: string;
+  name: string;
+  provider: string;
+  model: string;
+  enabled: number;
+}
+
+// ── Onboarding Wizard ──────────────────────────────────────────────────
+const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: string) => string }) => {
+  const [step, setStep] = useState(0);
+  const [providers, setProviders] = useState<AIProvider[]>([]);
+  const [configured, setConfigured] = useState<ConfiguredProvider[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [apiKey, setApiKey] = useState('');
+  const [endpoint, setEndpoint] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/ai/providers')
+      .then(r => r.json())
+      .then(data => {
+        setProviders(data.providers);
+        setConfigured(data.configured);
+        if (data.configured.length > 0) {
+          setSaved(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleConfigure = async () => {
+    if (!selectedProvider || !selectedModel) return;
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch('/api/ai/providers/configure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: selectedProvider,
+          model: selectedModel,
+          apiKey: apiKey || undefined,
+          endpoint: endpoint || undefined,
+          name: providers.find(p => p.id === selectedProvider)?.name
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSaved(true);
+        setTimeout(onComplete, 1000);
+      } else {
+        setError(data.error || 'Failed to configure');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const provider = providers.find(p => p.id === selectedProvider);
+
+  if (saved) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex flex-col items-center justify-center min-h-[60vh]"
+      >
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          className="w-24 h-24 rounded-full border-4 border-orange-500 border-t-transparent mb-8"
+        />
+        <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-4">
+          {t('onboarding.ready')}
+        </h2>
+        <p className="text-slate-400 text-sm">{t('onboarding.ready.desc')}</p>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-4xl mx-auto"
+    >
+      {/* Header */}
+      <div className="text-center mb-12">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", stiffness: 200 }}
+          className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-orange-500 flex items-center justify-center shadow-[0_0_30px_rgba(249,115,22,0.3)]"
+        >
+          <div className="w-10 h-2 bg-orange-500 rounded-full" />
+        </motion.div>
+        <motion.h1 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="text-4xl font-black text-white tracking-[0.15em] mb-4"
+        >
+          SATURN <span className="text-orange-500 font-light">v4.0</span>
+        </motion.h1>
+        <motion.p 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-slate-400 text-sm max-w-xl mx-auto leading-relaxed"
+        >
+          {t('onboarding.subtitle')}
+        </motion.p>
+      </div>
+
+      {/* Step indicator */}
+      <div className="flex justify-center gap-2 mb-12">
+        {[0, 1].map(i => (
+          <div key={i} className={cn(
+            "h-1 w-24 rounded-full transition-all duration-500",
+            step >= i ? "bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]" : "bg-white/10"
+          )} />
+        ))}
+      </div>
+
+      {/* Step 0: Provider Selection */}
+      {step === 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          <h2 className="text-lg font-black text-white uppercase tracking-widest mb-2">
+            {t('onboarding.select')}
+          </h2>
+          <p className="text-xs text-slate-500 mb-8">{t('onboarding.select.desc')}</p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {providers.map(p => (
+              <motion.button
+                key={p.id}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => { setSelectedProvider(p.id); setSelectedModel(''); }}
+                className={cn(
+                  "p-5 rounded-2xl border text-left transition-all",
+                  selectedProvider === p.id
+                    ? "bg-orange-500/10 border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.1)]"
+                    : "bg-white/[0.02] border-white/10 hover:border-white/20 hover:bg-white/[0.05]"
+                )}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center text-lg",
+                    selectedProvider === p.id ? "bg-orange-500/20 text-orange-500" : "bg-white/5 text-slate-400"
+                  )}>
+                    {p.name.charAt(0)}
+                  </div>
+                  {configured.some(c => c.provider === p.id) && (
+                    <span className="text-[9px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full uppercase font-black">
+                      {t('onboarding.configured')}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-sm font-bold text-white mb-1">{p.name}</h3>
+                <p className="text-[10px] text-slate-500 font-mono">{p.models.length} models</p>
+              </motion.button>
+            ))}
+          </div>
+
+          <div className="flex justify-end mt-8">
+            <button
+              onClick={() => setStep(1)}
+              disabled={!selectedProvider}
+              className="px-8 py-3 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              {t('onboarding.next')} →
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Step 1: Model & API Key */}
+      {step === 1 && provider && (
+        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+          <div className="flex items-center gap-4 mb-8">
+            <button onClick={() => setStep(0)} className="text-slate-500 hover:text-white transition-colors">
+              ← {t('onboarding.back')}
+            </button>
+            <h2 className="text-lg font-black text-white uppercase tracking-widest">
+              {provider.name}
+            </h2>
+          </div>
+
+          <div className="space-y-6">
+            {/* Model Selection */}
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 block">
+                {t('onboarding.model')}
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {provider.models.map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setSelectedModel(m)}
+                    className={cn(
+                      "p-3 rounded-xl border text-xs font-mono transition-all text-left",
+                      selectedModel === m
+                        ? "bg-orange-500/10 border-orange-500 text-orange-400"
+                        : "bg-white/[0.02] border-white/10 text-slate-400 hover:border-white/20"
+                    )}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* API Key */}
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+                {t('onboarding.apiKey')}
+              </label>
+              <div className="relative">
+                <Key size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={t('onboarding.apiKey.placeholder')}
+                  className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none font-mono"
+                />
+              </div>
+              <p className="text-[9px] text-slate-600 mt-2">{t('onboarding.apiKey.desc')}</p>
+            </div>
+
+            {/* Endpoint (for self-hosted) */}
+            {(provider.id === 'ollama' || provider.id === 'vllm' || provider.id === 'localai' || provider.id === 'custom') && (
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
+                  {t('onboarding.endpoint')}
+                </label>
+                <input
+                  type="text"
+                  value={endpoint}
+                  onChange={(e) => setEndpoint(e.target.value)}
+                  placeholder="http://localhost:11434"
+                  className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none font-mono"
+                />
+              </div>
+            )}
+
+            {error && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[10px] text-rose-400">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleConfigure}
+              disabled={!selectedModel || saving}
+              className="w-full py-4 bg-orange-500 text-black text-xs font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+            >
+              {saving ? (
+                <><RefreshCw size={14} className="animate-spin" /> {t('onboarding.saving')}</>
+              ) : (
+                <><Zap size={14} /> {t('onboarding.start')}</>
+              )}
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+};
+
+
 // ── i18n Hook ──────────────────────────────────────────────────────────
 function useLang() {
   const [lang, setLang] = useState<Language>(() => {
@@ -372,6 +657,7 @@ export default function App() {
   });
   const [aiSaved, setAiSaved] = useState(false);
   const [aiEndpoint, setAiEndpoint] = useState('');
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // SSH Form state
   const [sshForm, setSshForm] = useState({ host: '', port: '22', username: 'root', password: '', keyFile: '' });
@@ -394,6 +680,10 @@ export default function App() {
       if (aiRes) {
         const aiData = await aiRes.json();
         setAiConfig(aiData);
+        // Show onboarding if no AI provider is configured
+        if (!aiData.configured) {
+          setShowOnboarding(true);
+        }
       }
       setIsLoading(false);
     } catch (err) {
@@ -647,7 +937,15 @@ export default function App() {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar z-10">
-          {activeTab === 'dash' && (
+          {showOnboarding ? (
+            <OnboardingWizard 
+              onComplete={() => {
+                setShowOnboarding(false);
+                fetchData();
+              }} 
+              t={t} 
+            />
+          ) : activeTab === 'dash' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard title={t('card.health')} value="99.9%" icon={ShieldCheck} color="bg-emerald-600" trend={0.1} />

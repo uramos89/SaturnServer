@@ -126,6 +126,17 @@ db.exec(`
     executedBy TEXT,
     timestamp TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS ai_providers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    api_key TEXT,
+    endpoint TEXT,
+    enabled INTEGER DEFAULT 0,
+    created_at TEXT
+  );
 `);
 
 // Add column migration for new columns (safe if they already exist)
@@ -732,10 +743,72 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
-  // ── AI Config Endpoint ──────────────────────────────────────────────────
+  // ── AI Providers & Models ──────────────────────────────────────────────
+  const AI_PROVIDERS = [
+    { id: "openai", name: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1", "o1-mini", "o3-mini"] },
+    { id: "anthropic", name: "Anthropic", models: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-3.5-sonnet", "claude-3.5-haiku"] },
+    { id: "google", name: "Google AI", models: ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"] },
+    { id: "meta", name: "Meta (Llama)", models: ["llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3-70b", "llama-3-8b"] },
+    { id: "mistral", name: "Mistral AI", models: ["mistral-large", "mistral-medium", "mistral-small", "mixtral-8x7b", "codestral"] },
+    { id: "cohere", name: "Cohere", models: ["command-r-plus", "command-r", "command-light", "embed-english-v3", "embed-multilingual-v3"] },
+    { id: "deepseek", name: "DeepSeek", models: ["deepseek-chat", "deepseek-coder", "deepseek-v2", "deepseek-r1"] },
+    { id: "xai", name: "xAI (Grok)", models: ["grok-1", "grok-1.5", "grok-2"] },
+    { id: "perplexity", name: "Perplexity", models: ["sonar-pro", "sonar-small", "mixtral-8x7b-instruct"] },
+    { id: "together", name: "Together AI", models: ["mixtral-8x22b", "llama-3-70b", "deepseek-coder-33b", "qwen-72b"] },
+    { id: "fireworks", name: "Fireworks AI", models: ["llama-v3-70b", "mixtral-8x7b", "deepseek-coder-33b", "qwen-72b-chat"] },
+    { id: "groq", name: "Groq", models: ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it"] },
+    { id: "replicate", name: "Replicate", models: ["llama-3-70b", "mixtral-8x7b", "stable-diffusion", "whisper"] },
+    { id: "huggingface", name: "Hugging Face", models: ["mistral-7b", "llama-3-8b", "falcon-7b", "zephyr-7b", "codellama-34b"] },
+    { id: "ollama", name: "Ollama (Local)", models: ["llama3", "llama3.1", "mistral", "mixtral", "codellama", "deepseek-coder", "phi-3", "gemma-2", "qwen2", "yi-34b"] },
+    { id: "vllm", name: "vLLM (Self-Hosted)", models: ["llama-3-70b", "mixtral-8x22b", "qwen-72b", "custom-endpoint"] },
+    { id: "localai", name: "LocalAI", models: ["llama-3", "mistral", "phi-3", "falcon", "bert-embeddings"] },
+    { id: "custom", name: "Custom Endpoint", models: ["custom-model"] }
+  ];
+
+  // GET /api/ai/providers - List all available AI providers and models
+  app.get("/api/ai/providers", (req, res) => {
+    const configured = db.prepare("SELECT * FROM ai_providers").all() as any[];
+    res.json({ providers: AI_PROVIDERS, configured });
+  });
+
+  // POST /api/ai/providers/configure - Save API key for a provider
+  app.post("/api/ai/providers/configure", (req, res) => {
+    const { providerId, model, apiKey, endpoint, name } = req.body;
+    if (!providerId || !model) {
+      return res.status(400).json({ error: "providerId and model are required" });
+    }
+    const id = `ai-${providerId}-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    
+    // Disable all other providers of same type
+    db.prepare("UPDATE ai_providers SET enabled = 0 WHERE provider = ?").run(providerId);
+    
+    db.prepare(`INSERT OR REPLACE INTO ai_providers (id, name, provider, model, api_key, endpoint, enabled, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?)`)
+      .run(id, name || providerId, providerId, model, apiKey ? encrypt(apiKey) : null, endpoint || null, createdAt);
+    
+    // Set active provider in env
+    process.env.ACTIVE_AI_PROVIDER = providerId;
+    if (apiKey) {
+      if (providerId === 'google') process.env.GEMINI_API_KEY = apiKey;
+      else process.env[`${providerId.toUpperCase()}_API_KEY`] = apiKey;
+    }
+    
+    db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+      .run(`audit-${Date.now()}`, "USER", "AI_PROVIDER_CONFIGURED",
+        `AI provider ${providerId} configured with model ${model}`, createdAt);
+    
+    res.json({ success: true, id, message: `${providerId} configured successfully` });
+  });
+
+  // GET /api/ai/config - Get current AI config
   app.get("/api/ai/config", (req, res) => {
+    const active = db.prepare("SELECT * FROM ai_providers WHERE enabled = 1").get() as any;
     res.json({
-      provider: process.env.AI_PROVIDER || process.env.GEMINI_API_KEY ? "gemini" : process.env.OPENAI_API_KEY ? "openai" : "none",
+      configured: !!active,
+      provider: active?.provider || "none",
+      model: active?.model || "",
+      name: active?.name || "",
       apiKey: "",
       deepVerify: process.env.AI_DEEP_VERIFY !== "false",
       autoRemediate: process.env.AI_AUTO_REMEDIATE === "true"
@@ -744,7 +817,6 @@ Real-time SSH Metrics (${sshConn.host}):
 
   app.post("/api/ai/config", (req, res) => {
     const { provider, apiKey, deepVerify, autoRemediate, endpoint } = req.body;
-    // In production this would persist to a secure store
     if (provider === 'gemini' && apiKey) process.env.GEMINI_API_KEY = apiKey;
     if (provider === 'openai' && apiKey) process.env.OPENAI_API_KEY = apiKey;
     if (endpoint) process.env.AI_ENDPOINT = endpoint;

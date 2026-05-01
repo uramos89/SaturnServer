@@ -106,23 +106,14 @@ log "Dependencies installed."
 # ─── 5. Configure environment variables ────────────────────────────────────
 info "Step 5/7: Configuring environment variables..."
 
-# Configure .env — use GEMINI_API_KEY from env if set, otherwise placeholder
-if [[ ! -f .env ]] || ! grep -q "GEMINI_API_KEY=" .env || grep -q 'GEMINI_API_KEY=""' .env || grep -q "GEMINI_API_KEY=\"MY_GEMINI_API_KEY\"" .env; then
-  GEMINI_KEY="${GEMINI_API_KEY:-}"
-  if [[ -z "$GEMINI_KEY" ]]; then
-    warn "GEMINI_API_KEY not set. Using placeholder — AI features will be limited."
-    GEMINI_KEY="placeholder_key_set_during_install"
-  fi
-  cat > .env <<EOF
-GEMINI_API_KEY="${GEMINI_KEY}"
+# Create .env — API keys will be configured via the frontend on first launch
+cat > .env <<EOF
 NODE_ENV=production
 APP_URL="http://localhost:${APP_PORT}"
 PORT=${APP_PORT}
 EOF
-  log ".env file created at $INSTALL_DIR/.env"
-else
-  log ".env file already exists and contains an API Key."
-fi
+log ".env file created at $INSTALL_DIR/.env"
+log "AI API keys will be configured via the web interface on first launch."
 
 # ─── 6. Build frontend ─────────────────────────────────────────────────────
 info "Step 6/7: Building frontend for production..."
