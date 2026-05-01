@@ -44,10 +44,11 @@ try {
     # 4. Ensure .env file exists with secure defaults
     Write-Output "=== 4. Ensuring .env file ==="
     $result = Run-Root $session "if [ ! -f /opt/saturn/.env ]; then
-      cat > /opt/saturn/.env << 'EOF'
+      PEPPER=\$(date +%s | sha256sum | head -c 64)
+      cat > /opt/saturn/.env << EOF
 PORT=80
 NODE_ENV=production
-SSH_ENCRYPTION_PEPPER=$(openssl rand -hex 32)
+SSH_ENCRYPTION_PEPPER=\$PEPPER
 GEMINI_API_KEY=
 OPENAI_API_KEY=
 AI_DEEP_VERIFY=true
