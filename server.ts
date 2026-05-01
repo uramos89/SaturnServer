@@ -5,6 +5,8 @@ import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
 import { GoogleGenerativeAI } from "@google/genai";
 import fs from "fs";
+import crypto from "crypto";
+import { sshAgent, type SSHConnectionConfig, type SystemMetrics } from "./src/lib/ssh-agent.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +14,27 @@ const __dirname = path.dirname(__filename);
 // Initialize Database
 const db = new Database("saturno.db");
 db.pragma("journal_mode = WAL");
+
+// Encryption key for SSH credentials (derived from machine + a secret pepper)
+const ENCRYPTION_KEY = crypto.createHash("sha256").update(process.env.SSH_ENCRYPTION_PEPPER || "saturno-default-pepper-change-me").digest();
+
+function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(text, "utf-8", "hex");
+  encrypted += cipher.final("hex");
+  return iv.toString("hex") + ":" + encrypted;
+}
+
+function decrypt(text: string): string {
+  const parts = text.split(":");
+  const iv = Buffer.from(parts[0], "hex");
+  const encrypted = parts[1];
+  const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
+  let decrypted = decipher.update(encrypted, "hex", "utf-8");
+  decrypted += decipher.final("utf-8");
+  return decrypted;
+}
 
 // Database Schema
 db.exec(`
@@ -23,8 +46,27 @@ db.exec(`
     status TEXT,
     cpu REAL,
     memory REAL,
+    disk REAL,
+    uptime INTEGER,
+    kernel TEXT,
+    load_avg TEXT,
     lastCheck TEXT,
     tags TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS ssh_connections (
+    id TEXT PRIMARY KEY,
+    serverId TEXT UNIQUE,
+    host TEXT NOT NULL,
+    port INTEGER DEFAULT 22,
+    username TEXT NOT NULL,
+    authType TEXT DEFAULT 'key',
+    encryptedKey TEXT,
+    encryptedPassword TEXT,
+    fingerprint TEXT,
+    lastConnected TEXT,
+    status TEXT DEFAULT 'disconnected',
+    FOREIGN KEY (serverId) REFERENCES servers(id)
   );
 
   CREATE TABLE IF NOT EXISTS incidents (
@@ -60,20 +102,37 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS notification_configs (
     id TEXT PRIMARY KEY,
-    type TEXT, -- 'email', 'slack', 'webhook'
+    type TEXT,
     destination TEXT,
-    config TEXT, -- JSON blob for SMTP settings or Slack token
+    config TEXT,
     enabled INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS audit_logs (
     id TEXT PRIMARY KEY,
-    type TEXT, -- 'SYSTEM', 'NEURAL', 'USER'
+    type TEXT,
     event TEXT,
     detail TEXT,
     timestamp TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS command_history (
+    id TEXT PRIMARY KEY,
+    serverId TEXT,
+    command TEXT,
+    stdout TEXT,
+    stderr TEXT,
+    exitCode INTEGER,
+    executedBy TEXT,
+    timestamp TEXT
+  );
 `);
+
+// Add column migration for new columns (safe if they already exist)
+try { db.exec("ALTER TABLE servers ADD COLUMN disk REAL"); } catch {}
+try { db.exec("ALTER TABLE servers ADD COLUMN uptime INTEGER"); } catch {}
+try { db.exec("ALTER TABLE servers ADD COLUMN kernel TEXT"); } catch {}
+try { db.exec("ALTER TABLE servers ADD COLUMN load_avg TEXT"); } catch {}
 
 // Notification Service
 async function sendNotification(type: string, title: string, message: string, severity: string) {
@@ -85,9 +144,7 @@ async function sendNotification(type: string, title: string, message: string, se
         const axios = (await import("axios")).default;
         await axios.post(config.destination, {
           text: `*[SATURNO - ${severity.toUpperCase()}]* ${title}\n${message}`,
-          title,
-          message,
-          severity,
+          title, message, severity,
           timestamp: new Date().toISOString()
         });
       } else if (config.type === 'email') {
@@ -134,38 +191,364 @@ async function getLLMResponse(provider: string, prompt: string) {
   throw new Error(`Provider ${provider} not supported`);
 }
 
-// Seed Data (if empty)
+// Background metrics updater
+async function updateAllServerMetrics() {
+  const connections = db.prepare("SELECT * FROM ssh_connections WHERE status = 'connected'").all() as any[];
+  
+  for (const conn of connections) {
+    try {
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      // Check if we have an active connection
+      let metrics: SystemMetrics;
+      try {
+        metrics = await sshAgent.getSystemMetrics(key);
+      } catch {
+        // Reconnect
+        const config: SSHConnectionConfig = {
+          host: conn.host,
+          port: conn.port,
+          username: conn.username
+        };
+        if (conn.encryptedKey) config.privateKey = decrypt(conn.encryptedKey);
+        if (conn.encryptedPassword) config.password = decrypt(conn.encryptedPassword);
+        
+        await sshAgent.connect(config);
+        metrics = await sshAgent.getSystemMetrics(key);
+      }
+      
+      const os = metrics.os.toLowerCase().includes("ubuntu") || metrics.os.toLowerCase().includes("debian") || metrics.os.toLowerCase().includes("centos") || metrics.os.toLowerCase().includes("red hat") || metrics.os.toLowerCase().includes("linux") ? "linux" :
+                 metrics.os.toLowerCase().includes("windows") ? "windows" : "unix";
+
+      db.prepare(`UPDATE servers SET 
+        cpu = ?, memory = ?, disk = ?, uptime = ?, os = ?, kernel = ?, 
+        load_avg = ?, lastCheck = ?, status = ? WHERE id = ?`)
+        .run(
+          metrics.cpu, metrics.memory, metrics.disk, metrics.uptime,
+          os, metrics.kernel, JSON.stringify(metrics.loadAvg),
+          new Date().toISOString(),
+          metrics.cpu > 90 || metrics.memory > 90 ? "degraded" : "online",
+          conn.serverId
+        );
+
+      db.prepare("UPDATE ssh_connections SET lastConnected = ? WHERE id = ?")
+        .run(new Date().toISOString(), conn.id);
+
+    } catch (error: any) {
+      console.error(`Failed to update metrics for ${conn.host}:`, error.message);
+      db.prepare("UPDATE servers SET status = 'offline', lastCheck = ? WHERE id = ?")
+        .run(new Date().toISOString(), conn.serverId);
+    }
+  }
+}
+
+// Seed Data (if empty) - keep mock servers as fallback
 const serverCount = db.prepare("SELECT COUNT(*) as count FROM servers").get() as { count: number };
 if (serverCount.count === 0) {
-  const insertServer = db.prepare("INSERT INTO servers (id, name, ip, os, status, cpu, memory, lastCheck, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-  insertServer.run("srv-001", "Nexus-Core-01", "10.0.0.1", "linux", "online", 12.5, 45.2, new Date().toISOString(), "prod,core");
-  insertServer.run("srv-002", "Titan-Win-DB", "10.0.0.2", "windows", "degraded", 88.1, 92.4, new Date().toISOString(), "prod,db");
-  insertServer.run("srv-003", "Edge-Unix-01", "10.0.0.3", "unix", "online", 5.2, 12.8, new Date().toISOString(), "edge");
+  const insertServer = db.prepare("INSERT OR IGNORE INTO servers (id, name, ip, os, status, cpu, memory, disk, uptime, kernel, load_avg, lastCheck, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  insertServer.run("srv-001", "local-dev", "127.0.0.1", "linux", "pending", 0, 0, 0, 0, "", "[]", new Date().toISOString(), "local,pending-ssh");
   
   // Initial ContextP Knowledge
-  const insertContext = db.prepare("INSERT INTO contextp_entries (path, content, type, lastUpdated) VALUES (?, ?, ?, ?)");
-  insertContext.run("TECH/linux/baseline.md", "# Linux Security Baseline\n- Port 22 limited to internal\n- Autoupdate enabled", "TECH", new Date().toISOString());
+  const insertContext = db.prepare("INSERT OR IGNORE INTO contextp_entries (path, content, type, lastUpdated) VALUES (?, ?, ?, ?)");
+  insertContext.run("TECH/ssh/baseline.md", "# SSH Management\n- Port 22 default\n- Key-based auth preferred\n- Keepalive every 10s\n- Connection pooling enabled", "TECH", new Date().toISOString());
+  insertContext.run("TECH/linux/monitoring.md", "# Linux Monitoring Commands\n- CPU: /proc/stat\n- Memory: free\n- Disk: df\n- Uptime: /proc/uptime\n- Load: /proc/loadavg", "TECH", new Date().toISOString());
   insertContext.run("CONTRACTS/root_contract.md", "# Root Contract\nEvery action must be audited. No direct root login.", "CONTRACTS", new Date().toISOString());
   insertContext.run("PARAMS/preferences.md", "# User Preferences\n- Language: Spanish\n- AI Provider: Gemini 2.0\n- Strict Mode: Enabled", "PARAMS", new Date().toISOString());
-  insertContext.run("_INDEX/INDEX_MASTER.md", "# Index Master\n- TECH: General documentation\n- STRUCT: Architecture templates\n- AUDIT: Execution history", "INDEX", new Date().toISOString());
+  insertContext.run("_INDEX/INDEX_MASTER.md", "# Index Master\n- TECH: General documentation\n- SSH: Connection management\n- CONTRACTS: Root rules\n- AUDIT: Execution history", "INDEX", new Date().toISOString());
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 async function startServer() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "10mb" }));
 
-  // Health Check
+  // ── Health Check ──────────────────────────────────────────────────────────
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString(), version: "2.0.0" });
+    const sshCount = db.prepare("SELECT COUNT(*) as c FROM ssh_connections WHERE status = 'connected'").get() as any;
+    const serverCount = db.prepare("SELECT COUNT(*) as c FROM servers").get() as any;
+    res.json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(), 
+      version: "3.0.0",
+      ssh: { connected: sshCount.c, total: db.prepare("SELECT COUNT(*) as c FROM ssh_connections").get() as any },
+      servers: serverCount.c
+    });
   });
 
-  // API Routes
-  app.get("/api/servers", (req, res) => {
+  // ── SSH Management Endpoints ──────────────────────────────────────────────
 
+  // GET /api/ssh/connections - List all SSH connections
+  app.get("/api/ssh/connections", (req, res) => {
+    const conns = db.prepare(`
+      SELECT sc.id, sc.serverId, sc.host, sc.port, sc.username, sc.authType, 
+             sc.fingerprint, sc.lastConnected, sc.status, s.name as serverName
+      FROM ssh_connections sc
+      LEFT JOIN servers s ON sc.serverId = s.id
+    `).all();
+    res.json(conns);
+  });
+
+  // POST /api/ssh/connect - Test connection and register server
+  app.post("/api/ssh/connect", async (req, res) => {
+    const { host, port = 22, username, privateKey, password } = req.body;
+    
+    if (!host || !username) {
+      return res.status(400).json({ error: "Host and username are required" });
+    }
+
+    const config: SSHConnectionConfig = { host, port, username };
+
+    try {
+      if (privateKey) {
+        config.privateKey = privateKey;
+      } else if (password) {
+        config.password = password;
+      } else {
+        // Try default SSH key
+        const homeKey = path.join(process.env.HOME || process.env.USERPROFILE || "/root", ".ssh", "id_rsa");
+        if (fs.existsSync(homeKey)) {
+          config.privateKey = fs.readFileSync(homeKey, "utf-8");
+        } else {
+          return res.status(400).json({ error: "No authentication method provided and no default SSH key found" });
+        }
+      }
+
+      const testResult = await sshAgent.testConnection(config);
+      
+      if (!testResult.success) {
+        return res.status(401).json({ error: testResult.message });
+      }
+
+      const metrics = testResult.metrics!;
+      const serverId = `srv-${host.replace(/[^a-zA-Z0-9]/g, '-')}`;
+      const os = metrics.os.toLowerCase().includes("ubuntu") || metrics.os.toLowerCase().includes("debian") || metrics.os.toLowerCase().includes("centos") || metrics.os.toLowerCase().includes("red hat") || metrics.os.toLowerCase().includes("linux") ? "linux" :
+                 metrics.os.toLowerCase().includes("windows") ? "windows" : "unix";
+
+      // Upsert server
+      db.prepare(`INSERT OR REPLACE INTO servers 
+        (id, name, ip, os, status, cpu, memory, disk, uptime, kernel, load_avg, lastCheck, tags) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(
+          serverId, metrics.hostname, host, os, "online",
+          metrics.cpu, metrics.memory, metrics.disk, metrics.uptime,
+          metrics.kernel, JSON.stringify(metrics.loadAvg),
+          new Date().toISOString(), "ssh,managed"
+        );
+
+      // Upsert SSH connection
+      const connId = `ssh-${serverId}`;
+      db.prepare(`INSERT OR REPLACE INTO ssh_connections 
+        (id, serverId, host, port, username, authType, encryptedKey, encryptedPassword, fingerprint, lastConnected, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(
+          connId, serverId, host, port, username,
+          privateKey ? "key" : "password",
+          privateKey ? encrypt(privateKey) : null,
+          password ? encrypt(password) : null,
+          metrics.hostname,
+          new Date().toISOString(), "connected"
+        );
+
+      // Log audit
+      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+        .run(`audit-${Date.now()}`, "SYSTEM", "SSH_CONNECTED", 
+          `SSH connection established to ${username}@${host}:${port} (${metrics.hostname})`, 
+          new Date().toISOString());
+
+      res.json({ 
+        success: true, 
+        serverId, 
+        hostname: metrics.hostname, 
+        metrics,
+        message: `Connected to ${metrics.hostname}`
+      });
+
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/ssh/disconnect - Disconnect from server
+  app.post("/api/ssh/disconnect", async (req, res) => {
+    const { serverId } = req.body;
+    if (!serverId) return res.status(400).json({ error: "serverId required" });
+
+    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+    if (!conn) return res.status(404).json({ error: "Connection not found" });
+
+    const key = `${conn.username}@${conn.host}:${conn.port}`;
+    try { await sshAgent.disconnect(key); } catch {}
+
+    db.prepare("UPDATE ssh_connections SET status = 'disconnected' WHERE serverId = ?").run(serverId);
+    db.prepare("UPDATE servers SET status = 'offline' WHERE id = ?").run(serverId);
+
+    res.json({ success: true });
+  });
+
+  // POST /api/servers/:id/refresh - Refresh metrics via SSH
+  app.post("/api/servers/:id/refresh", async (req, res) => {
+    const { id } = req.params;
+    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+    if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+
+    try {
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      let metrics: SystemMetrics;
+
+      try {
+        metrics = await sshAgent.getSystemMetrics(key);
+      } catch {
+        // Reconnect
+        const config: SSHConnectionConfig = {
+          host: conn.host, port: conn.port, username: conn.username
+        };
+        if (conn.encryptedKey) config.privateKey = decrypt(conn.encryptedKey);
+        if (conn.encryptedPassword) config.password = decrypt(conn.encryptedPassword);
+        await sshAgent.connect(config);
+        metrics = await sshAgent.getSystemMetrics(key);
+      }
+
+      const os = metrics.os.toLowerCase().includes("linux") ? "linux" :
+                 metrics.os.toLowerCase().includes("windows") ? "windows" : "unix";
+
+      db.prepare(`UPDATE servers SET 
+        cpu = ?, memory = ?, disk = ?, uptime = ?, os = ?, kernel = ?,
+        load_avg = ?, lastCheck = ?, status = ? WHERE id = ?`)
+        .run(metrics.cpu, metrics.memory, metrics.disk, metrics.uptime,
+             os, metrics.kernel, JSON.stringify(metrics.loadAvg),
+             new Date().toISOString(),
+             metrics.cpu > 90 || metrics.memory > 90 ? "degraded" : "online", id);
+
+      db.prepare("UPDATE ssh_connections SET lastConnected = ?, status = 'connected' WHERE serverId = ?")
+        .run(new Date().toISOString(), id);
+
+      res.json({ success: true, metrics });
+    } catch (error: any) {
+      db.prepare("UPDATE servers SET status = 'offline' WHERE id = ?").run(id);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/servers/:id/exec - Execute command on server via SSH
+  app.post("/api/servers/:id/exec", async (req, res) => {
+    const { id } = req.params;
+    const { command } = req.body;
+    
+    if (!command) return res.status(400).json({ error: "Command required" });
+
+    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+    if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+
+    try {
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+
+      // Ensure connected
+      try { await sshAgent.getSystemMetrics(key); } catch {
+        const config: SSHConnectionConfig = {
+          host: conn.host, port: conn.port, username: conn.username
+        };
+        if (conn.encryptedKey) config.privateKey = decrypt(conn.encryptedKey);
+        if (conn.encryptedPassword) config.password = decrypt(conn.encryptedPassword);
+        await sshAgent.connect(config);
+      }
+
+      const result = await sshAgent.execCommand(key, command);
+
+      // Log to command history
+      db.prepare(`INSERT INTO command_history (id, serverId, command, stdout, stderr, exitCode, executedBy, timestamp) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(`cmd-${Date.now()}`, id, command, result.stdout.substring(0, 5000), 
+             result.stderr.substring(0, 1000), result.code, "admin", new Date().toISOString());
+
+      // Audit log
+      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+        .run(`audit-${Date.now()}`, "USER", "CMD_EXECUTED", 
+          `Command executed on ${conn.host}: ${command.substring(0, 100)}`, new Date().toISOString());
+
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET /api/servers/:id/history - Command history for a server
+  app.get("/api/servers/:id/history", (req, res) => {
+    const { id } = req.params;
+    const history = db.prepare("SELECT * FROM command_history WHERE serverId = ? ORDER BY timestamp DESC LIMIT 50").all();
+    res.json(history);
+  });
+
+  // POST /api/servers/:id/script - Execute remediation script via SSH
+  app.post("/api/servers/:id/script", async (req, res) => {
+    const { id } = req.params;
+    const { script } = req.body;
+    
+    if (!script) return res.status(400).json({ error: "Script required" });
+
+    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+    if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+
+    try {
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+
+      try { await sshAgent.getSystemMetrics(key); } catch {
+        const config: SSHConnectionConfig = {
+          host: conn.host, port: conn.port, username: conn.username
+        };
+        if (conn.encryptedKey) config.privateKey = decrypt(conn.encryptedKey);
+        if (conn.encryptedPassword) config.password = decrypt(conn.encryptedPassword);
+        await sshAgent.connect(config);
+      }
+
+      const result = await sshAgent.execScript(key, script);
+
+      // Audit log
+      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+        .run(`audit-${Date.now()}`, "USER", "SCRIPT_EXECUTED",
+          `Remediation script executed on ${conn.host} (exit: ${result.code})`, new Date().toISOString());
+
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET /api/servers/ssh/stream - SSE stream for real-time metrics
+  app.get("/api/servers/ssh/stream", (req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "Access-Control-Allow-Origin": "*"
+    });
+
+    const sendMetrics = async () => {
+      try {
+        await updateAllServerMetrics();
+        const servers = db.prepare("SELECT * FROM servers").all();
+        res.write(`data: ${JSON.stringify({ type: "metrics", servers, timestamp: new Date().toISOString() })}\n\n`);
+      } catch {}
+    };
+
+    // Send initial data
+    sendMetrics();
+
+    const interval = setInterval(sendMetrics, 10000);
+
+    req.on("close", () => {
+      clearInterval(interval);
+    });
+  });
+
+  // ── Existing API Routes ───────────────────────────────────────────────────
+
+  app.get("/api/servers", (req, res) => {
     const servers = db.prepare("SELECT * FROM servers").all();
-    res.json(servers.map((s: any) => ({ ...s, tags: s.tags.split(",") })));
+    res.json(servers.map((s: any) => ({ 
+      ...s, 
+      tags: s.tags ? s.tags.split(",") : [],
+      load_avg: s.load_avg ? JSON.parse(s.load_avg) : []
+    })));
   });
 
   app.get("/api/incidents", (req, res) => {
@@ -208,13 +591,42 @@ async function startServer() {
 
     if (approved) {
       db.prepare("UPDATE obpa_cycles SET status = 'approved' WHERE id = ?").run(obpaId);
-      // Log execution
       db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
         .run(`audit-${Date.now()}`, "USER", "REMEDIATION_APPROVED", `User approved remediation for incident ${cycle.incidentId}`, new Date().toISOString());
       
-      // Update incident status to closed after "execution"
+      // Execute remediation script via SSH if we have a connection
+      const incident = db.prepare("SELECT * FROM incidents WHERE id = ?").get() as any;
+      if (incident) {
+        const sshConn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+        if (sshConn && cycle.remediation_script) {
+          try {
+            const key = `${sshConn.username}@${sshConn.host}:${sshConn.port}`;
+            try { await sshAgent.getSystemMetrics(key); } catch {
+              const config: SSHConnectionConfig = {
+                host: sshConn.host, port: sshConn.port, username: sshConn.username
+              };
+              if (sshConn.encryptedKey) config.privateKey = decrypt(sshConn.encryptedKey);
+              if (sshConn.encryptedPassword) config.password = decrypt(sshConn.encryptedPassword);
+              await sshAgent.connect(config);
+            }
+            const execResult = await sshAgent.execScript(key, cycle.remediation_script);
+            db.prepare("UPDATE obpa_cycles SET execution_result = ? WHERE id = ?")
+              .run(`Exit code: ${execResult.code}\n${execResult.stdout.substring(0, 2000)}`, obpaId);
+            
+            // Refresh metrics after remediation
+            const metrics = await sshAgent.getSystemMetrics(key);
+            const os = metrics.os.toLowerCase().includes("linux") ? "linux" :
+                       metrics.os.toLowerCase().includes("windows") ? "windows" : "unix";
+            db.prepare(`UPDATE servers SET cpu = ?, memory = ?, disk = ?, status = ?, lastCheck = ? WHERE id = ?`)
+              .run(metrics.cpu, metrics.memory, metrics.disk, "online", new Date().toISOString(), sshConn.serverId);
+          } catch (e: any) {
+            db.prepare("UPDATE obpa_cycles SET execution_result = ? WHERE id = ?")
+              .run(`SSH execution failed: ${e.message}`, obpaId);
+          }
+        }
+      }
+
       db.prepare("UPDATE incidents SET status = 'closed' WHERE id = ?").run(cycle.incidentId);
-      
       await sendNotification("success", "Remediación Exitosa", `Se ha aplicado la remediación para el incidente ${cycle.incidentId} tras aprobación manual.`, "success");
     } else {
       db.prepare("UPDATE obpa_cycles SET status = 'rejected' WHERE id = ?").run(obpaId);
@@ -231,14 +643,14 @@ async function startServer() {
       .run(id, serverId, title, description, severity, "open", timestamp);
     
     db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-        .run(`audit-${Date.now()}`, "SYSTEM", "INCIDENT_CREATED", `Incident ${id} on ${serverId}: ${title}`, timestamp);
+      .run(`audit-${Date.now()}`, "SYSTEM", "INCIDENT_CREATED", `Incident ${id} on ${serverId}: ${title}`, timestamp);
 
     await sendNotification("warning", `Nuevo Incidente: ${title}`, description, severity);
     
     res.json({ id, status: "open" });
   });
 
-  // Neural Core: OBPA Cycle Simulation
+  // Neural Core: OBPA Cycle with SSH context
   app.post("/api/neural/analyze", async (req, res) => {
     const { incidentId, provider = 'gemini' } = req.body;
     const incident = db.prepare("SELECT * FROM incidents WHERE id = ?").get() as any;
@@ -247,11 +659,31 @@ async function startServer() {
     if (!incident || !server) return res.status(404).json({ error: "Not found" });
 
     try {
-      // Phase: OBSERVE & PROPOSE 
+      // Get SSH real-time metrics if available
+      let realTimeMetrics = "";
+      const sshConn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ? AND status = 'connected'").get() as any;
+      if (sshConn) {
+        try {
+          const key = `${sshConn.username}@${sshConn.host}:${sshConn.port}`;
+          const metrics = await sshAgent.getSystemMetrics(key);
+          realTimeMetrics = `
+Real-time SSH Metrics (${sshConn.host}):
+- CPU: ${metrics.cpu}%
+- Memory: ${metrics.memory}%
+- Disk: ${metrics.disk}%
+- Uptime: ${Math.floor(metrics.uptime / 3600)}h
+- Load Avg: ${metrics.loadAvg.join(", ")}
+- Kernel: ${metrics.kernel}
+- Processes: ${metrics.processes}
+`;
+        } catch {}
+      }
+      
       const prompt = `
         Context: Saturno IA Infrastructure Management.
         Incident: ${incident.title} - ${incident.description}
         Server: ${server.name} (${server.os}, ${server.ip})
+        ${realTimeMetrics}
         Knowledge Base: ${JSON.stringify(db.prepare("SELECT * FROM contextp_entries").all())}
         
         Execute the OBPA (Observe, Propose, Execute, Bitácora, Consolidate) cycle.
@@ -259,14 +691,13 @@ async function startServer() {
         {
           "observation": "detailed analysis of what happened",
           "proposal": "suggested fix",
-          "remediation_script": "shell script or powershell",
+          "remediation_script": "shell script (bash for Linux, powershell for Windows)",
           "consolidated_knowledge": "new entry for ContextP",
           "confidence": 0-1
         }
       `;
 
       const text = await getLLMResponse(provider, prompt);
-      // Clean markdown if present
       const jsonStr = text.replace(/```json|```/g, "").trim();
       const aiResponse = JSON.parse(jsonStr);
 
@@ -275,25 +706,19 @@ async function startServer() {
         INSERT INTO obpa_cycles (id, incidentId, phase, observation, proposal, remediation_script, execution_result, consolidated_knowledge, confidence, status, timestamp)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        obpaId, 
-        incidentId, 
-        "PROPOSE", 
-        aiResponse.observation, 
-        aiResponse.proposal, 
-        aiResponse.remediation_script, 
-        "Waiting for Approval", 
-        aiResponse.consolidated_knowledge, 
-        aiResponse.confidence, 
-        "pending",
-        new Date().toISOString()
+        obpaId, incidentId, "PROPOSE",
+        aiResponse.observation, aiResponse.proposal,
+        aiResponse.remediation_script, "Waiting for Approval",
+        aiResponse.consolidated_knowledge, aiResponse.confidence,
+        "pending", new Date().toISOString()
       );
 
-      // Update incident status
       db.prepare("UPDATE incidents SET status = 'analyzing' WHERE id = ?").run(incidentId);
       
-      // Log analysis
       db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-        .run(`audit-${Date.now()}`, "NEURAL", "ANALYSIS_COMPLETE", `Neural analysis for ${incidentId} complete with ${(aiResponse.confidence * 100).toFixed(1)}% confidence`, new Date().toISOString());
+        .run(`audit-${Date.now()}`, "NEURAL", "ANALYSIS_COMPLETE", 
+          `Neural analysis for ${incidentId} complete with ${(aiResponse.confidence * 100).toFixed(1)}% confidence`, 
+          new Date().toISOString());
 
       res.json({ success: true, obpaId, analysis: aiResponse });
     } catch (error: any) {
@@ -302,7 +727,12 @@ async function startServer() {
     }
   });
 
-  // Vite Integration
+  // ── Background SSH Metrics Scheduler ──────────────────────────────────────
+  if (process.env.NODE_ENV === "production") {
+    setInterval(updateAllServerMetrics, 30000);
+  }
+
+  // ── Vite Integration ───────────────────────────────────────────────────────
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -319,7 +749,8 @@ async function startServer() {
 
   const PORT = 3000;
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Saturno Core running on http://localhost:${PORT}`);
+    console.log(`Saturno Core v3.0.0 running on http://localhost:${PORT}`);
+    console.log(`SSH Agent ready. Connect to servers via POST /api/ssh/connect`);
   });
 }
 

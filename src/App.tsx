@@ -20,8 +20,13 @@ import {
   CheckCircle2,
   XCircle,
   Mail,
-  Zap
+  Zap,
+  Plug,
+  Unplug,
+  TerminalSquare,
+  History
 } from 'lucide-react';
+
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import type { ManagedServer, Incident, ContextP_Entry, AuditLog, NotificationConfig } from './lib/types';

@@ -1,0 +1,11 @@
+# Litestream Configuration for Saturno
+# Replica SQLite to S3-compatible storage
+dbs:
+  - path: /app/data/saturno.db
+    replicas:
+      - url: ${LITESTREAM_REPLICA_URL}
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        retention: 72h
+        snapshot-interval: 24h
+        validation-interval: 1h

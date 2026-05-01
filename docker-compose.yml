@@ -1,0 +1,85 @@
+version: "3.9"
+
+services:
+  # ── Saturno Core (App + API) ──────────────────────────────────────────────
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: saturno-core
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SSH_ENCRYPTION_PEPPER=${SSH_ENCRYPTION_PEPPER:-saturno-docker-pepper}
+      - APP_URL=http://localhost:3000
+    volumes:
+      - saturno_data:/app/data
+      - saturno_contextp:/app/ContextP
+      - ${HOME}/.ssh:/root/.ssh:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - saturno_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Neural Core (ContextP + LLM Adapter) [Aislado para blue-green] ─────────
+  neural:
+    build:
+      context: .
+      dockerfile: Dockerfile.neural
+    container_name: saturno-neural
+    ports:
+      - "50051:50051"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - saturno_contextp:/app/ContextP
+    restart: unless-stopped
+    networks:
+      - saturno_net
+    profiles:
+      - neural
+
+  # ── Litestream (Backup continuo de SQLite a S3/MinIO) ─────────────────────
+  litestream:
+    image: litestream/litestream:latest
+    container_name: saturno-litestream
+    environment:
+      - LITESTREAM_ACCESS_KEY_ID=${LITESTREAM_ACCESS_KEY_ID:-}
+      - LITESTREAM_SECRET_ACCESS_KEY=${LITESTREAM_SECRET_ACCESS_KEY:-}
+      - LITESTREAM_REPLICA_URL=${LITESTREAM_REPLICA_URL:-}
+    volumes:
+      - saturno_data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    command: replicate
+    restart: unless-stopped
+    networks:
+      - saturno_net
+    depends_on:
+      core:
+        condition: service_healthy
+    profiles:
+      - backup
+
+volumes:
+  saturno_data:
+    driver: local
+  saturno_contextp:
+    driver: local
+
+networks:
+  saturno_net:
+    driver: bridge
