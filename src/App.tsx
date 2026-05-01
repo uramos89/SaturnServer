@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Server, 
   Activity, 
@@ -24,12 +23,16 @@ import {
   Plug,
   Unplug,
   TerminalSquare,
-  History
+  History,
+  Globe,
+  Key,
+  Wifi
 } from 'lucide-react';
 
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
-import type { ManagedServer, Incident, ContextP_Entry, AuditLog, NotificationConfig } from './lib/types';
+import type { ManagedServer, Incident, AuditLog, NotificationConfig, AIConfig, SshConnection } from './lib/types';
+import { t, Language } from './lib/i18n';
 import { 
   LineChart, 
   Line, 
@@ -42,7 +45,19 @@ import {
   Area
 } from 'recharts';
 
-// Components
+// ── i18n Hook ──────────────────────────────────────────────────────────
+function useLang() {
+  const [lang, setLang] = useState<Language>(() => {
+    return (localStorage.getItem('saturn-lang') as Language) || 'en';
+  });
+  const set = useCallback((l: Language) => {
+    localStorage.setItem('saturn-lang', l);
+    setLang(l);
+  }, []);
+  return { lang, setLang: set, t: (key: string) => t(key, lang) };
+}
+
+// ── StatCard ────────────────────────────────────────────────────────────
 const StatCard = ({ title, value, icon: Icon, color, trend }: any) => (
   <div className="immersive-card p-6 group transition-all hover:bg-white/[0.05]">
     <div className="text-slate-500 text-[10px] uppercase tracking-widest mb-1">{title}</div>
@@ -69,7 +84,8 @@ const StatCard = ({ title, value, icon: Icon, color, trend }: any) => (
   </div>
 );
 
-const ServerRow = ({ server, onClick }: { server: ManagedServer, onClick: () => void }) => (
+// ── ServerRow ──────────────────────────────────────────────────────────
+const ServerRow = ({ server, onClick, t }: { server: ManagedServer, onClick: () => void, t: (k: string) => string }) => (
   <motion.div 
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
@@ -91,11 +107,10 @@ const ServerRow = ({ server, onClick }: { server: ManagedServer, onClick: () => 
         <div className="text-xs text-slate-500 font-mono">{server.ip}</div>
       </div>
     </div>
-    
     <div className="flex items-center gap-8">
       <div className="hidden md:flex flex-col gap-1 w-24">
         <div className="flex justify-between text-[10px] text-slate-500 uppercase">
-          <span>CPU</span>
+          <span>{t('server.cpu')}</span>
           <span>{server.cpu}%</span>
         </div>
         <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
@@ -108,7 +123,7 @@ const ServerRow = ({ server, onClick }: { server: ManagedServer, onClick: () => 
       </div>
       <div className="hidden md:flex flex-col gap-1 w-24">
         <div className="flex justify-between text-[10px] text-slate-500 uppercase">
-          <span>MEM</span>
+          <span>{t('server.mem')}</span>
           <span>{server.memory}%</span>
         </div>
         <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
@@ -131,7 +146,8 @@ const ServerRow = ({ server, onClick }: { server: ManagedServer, onClick: () => 
   </motion.div>
 );
 
-const OBPA_Visualizer = ({ incident, onComplete }: { incident: Incident, onComplete: () => void }) => {
+// ── OBPA Visualizer ────────────────────────────────────────────────────
+const OBPA_Visualizer = ({ incident, onComplete, t }: { incident: Incident, onComplete: () => void, t: (k: string) => string }) => {
   const [step, setStep] = useState(0);
   const [log, setLog] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -139,23 +155,22 @@ const OBPA_Visualizer = ({ incident, onComplete }: { incident: Incident, onCompl
   const [obpaId, setObpaId] = useState<string | null>(null);
 
   const steps = [
-    { id: 'OBSERVE', label: 'Infrastucture Monitoring', icon: Activity },
-    { id: 'PROPOSE', label: 'ContextP Pattern Matching', icon: Brain },
-    { id: 'EXECUTE', label: 'Remediation Synthesis', icon: Terminal },
-    { id: 'APPROVE', label: 'Manual Approval', icon: Settings },
-    { id: 'BITACORA', label: 'Contractual Validation', icon: ShieldCheck },
-    { id: 'CONSOLIDATE', label: 'Knowledge Persistance', icon: Database },
+    { id: 'OBSERVE', label: t('obpa.observe'), icon: Activity },
+    { id: 'PROPOSE', label: t('obpa.propose'), icon: Brain },
+    { id: 'EXECUTE', label: t('obpa.execute'), icon: Terminal },
+    { id: 'APPROVE', label: t('obpa.approve'), icon: Settings },
+    { id: 'BITACORA', label: t('obpa.bitacora'), icon: ShieldCheck },
+    { id: 'CONSOLIDATE', label: t('obpa.consolidate'), icon: Database },
   ];
 
   const runAnalysis = async () => {
     setIsProcessing(true);
-    setLog(['Initiating OBPA Neural Cycle...', `Analyzing incident: ${incident.id}`]);
+    setLog([`[ARES] Initiating OBPA Neural Cycle...`, `[ARES] Analyzing incident: ${incident.id}`]);
     
     try {
-      // Observe & Propose & Execute Synthesis
       for (let i = 0; i < 3; i++) {
         setStep(i);
-        setLog(prev => [...prev, `[${steps[i].id}] ${steps[i].label} in progress...`]);
+        setLog(prev => [...prev, `[ARES] [${steps[i].id}] ${steps[i].label} in progress...`]);
         await new Promise(r => setTimeout(r, 800));
       }
 
@@ -170,13 +185,13 @@ const OBPA_Visualizer = ({ incident, onComplete }: { incident: Incident, onCompl
       
       setLog(prev => [
         ...prev, 
-        `[NEURAL] Analysis Complete. Confidence: ${(data.analysis.confidence * 100).toFixed(2)}%`,
-        `[NEURAL] Proposed Fix: ${data.analysis.proposal}`,
-        `[NEURAL] Waiting for administrative approval to proceed with execution.`
+        `[ARES] Analysis Complete. Confidence: ${(data.analysis.confidence * 100).toFixed(2)}%`,
+        `[ARES] Proposed Fix: ${data.analysis.proposal}`,
+        `[ARES] ${t('obpa.waiting')}`
       ]);
-      setStep(3); // Wait at Approval step
+      setStep(3);
     } catch (err) {
-      setLog(prev => [...prev, 'Error in Neural Core processing.']);
+      setLog(prev => [...prev, '[ARES] Error in Neural Core processing.']);
     } finally {
       setIsProcessing(false);
     }
@@ -193,17 +208,16 @@ const OBPA_Visualizer = ({ incident, onComplete }: { incident: Incident, onCompl
       });
       
       if (approved) {
-        setLog(prev => [...prev, '[USER] Execution approved. Applying script...']);
-        // Finalize steps
+        setLog(prev => [...prev, `[USER] ${t('obpa.approved')}`]);
         for (let i = 4; i < steps.length; i++) {
           setStep(i);
-          setLog(prev => [...prev, `[${steps[i].id}] ${steps[i].label} complete.`]);
+          setLog(prev => [...prev, `[ARES] [${steps[i].id}] ${steps[i].label} complete.`]);
           await new Promise(r => setTimeout(r, 800));
         }
-        setLog(prev => [...prev, '[SATURNO] Cycle finalized successfully. Knowledge consolidated.']);
+        setLog(prev => [...prev, `[SATURN] ${t('obpa.finalized')}`]);
         setTimeout(onComplete, 1500);
       } else {
-        setLog(prev => [...prev, '[USER] Execution rejected. Incident stays open.']);
+        setLog(prev => [...prev, `[USER] ${t('obpa.rejected')}`]);
         setTimeout(onComplete, 1500);
       }
     } finally {
@@ -220,7 +234,7 @@ const OBPA_Visualizer = ({ incident, onComplete }: { incident: Incident, onCompl
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-          <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] italic">OBPA Cycle Progress // Deep-Verify Active</h3>
+          <h3 className="text-sm font-black text-white uppercase tracking-[0.2em] italic">{t('obpa.title')}</h3>
         </div>
         <div className="flex gap-2">
           {steps.map((s, i) => (
@@ -272,7 +286,7 @@ const OBPA_Visualizer = ({ incident, onComplete }: { incident: Incident, onCompl
               className="mt-4 p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl"
             >
               <h4 className="text-[10px] font-black text-orange-500 uppercase flex items-center gap-2 mb-2">
-                <Brain size={14} /> Action Required
+                <Brain size={14} /> {t('obpa.action')}
               </h4>
               <p className="text-xs text-white mb-4 italic leading-relaxed">"{proposal.proposal}"</p>
               <div className="bg-black/60 p-2 rounded font-mono text-[9px] text-emerald-500 mb-4 whitespace-pre-wrap">
@@ -284,14 +298,14 @@ const OBPA_Visualizer = ({ incident, onComplete }: { incident: Incident, onCompl
                   onClick={() => approveRemediation(true)}
                   className="flex-1 py-1.5 bg-orange-500 text-black text-[10px] font-black uppercase rounded hover:bg-orange-400 disabled:opacity-50"
                 >
-                  Confirm & Execute
+                  {t('obpa.confirm')}
                 </button>
                 <button 
                    disabled={isProcessing}
                    onClick={() => approveRemediation(false)}
                    className="flex-1 py-1.5 bg-white/5 text-white text-[10px] font-black uppercase rounded hover:bg-white/10 disabled:opacity-50"
                 >
-                  Reject
+                  {t('obpa.reject')}
                 </button>
               </div>
             </motion.div>
@@ -302,22 +316,21 @@ const OBPA_Visualizer = ({ incident, onComplete }: { incident: Incident, onCompl
           <div className="flex items-center justify-between mb-4 text-slate-500 border-b border-white/5 pb-3">
             <div className="flex items-center gap-2">
               <Terminal size={14} />
-              <span className="font-bold tracking-widest uppercase">Saturno_Neural_Output</span>
+              <span className="font-bold tracking-widest uppercase">Saturn_Ares_Output</span>
             </div>
-            <span className="text-[9px]">v1.0.42</span>
+            <span className="text-[9px]">{t('neural.version')}</span>
           </div>
           {log.map((line, i) => (
             <div key={i} className="mb-2 leading-relaxed">
               <span className={cn(
                 "mr-2 font-bold",
-                line.includes('[INFO]') ? "text-emerald-500" : 
-                line.includes('[NEURAL]') ? "text-orange-500" : "text-slate-600"
+                line.includes('[ARES]') ? "text-orange-500" : "text-slate-600"
               )}>
-                {line.includes('root@saturno') ? '' : line.startsWith('[') ? '' : '>'}
+                {'>'}
               </span>
               <span className={cn(
                 line.includes('Error') ? "text-rose-400" : 
-                line.includes('Resolution Applied') ? "text-emerald-400 font-bold" : "text-slate-400"
+                line.includes('finalized') ? "text-emerald-400 font-bold" : "text-slate-400"
               )}>
                 {line}
               </span>
@@ -336,30 +349,52 @@ const OBPA_Visualizer = ({ incident, onComplete }: { incident: Incident, onCompl
   );
 };
 
+// ── Main App ───────────────────────────────────────────────────────────
 export default function App() {
+  const { lang, setLang, t: _t } = useLang();
+  const t = _t;
+
   const [servers, setServers] = useState<ManagedServer[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [knowledge, setKnowledge] = useState<ContextP_Entry[]>([]);
+  const [knowledge, setKnowledge] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [notifConfigs, setNotifConfigs] = useState<NotificationConfig[]>([]);
   const [activeAnalysis, setActiveAnalysis] = useState<Incident | null>(null);
   const [activeTab, setActiveTab] = useState<'dash' | 'servers' | 'knowledge' | 'audit' | 'settings'>('dash');
   const [isLoading, setIsLoading] = useState(true);
+  const [sshModal, setSshModal] = useState(false);
+  const [sshConnections, setSshConnections] = useState<SshConnection[]>([]);
+  const [aiConfig, setAiConfig] = useState<AIConfig>({
+    provider: 'none',
+    apiKey: '',
+    deepVerify: true,
+    autoRemediate: false
+  });
+  const [aiSaved, setAiSaved] = useState(false);
+  const [aiEndpoint, setAiEndpoint] = useState('');
+
+  // SSH Form state
+  const [sshForm, setSshForm] = useState({ host: '', port: '22', username: 'root', password: '', keyFile: '' });
 
   const fetchData = async () => {
     try {
-      const [sRes, iRes, kRes, aRes, nRes] = await Promise.all([
+      const [sRes, iRes, kRes, aRes, nRes, aiRes] = await Promise.all([
         fetch('/api/servers'),
         fetch('/api/incidents'),
         fetch('/api/contextp'),
         fetch('/api/audit'),
-        fetch('/api/notifications')
+        fetch('/api/notifications'),
+        fetch('/api/ai/config').catch(() => null)
       ]);
       setServers(await sRes.json());
       setIncidents(await iRes.json());
       setKnowledge(await kRes.json());
       setAuditLogs(await aRes.json());
       setNotifConfigs(await nRes.json());
+      if (aiRes) {
+        const aiData = await aiRes.json();
+        setAiConfig(aiData);
+      }
       setIsLoading(false);
     } catch (err) {
       console.error(err);
@@ -372,6 +407,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // ── Handlers ──────────────────────────────────────────────────────────
   const saveNotifConfig = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -389,37 +425,81 @@ export default function App() {
     fetchData();
   };
 
+  const saveAiConfig = async () => {
+    try {
+      await fetch('/api/ai/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aiConfig)
+      });
+      setAiSaved(true);
+      setTimeout(() => setAiSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to save AI config:', err);
+    }
+  };
+
   const triggerIncident = async () => {
     const randomServer = servers[Math.floor(Math.random() * servers.length)];
+    if (!randomServer) return;
     await fetch('/api/incidents/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         serverId: randomServer.id,
-        title: "Alta Latencia Detectada",
-        description: `Se detectaron picos de CPU en ${randomServer.name}. Posible fuga de memoria en proceso nginx.`,
+        title: "High Latency Detected",
+        description: `CPU spikes detected on ${randomServer.name}. Possible memory leak in nginx process.`,
         severity: "high"
       })
     });
     fetchData();
   };
 
+  const connectSsh = async () => {
+    try {
+      const res = await fetch('/api/ssh/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          host: sshForm.host,
+          port: parseInt(sshForm.port),
+          username: sshForm.username,
+          password: sshForm.password || undefined,
+          keyFile: sshForm.keyFile || undefined
+        })
+      });
+      const conn = await res.json();
+      setSshConnections(prev => [...prev, conn]);
+      setSshModal(false);
+    } catch (err) {
+      console.error('SSH connection failed:', err);
+    }
+  };
+
+  const disconnectSsh = async (connId: string) => {
+    try {
+      await fetch(`/api/ssh/disconnect/${connId}`, { method: 'POST' });
+      setSshConnections(prev => prev.filter(c => c.id !== connId));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-[#050507] overflow-hidden relative">
-      {/* Background Ambient Glows */}
       <div className="ambient-glow-1" />
       <div className="ambient-glow-2" />
 
-      {/* Sidebar */}
+      {/* ── Sidebar ──────────────────────────────────────────────────── */}
       <aside className="w-64 border-r border-white/5 bg-black/20 flex flex-col hidden lg:flex p-4 gap-2 z-10 font-sans">
         <div className="p-4 flex items-center gap-3">
           <div className="w-8 h-8 rounded-full border-2 border-orange-500 flex items-center justify-center shadow-[0_0_15px_rgba(249,115,22,0.4)]">
             <div className="w-4 h-1 bg-orange-500 rounded-full" />
           </div>
-          <h1 className="text-xl font-bold tracking-widest text-white">SATURNO <span className="text-orange-500 font-light">CORE</span></h1>
+          <h1 className="text-xl font-bold tracking-widest text-white">SATURN <span className="text-orange-500 font-light">CORE</span></h1>
         </div>
 
-        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-6 mb-2 px-4 italic">Infrastructure</div>
+        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-6 mb-2 px-4 italic">{t('nav.infrastructure')}</div>
         <nav className="px-2 space-y-1">
           <button 
             onClick={() => setActiveTab('dash')}
@@ -429,7 +509,7 @@ export default function App() {
             )}
           >
             <div className={cn("w-2 h-2 rounded-full", activeTab === 'dash' ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" : "bg-slate-700")} />
-            <span>Dashboard</span>
+            <span>{t('nav.dashboard')}</span>
           </button>
           <button 
             onClick={() => setActiveTab('servers')}
@@ -439,11 +519,11 @@ export default function App() {
             )}
           >
             <div className={cn("w-2 h-2 rounded-full", activeTab === 'servers' ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" : "bg-slate-700")} />
-            <span>Managed Nodes</span>
+            <span>{t('nav.servers')}</span>
           </button>
         </nav>
 
-        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-8 mb-2 px-4 italic">Neural ContextP</div>
+        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mt-8 mb-2 px-4 italic">{t('nav.neural')}</div>
         <nav className="px-2 space-y-1">
           <button 
             onClick={() => setActiveTab('knowledge')}
@@ -453,9 +533,47 @@ export default function App() {
             )}
           >
             <div className={cn("w-1.5 h-4 rounded-full", activeTab === 'knowledge' ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" : "bg-blue-500/20")} />
-            <span>Knowledge Base</span>
+            <span>{t('nav.knowledge')}</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('audit')}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all text-sm",
+              activeTab === 'audit' ? "bg-white/5 border border-white/10 text-white" : "text-slate-400 hover:text-white hover:bg-white/5"
+            )}
+          >
+            <div className={cn("w-1.5 h-4 rounded-full", activeTab === 'audit' ? "bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.6)]" : "bg-purple-500/20")} />
+            <span>{t('nav.audit')}</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all text-sm",
+              activeTab === 'settings' ? "bg-white/5 border border-white/10 text-white" : "text-slate-400 hover:text-white hover:bg-white/5"
+            )}
+          >
+            <div className={cn("w-1.5 h-4 rounded-full", activeTab === 'settings' ? "bg-slate-500 shadow-[0_0_8px_rgba(100,116,139,0.6)]" : "bg-slate-500/20")} />
+            <span>{t('nav.settings')}</span>
           </button>
         </nav>
+
+        {/* SSH Connections sidebar */}
+        {sshConnections.length > 0 && (
+          <div className="mt-2 px-2">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-2 px-4 italic">SSH Sessions</div>
+            {sshConnections.map(conn => (
+              <div key={conn.id} className="flex items-center justify-between px-4 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 mb-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span className="text-[10px] text-emerald-400 font-mono">{conn.host}</span>
+                </div>
+                <button onClick={() => disconnectSsh(conn.id)} className="text-[9px] text-slate-500 hover:text-rose-400">
+                  <XCircle size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-auto p-4 rounded-xl bg-gradient-to-br from-orange-500/10 to-transparent border border-orange-500/20">
           <div className="text-xs text-orange-200 mb-1 flex items-center gap-2">
@@ -469,7 +587,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* ── Main ──────────────────────────────────────────────────────── */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
         {/* Header */}
         <header className="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-black/40 backdrop-blur-md sticky top-0 z-20">
@@ -478,79 +596,73 @@ export default function App() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
               <input 
                 type="text" 
-                placeholder="DeepSearch managed nodes..." 
+                placeholder={t('search.placeholder')}
                 className="w-full bg-white/5 border border-white/10 rounded-full py-1.5 pl-10 pr-4 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all font-sans text-slate-300"
               />
             </div>
           </div>
           <div className="flex items-center gap-6">
+            {/* Language Toggle */}
+            <div className="flex items-center border border-white/10 rounded-full p-0.5">
+              <button
+                onClick={() => setLang('en')}
+                className={cn(
+                  "px-3 py-1 text-[10px] font-black uppercase rounded-full transition-all tracking-wider",
+                  lang === 'en' ? "bg-orange-500 text-black" : "text-slate-500 hover:text-white"
+                )}
+              >EN</button>
+              <button
+                onClick={() => setLang('es')}
+                className={cn(
+                  "px-3 py-1 text-[10px] font-black uppercase rounded-full transition-all tracking-wider",
+                  lang === 'es' ? "bg-orange-500 text-black" : "text-slate-500 hover:text-white"
+                )}
+              >ES</button>
+            </div>
             <div className="flex flex-col items-end">
-              <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">System Status</span>
+              <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">{t('status.system')}</span>
               <span className="text-xs font-mono text-emerald-400 flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                STABLE // 99.99%
+                {t('status.stable')} // 99.99%
               </span>
             </div>
             <div className="h-8 w-[1px] bg-white/10"></div>
             <div className="px-4 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] font-black tracking-tighter uppercase">
-              Neural: 1.0.42-DEEP_VERIFY
+              {t('neural.version')}
             </div>
+            <button 
+              onClick={() => setSshModal(true)}
+              className="bg-white/5 hover:bg-white/10 border border-white/10 text-white text-[10px] font-black px-4 py-2 rounded-full transition-all flex items-center gap-2 uppercase tracking-tighter"
+            >
+              <Plug size={12} /> SSH
+            </button>
             <button 
               onClick={triggerIncident}
               className="bg-orange-500 hover:bg-orange-400 text-black text-[10px] font-black px-6 py-2 rounded-full transition-all shadow-[0_0_20px_rgba(249,115,22,0.3)] flex items-center gap-2 uppercase tracking-tighter"
             >
-              Simular Incident
+              {t('button.simulate')}
             </button>
           </div>
         </header>
 
-        {/* Content Area */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto p-8 space-y-8 no-scrollbar z-10">
           {activeTab === 'dash' && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-8"
-            >
-              {/* Stats Grid */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard 
-                  title="Salud del Sistema" 
-                  value="99.9%" 
-                  icon={ShieldCheck} 
-                  color="bg-emerald-600" 
-                  trend={0.1}
-                />
-                <StatCard 
-                  title="Conexiones Activas" 
-                  value={servers.length} 
-                  icon={Server} 
-                  color="bg-indigo-600" 
-                />
-                <StatCard 
-                  title="Incidentes 24h" 
-                  value={incidents.length} 
-                  icon={AlertTriangle} 
-                  color="bg-amber-600" 
-                  trend={-12}
-                />
-                <StatCard 
-                  title="Memoria ContextP" 
-                  value={`${knowledge.length} docs`} 
-                  icon={Brain} 
-                  color="bg-fuchsia-600" 
-                  trend={4}
-                />
+                <StatCard title={t('card.health')} value="99.9%" icon={ShieldCheck} color="bg-emerald-600" trend={0.1} />
+                <StatCard title={t('card.connections')} value={servers.length} icon={Server} color="bg-indigo-600" />
+                <StatCard title={t('card.incidents')} value={incidents.length} icon={AlertTriangle} color="bg-amber-600" trend={-12} />
+                <StatCard title={t('card.memory')} value={`${knowledge.length} docs`} icon={Brain} color="bg-fuchsia-600" trend={4} />
               </div>
 
-              {/* Charts & Activity */}
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <div className="xl:col-span-2 space-y-6">
                   <div className="immersive-card p-6">
                     <div className="flex justify-between items-center mb-6">
                       <h3 className="font-black text-white uppercase tracking-[0.2em] text-[10px] flex items-center gap-2 italic">
                         <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        Global System Latency p99
+                        {t('metrics.latency')}
                       </h3>
                       <div className="flex gap-2">
                         <button className="text-[10px] px-2 py-1 bg-slate-800 rounded uppercase font-bold text-slate-400">1h</button>
@@ -586,11 +698,11 @@ export default function App() {
                   <div className="immersive-card p-6 overflow-hidden">
                     <h3 className="font-black text-white uppercase tracking-[0.2em] text-[10px] mb-6 flex items-center gap-2 italic">
                       <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                      Critical Infrastructure Nodes
+                      {t('metrics.nodes')}
                     </h3>
                     <div className="divide-y divide-slate-800">
                       {servers.map(server => (
-                        <ServerRow key={server.id} server={server} onClick={() => setActiveTab('servers')} />
+                        <ServerRow key={server.id} server={server} onClick={() => setActiveTab('servers')} t={t} />
                       ))}
                     </div>
                   </div>
@@ -600,7 +712,7 @@ export default function App() {
                   <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col h-full">
                     <h3 className="font-bold text-white uppercase tracking-wider text-sm mb-6 flex items-center gap-2">
                        <AlertTriangle size={16} className="text-amber-500" />
-                       Incidentes Recientes
+                       {t('incident.title')}
                     </h3>
                     <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar max-h-[600px]">
                       {incidents.map((incident) => (
@@ -627,21 +739,21 @@ export default function App() {
                               incident.status === 'open' ? "text-orange-400" : "text-emerald-400"
                             )}>
                               {incident.status === 'open' ? <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" /> : <ShieldCheck size={10} />}
-                              {incident.status.toUpperCase()}
+                              {incident.status === 'open' ? t('incident.open') : t('incident.closed')}
                             </span>
                             {incident.status === 'open' && (
                               <button 
                                 className="text-[10px] font-black text-orange-500 uppercase hover:underline tracking-tighter"
                                 onClick={(e) => { e.stopPropagation(); setActiveAnalysis(incident); }}
                               >
-                                Deep Analysis →
+                                {t('incident.analyze')} →
                               </button>
                             )}
                           </div>
                         </div>
                       ))}
                       {incidents.length === 0 && (
-                        <div className="text-center py-12 text-slate-500 text-xs italic">No se detectaron anomalías.</div>
+                        <div className="text-center py-12 text-slate-500 text-xs italic">{t('incident.none')}</div>
                       )}
                     </div>
                   </div>
@@ -650,6 +762,7 @@ export default function App() {
             </motion.div>
           )}
 
+          {/* ── Servers Tab ────────────────────────────────────────────── */}
           {activeTab === 'servers' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -678,19 +791,19 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-6 border-t border-white/5 pt-6">
                         <div>
                           <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2 flex items-center gap-1">
-                            <Cpu size={12} /> CPU LOAD
+                            <Cpu size={12} /> {t('server.cpu')}
                           </div>
                           <div className="text-xl font-mono font-bold text-white tracking-tighter">{server.cpu}%</div>
                         </div>
                         <div>
                           <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2 flex items-center gap-1">
-                            <HardDrive size={12} /> RAM UTIL
+                            <HardDrive size={12} /> {t('server.mem')}
                           </div>
                           <div className="text-xl font-mono font-bold text-white tracking-tighter">{server.memory}%</div>
                         </div>
                       </div>
                       <div className="mt-6 flex flex-wrap gap-1.5">
-                        {server.tags.map(t => <span key={t} className="text-[9px] bg-white/5 border border-white/10 px-2 py-0.5 rounded-full text-slate-400 font-bold uppercase">#{t}</span>)}
+                        {server.tags.map(tag => <span key={tag} className="text-[9px] bg-white/5 border border-white/10 px-2 py-0.5 rounded-full text-slate-400 font-bold uppercase">#{tag}</span>)}
                       </div>
                    </div>
                 ))}
@@ -698,28 +811,29 @@ export default function App() {
             </motion.div>
           )}
 
+          {/* ── Audit Tab ────────────────────────────────────────────── */}
           {activeTab === 'audit' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                <div className="immersive-card overflow-hidden">
                  <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
                     <h3 className="text-[10px] font-black text-white uppercase tracking-[0.3em] flex items-center gap-2 italic">
                        <Logs size={16} className="text-orange-500" />
-                       Comprehensive Audit Trace // Level-4
+                       {t('audit.title')}
                     </h3>
                     <div className="flex gap-2">
-                       <button className="text-[9px] font-black text-slate-500 uppercase hover:text-white transition-colors">Export CSV</button>
+                       <button className="text-[9px] font-black text-slate-500 uppercase hover:text-white transition-colors">{t('audit.export')}</button>
                        <div className="w-[1px] h-3 bg-white/10" />
-                       <button className="text-[9px] font-black text-rose-500 uppercase hover:text-rose-400 transition-colors">Purge Logs</button>
+                       <button className="text-[9px] font-black text-rose-500 uppercase hover:text-rose-400 transition-colors">{t('audit.purge')}</button>
                     </div>
                  </div>
                  <div className="overflow-x-auto overflow-y-auto max-h-[600px] no-scrollbar">
                     <table className="w-full text-left text-[10px] font-mono border-collapse">
                        <thead className="bg-[#050507] text-slate-500 sticky top-0 z-10 shadow-sm shadow-white/5">
                           <tr>
-                             <th className="px-6 py-4 uppercase font-black tracking-widest border-b border-white/5">Timestamp</th>
-                             <th className="px-6 py-4 uppercase font-black tracking-widest border-b border-white/5">Origin</th>
-                             <th className="px-6 py-4 uppercase font-black tracking-widest border-b border-white/5">Event</th>
-                             <th className="px-6 py-4 uppercase font-black tracking-widest border-b border-white/5">Detail</th>
+                             <th className="px-6 py-4 uppercase font-black tracking-widest border-b border-white/5">{t('audit.timestamp')}</th>
+                             <th className="px-6 py-4 uppercase font-black tracking-widest border-b border-white/5">{t('audit.origin')}</th>
+                             <th className="px-6 py-4 uppercase font-black tracking-widest border-b border-white/5">{t('audit.event')}</th>
+                             <th className="px-6 py-4 uppercase font-black tracking-widest border-b border-white/5">{t('audit.detail')}</th>
                           </tr>
                        </thead>
                        <tbody className="divide-y divide-white/5">
@@ -746,16 +860,159 @@ export default function App() {
             </motion.div>
           )}
 
+          {/* ── Settings Tab ──────────────────────────────────────────── */}
           {activeTab === 'settings' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+               {/* Language */}
                <div className="space-y-6">
                   <div className="immersive-card p-8">
                      <h3 className="text-[10px] font-black text-orange-500 uppercase tracking-[0.2em] mb-6 italic flex items-center gap-2">
-                        <Mail size={16} /> Notification Pipeline Config
+                        <Globe size={16} /> {t('settings.language')}
                      </h3>
+                     <p className="text-xs text-slate-500 mb-6">{t('settings.language.desc')}</p>
+                     <div className="flex gap-4">
+                        <button
+                          onClick={() => setLang('en')}
+                          className={cn(
+                            "flex-1 py-3 rounded-xl border text-sm font-black uppercase tracking-wider transition-all",
+                            lang === 'en' 
+                              ? "bg-orange-500 text-black border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.3)]" 
+                              : "bg-white/5 text-slate-400 border-white/10 hover:border-white/20"
+                          )}
+                        >
+                          🇬🇧 English
+                        </button>
+                        <button
+                          onClick={() => setLang('es')}
+                          className={cn(
+                            "flex-1 py-3 rounded-xl border text-sm font-black uppercase tracking-wider transition-all",
+                            lang === 'es' 
+                              ? "bg-orange-500 text-black border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.3)]" 
+                              : "bg-white/5 text-slate-400 border-white/10 hover:border-white/20"
+                          )}
+                        >
+                          🇪🇸 Español
+                        </button>
+                     </div>
+                  </div>
+
+                  {/* AI Configuration */}
+                  <div className="immersive-card p-8">
+                     <h3 className="text-[10px] font-black text-orange-500 uppercase tracking-[0.2em] mb-6 italic flex items-center gap-2">
+                        <Brain size={16} /> {t('settings.ai')}
+                     </h3>
+                     <p className="text-xs text-slate-500 mb-6">{t('settings.ai.desc')}</p>
+
+                     <div className="space-y-6">
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('settings.ai.provider')}</label>
+                           <select 
+                             value={aiConfig.provider}
+                             onChange={(e) => setAiConfig({ ...aiConfig, provider: e.target.value as any })}
+                             className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                           >
+                             <option value="none">{t('provider.none')}</option>
+                             <option value="gemini">{t('provider.gemini')}</option>
+                             <option value="openai">{t('provider.openai')}</option>
+                             <option value="ollama">{t('provider.ollama')}</option>
+                             <option value="anthropic">{t('provider.anthropic')}</option>
+                           </select>
+                        </div>
+
+                        {aiConfig.provider !== 'none' && (
+                          <>
+                            <div className="space-y-2">
+                               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('settings.ai.key')}</label>
+                               <div className="relative">
+                                 <Key size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                                 <input 
+                                   type="password"
+                                   value={aiConfig.apiKey}
+                                   onChange={(e) => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
+                                   placeholder="sk-..." 
+                                   className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none font-mono"
+                                 />
+                               </div>
+                            </div>
+
+                            {aiConfig.provider === 'ollama' && (
+                              <div className="space-y-2">
+                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Endpoint</label>
+                                 <input 
+                                   type="text"
+                                   value={aiEndpoint}
+                                   onChange={(e) => setAiEndpoint(e.target.value)}
+                                   placeholder="http://localhost:11434"
+                                   className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none font-mono"
+                                 />
+                              </div>
+                            )}
+
+                            <div className="space-y-4 pt-4 border-t border-white/5">
+                               <div className="flex justify-between items-center p-4 bg-black/40 border border-white/5 rounded-2xl">
+                                  <div className="flex-1">
+                                     <div className="text-xs font-bold text-white uppercase italic">{t('settings.ai.deep')}</div>
+                                     <div className="text-[10px] text-slate-500">{t('settings.ai.deep.desc')}</div>
+                                  </div>
+                                  <button
+                                    onClick={() => setAiConfig({ ...aiConfig, deepVerify: !aiConfig.deepVerify })}
+                                    className={cn(
+                                      "w-12 h-6 rounded-full p-1 transition-all",
+                                      aiConfig.deepVerify ? "bg-orange-500" : "bg-slate-800"
+                                    )}
+                                  >
+                                     <div className={cn(
+                                       "w-4 h-4 bg-white rounded-full shadow-lg transition-transform",
+                                       aiConfig.deepVerify ? "translate-x-6" : "translate-x-0"
+                                     )} />
+                                  </button>
+                               </div>
+                               <div className="flex justify-between items-center p-4 bg-black/40 border border-white/5 rounded-2xl">
+                                  <div className="flex-1">
+                                     <div className="text-xs font-bold text-white uppercase italic">{t('settings.ai.auto')}</div>
+                                     <div className="text-[10px] text-slate-500">{t('settings.ai.auto.desc')}</div>
+                                  </div>
+                                  <button
+                                    onClick={() => setAiConfig({ ...aiConfig, autoRemediate: !aiConfig.autoRemediate })}
+                                    className={cn(
+                                      "w-12 h-6 rounded-full p-1 transition-all",
+                                      aiConfig.autoRemediate ? "bg-orange-500" : "bg-slate-800"
+                                    )}
+                                  >
+                                     <div className={cn(
+                                       "w-4 h-4 bg-white rounded-full shadow-lg transition-transform",
+                                       aiConfig.autoRemediate ? "translate-x-6" : "translate-x-0"
+                                     )} />
+                                  </button>
+                               </div>
+                            </div>
+                          </>
+                        )}
+
+                        <button 
+                          onClick={saveAiConfig}
+                          className="w-full py-3 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all flex items-center justify-center gap-2"
+                        >
+                          {aiSaved ? (
+                            <><CheckCircle2 size={14} /> {t('settings.ai.saved')}</>
+                          ) : (
+                            <><Zap size={14} /> {t('settings.ai.save')}</>
+                          )}
+                        </button>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Notifications */}
+               <div className="space-y-6">
+                  <div className="immersive-card p-8">
+                     <h3 className="text-[10px] font-black text-orange-500 uppercase tracking-[0.2em] mb-6 italic flex items-center gap-2">
+                        <Mail size={16} /> {t('settings.notifications')}
+                     </h3>
+                     <p className="text-xs text-slate-500 mb-6">{t('settings.notifications.desc')}</p>
                      <form onSubmit={saveNotifConfig} className="space-y-6">
                         <div className="space-y-2">
-                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Adapter Type</label>
+                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('settings.notifications.type')}</label>
                            <select name="type" className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none">
                               <option value="slack">Slack Webhook</option>
                               <option value="webhook">Generic API Webhook</option>
@@ -763,7 +1020,7 @@ export default function App() {
                            </select>
                         </div>
                         <div className="space-y-2">
-                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Destination End-point</label>
+                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('settings.notifications.dest')}</label>
                            <input 
                               name="destination"
                               type="text" 
@@ -772,41 +1029,13 @@ export default function App() {
                            />
                         </div>
                         <button className="w-full py-3 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all flex items-center justify-center gap-2">
-                           <RefreshCw size={14} /> Initialize Adapter
+                           <RefreshCw size={14} /> {t('settings.notifications.init')}
                         </button>
                      </form>
                   </div>
-               </div>
-
-               <div className="space-y-6">
-                  <div className="immersive-card p-8 bg-orange-500/5">
-                     <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em] mb-6 italic flex items-center gap-2">
-                        <Zap size={16} className="text-orange-500" /> Neural Engine Controller
-                     </h3>
-                     <div className="space-y-4">
-                        <div className="flex justify-between items-center p-4 bg-black/40 border border-white/5 rounded-2xl">
-                           <div>
-                              <div className="text-xs font-bold text-white uppercase italic">Deep-Verify Mode</div>
-                              <div className="text-[10px] text-slate-500">Manual approval required for all OBPA-v4 cycles.</div>
-                           </div>
-                           <div className="w-12 h-6 bg-orange-500 rounded-full p-1 flex justify-end">
-                              <div className="w-4 h-4 bg-white rounded-full shadow-lg" />
-                           </div>
-                        </div>
-                        <div className="flex justify-between items-center p-4 bg-black/40 border border-white/5 rounded-2xl opacity-50 grayscale">
-                           <div>
-                              <div className="text-xs font-bold text-white uppercase italic">Auto-Remediate (Alpha)</div>
-                              <div className="text-[10px] text-slate-500">Autonomous resolution for low-severity incidents.</div>
-                           </div>
-                           <div className="w-12 h-6 bg-slate-800 rounded-full p-1 flex justify-start">
-                              <div className="w-4 h-4 bg-slate-600 rounded-full" />
-                           </div>
-                        </div>
-                     </div>
-                  </div>
 
                   <div className="immersive-card p-8">
-                     <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 italic">Active Notifications</h3>
+                     <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6 italic">{t('settings.notifications.active')}</h3>
                      <div className="space-y-3">
                         {notifConfigs.map(notif => (
                            <div key={notif.id} className="p-4 bg-black/40 border border-white/5 rounded-2xl flex items-center justify-between">
@@ -824,12 +1053,16 @@ export default function App() {
                               <span className="text-[9px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded uppercase tracking-widest">Active</span>
                            </div>
                         ))}
+                        {notifConfigs.length === 0 && (
+                          <div className="text-center py-8 text-slate-600 text-xs italic">{t('settings.notifications.none')}</div>
+                        )}
                      </div>
                   </div>
                </div>
             </motion.div>
           )}
 
+          {/* ── Knowledge Tab ────────────────────────────────────────── */}
           {activeTab === 'knowledge' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 lg:grid-cols-4 gap-8">
               <div className="lg:col-span-1 space-y-4">
@@ -840,13 +1073,13 @@ export default function App() {
                        {type}
                     </h3>
                     <div className="space-y-1">
-                      {knowledge.filter(k => k.type === type).map(k => (
+                      {knowledge.filter((k: any) => k.type === type).map((k: any) => (
                         <div key={k.path} className="text-[11px] text-slate-500 hover:text-white cursor-pointer py-1.5 px-3 rounded-lg hover:bg-white/5 transition-all truncate border border-transparent hover:border-white/5">
                           {k.path.split('/').pop()}
                         </div>
                       ))}
-                      {knowledge.filter(k => k.type === type).length === 0 && (
-                         <div className="text-[9px] text-slate-700 italic px-3">Recursive index empty.</div>
+                      {knowledge.filter((k: any) => k.type === type).length === 0 && (
+                         <div className="text-[9px] text-slate-700 italic px-3">{t('knowledge.empty')}</div>
                       )}
                     </div>
                   </div>
@@ -858,18 +1091,18 @@ export default function App() {
                 </div>
                 <div className="flex justify-between items-start mb-10 pb-6 border-b border-white/5">
                   <div>
-                    <div className="text-[10px] font-black text-orange-500 uppercase tracking-[0.3em] mb-2 italic">NEURAL_METADATA_VISOR // CONTEXTP</div>
+                    <div className="text-[10px] font-black text-orange-500 uppercase tracking-[0.3em] mb-2 italic">{t('knowledge.title')}</div>
                     <h2 className="text-3xl font-black text-white tracking-widest uppercase italic">Root_Contract.md</h2>
                   </div>
                   <div className="text-[10px] font-mono text-slate-600 bg-white/5 px-3 py-1 rounded-full border border-white/5">
-                    SYNCED: 2026-05-01T17:15:40Z
+                    {t('knowledge.synced')}: 2026-05-01T17:15:40Z
                   </div>
                 </div>
                 <div className="prose prose-invert prose-orange max-w-none font-mono text-[13px] text-slate-400 leading-relaxed">
                    <p className="mb-6 text-white font-bold tracking-tight text-base italic border-l-2 border-orange-500 pl-4 bg-orange-500/5 py-2">
                      # INFRASTRUCTURE ROOT CONTRACT // IMMUTABLE
                    </p>
-                   <p className="mb-4">This document establishes the high-order ethical and technical boundaries for the Saturno Neural Engine.</p>
+                   <p className="mb-4">This document establishes the high-order ethical and technical boundaries for the Saturn Neural Engine (Ares).</p>
                    <ul className="space-y-4">
                       <li className="flex gap-4">
                         <span className="text-orange-500">[01]</span>
@@ -894,7 +1127,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Modal Analysis */}
+        {/* ── OBPA Modal ──────────────────────────────────────────────── */}
         <AnimatePresence>
           {activeAnalysis && (
             <motion.div 
@@ -915,7 +1148,7 @@ export default function App() {
                       <Brain size={24} />
                     </div>
                     <div>
-                      <h2 className="font-bold text-white">SATURNO.Neural_Protocol_OBPA</h2>
+                      <h2 className="font-bold text-white">SATURN.Ares_Protocol_OBPA</h2>
                       <div className="text-[10px] text-slate-400 font-mono tracking-tighter uppercase">Initializing Cognitive Resolution Path...</div>
                     </div>
                   </div>
@@ -932,21 +1165,102 @@ export default function App() {
                     setActiveAnalysis(null);
                     fetchData();
                   }} 
+                  t={t}
                 />
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
-        {/* Bottom Global Metrics */}
+
+        {/* ── SSH Connection Modal ───────────────────────────────────── */}
+        <AnimatePresence>
+          {sshModal && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4"
+            >
+              <motion.div 
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden p-8"
+              >
+                <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-3">
+                  <Wifi size={20} className="text-orange-500" />
+                  {t('server.ssh.connect')}
+                </h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('server.ssh.host')}</label>
+                    <input 
+                      value={sshForm.host}
+                      onChange={(e) => setSshForm({...sshForm, host: e.target.value})}
+                      placeholder="192.168.1.100"
+                      className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none mt-1"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('server.ssh.port')}</label>
+                      <input 
+                        value={sshForm.port}
+                        onChange={(e) => setSshForm({...sshForm, port: e.target.value})}
+                        placeholder="22"
+                        className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('server.ssh.user')}</label>
+                      <input 
+                        value={sshForm.username}
+                        onChange={(e) => setSshForm({...sshForm, username: e.target.value})}
+                        placeholder="root"
+                        className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none mt-1"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('server.ssh.password')}</label>
+                    <input 
+                      type="password"
+                      value={sshForm.password}
+                      onChange={(e) => setSshForm({...sshForm, password: e.target.value})}
+                      placeholder="••••••••"
+                      className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none mt-1"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <button 
+                      onClick={connectSsh}
+                      className="flex-1 py-3 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all"
+                    >
+                      <Plug size={14} className="inline mr-2" /> {t('server.ssh.connect')}
+                    </button>
+                    <button 
+                      onClick={() => setSshModal(false)}
+                      className="flex-1 py-3 bg-white/5 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/10 transition-all"
+                    >
+                      {t('button.cancel')}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Footer */}
         <footer className="h-10 border-t border-white/10 bg-black flex items-center px-8 justify-between text-[10px] font-mono text-slate-500 z-20">
           <div className="flex gap-6 uppercase">
-            <span>GOROUTINES: 1,402</span>
-            <span>STORAGE: SQLITE/WAL</span>
-            <span>RECURSION: OBPA-v4</span>
+            <span>{t('footer.goroutines')}: 1,402</span>
+            <span>{t('footer.storage')}</span>
+            <span>{t('footer.recursion')}</span>
           </div>
           <div className="flex items-center gap-2 uppercase">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            NODE POOL REPLICATION SUCCESSFUL
+            {t('footer.replication')}
           </div>
         </footer>
       </main>

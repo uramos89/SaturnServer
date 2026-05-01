@@ -1,17 +1,137 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --color-saturno-accent: #f97316; /* Orange 500 */
-  --color-saturno-emerald: #34d399; /* Emerald 400 */
+  --color-saturn-accent: #f97316;
+  --color-saturn-emerald: #34d399;
 }
 
+/* ── Base ────────────────────────────────────────────────────────────── */
 body {
   @apply bg-[#050507] text-[#e0e0e5] font-sans selection:bg-orange-500/30 overflow-hidden;
+  margin: 0;
+  padding: 0;
 }
 
+/* ── Splash Screen ───────────────────────────────────────────────────── */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #050507;
+  gap: 24px;
+}
+
+.splash-ring {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-ring-inner {
+  position: absolute;
+  inset: 0;
+  border: 3px solid transparent;
+  border-top-color: #f97316;
+  border-right-color: #f97316;
+  border-radius: 50%;
+  animation: spinRing 1.2s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
+  box-shadow: 0 0 30px rgba(249, 115, 22, 0.15), inset 0 0 30px rgba(249, 115, 22, 0.05);
+}
+
+.splash-ring::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border: 1px solid transparent;
+  border-bottom-color: rgba(249, 115, 22, 0.2);
+  border-left-color: rgba(249, 115, 22, 0.2);
+  border-radius: 50%;
+  animation: spinRingReverse 2s linear infinite;
+}
+
+.splash-logo {
+  font-size: 48px;
+  font-weight: 900;
+  font-family: 'Inter', sans-serif;
+  color: #f97316;
+  text-shadow: 0 0 40px rgba(249, 115, 22, 0.4);
+  animation: pulseGlow 2s ease-in-out infinite;
+  z-index: 1;
+}
+
+.splash-title {
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  color: white;
+  font-family: 'Inter', sans-serif;
+  animation: fadeUp 1s ease-out 0.3s both;
+}
+
+.splash-subtitle {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: #64748b;
+  text-transform: uppercase;
+  animation: fadeUp 1s ease-out 0.5s both;
+}
+
+.splash-loader {
+  width: 160px;
+  height: 2px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 8px;
+  animation: fadeUp 1s ease-out 0.7s both;
+}
+
+.splash-loader-bar {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #f97316, #fb923c);
+  border-radius: 2px;
+  animation: loadBar 2s ease-in-out 0.7s forwards;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.5);
+}
+
+@keyframes spinRing {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes spinRingReverse {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-360deg); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.05); text-shadow: 0 0 60px rgba(249, 115, 22, 0.6); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes loadBar {
+  0% { width: 0; }
+  60% { width: 78%; }
+  100% { width: 100%; }
+}
+
+/* ── Ambient Glows ───────────────────────────────────────────────────── */
 .ambient-glow-1 {
   @apply absolute top-[-100px] left-[-100px] w-[500px] h-[500px] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none;
 }
@@ -20,6 +140,7 @@ body {
   @apply absolute bottom-[-100px] right-[-100px] w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none;
 }
 
+/* ── Scrollbar ────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 4px;
 }
@@ -32,6 +153,16 @@ body {
   @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
 }
 
+/* ── Components ────────────────────────────────────────────────────────── */
 .immersive-card {
   @apply bg-white/[0.03] border border-white/10 rounded-2xl backdrop-blur-sm;
+}
+
+/* ── Utilities ────────────────────────────────────────────────────────── */
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }

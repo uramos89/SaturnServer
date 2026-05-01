@@ -12,11 +12,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize Database
-const db = new Database("saturno.db");
+const db = new Database("saturn.db");
 db.pragma("journal_mode = WAL");
 
 // Encryption key for SSH credentials (derived from machine + a secret pepper)
-const ENCRYPTION_KEY = crypto.createHash("sha256").update(process.env.SSH_ENCRYPTION_PEPPER || "saturno-default-pepper-change-me").digest();
+const ENCRYPTION_KEY = crypto.createHash("sha256").update(process.env.SSH_ENCRYPTION_PEPPER || "saturn-default-pepper-change-me").digest();
 
 function encrypt(text: string): string {
   const iv = crypto.randomBytes(16);
@@ -143,7 +143,7 @@ async function sendNotification(type: string, title: string, message: string, se
       if (config.type === 'webhook' || config.type === 'slack') {
         const axios = (await import("axios")).default;
         await axios.post(config.destination, {
-          text: `*[SATURNO - ${severity.toUpperCase()}]* ${title}\n${message}`,
+          text: `*[SATURN - ${severity.toUpperCase()}]* ${title}\n${message}`,
           title, message, severity,
           timestamp: new Date().toISOString()
         });
@@ -152,9 +152,9 @@ async function sendNotification(type: string, title: string, message: string, se
         const smtpConfig = JSON.parse(config.config);
         const transporter = nodemailer.createTransport(smtpConfig);
         await transporter.sendMail({
-          from: `"Saturno Core" <${smtpConfig.auth.user}>`,
+          from: `"Saturn Core" <${smtpConfig.auth.user}>`,
           to: config.destination,
-          subject: `[SATURNO] ${severity.toUpperCase()}: ${title}`,
+          subject: `[SATURN] ${severity.toUpperCase()}: ${title}`,
           text: message
         });
       }
@@ -269,7 +269,8 @@ async function startServer() {
     res.json({ 
       status: "ok", 
       timestamp: new Date().toISOString(), 
-      version: "3.0.0",
+      version: "4.0.0",
+      engine: "ARES 1.0.0",
       ssh: { connected: sshCount.c, total: db.prepare("SELECT COUNT(*) as c FROM ssh_connections").get() as any },
       servers: serverCount.c
     });
@@ -627,7 +628,7 @@ async function startServer() {
       }
 
       db.prepare("UPDATE incidents SET status = 'closed' WHERE id = ?").run(cycle.incidentId);
-      await sendNotification("success", "Remediación Exitosa", `Se ha aplicado la remediación para el incidente ${cycle.incidentId} tras aprobación manual.`, "success");
+      await sendNotification("success", "Remediation Successful", `Remediation applied for incident ${cycle.incidentId} after manual approval.`, "success");
     } else {
       db.prepare("UPDATE obpa_cycles SET status = 'rejected' WHERE id = ?").run(obpaId);
       db.prepare("UPDATE incidents SET status = 'open' WHERE id = ?").run(cycle.incidentId);
@@ -645,7 +646,7 @@ async function startServer() {
     db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
       .run(`audit-${Date.now()}`, "SYSTEM", "INCIDENT_CREATED", `Incident ${id} on ${serverId}: ${title}`, timestamp);
 
-    await sendNotification("warning", `Nuevo Incidente: ${title}`, description, severity);
+    await sendNotification("warning", `New Incident: ${title}`, description, severity);
     
     res.json({ id, status: "open" });
   });
@@ -680,7 +681,9 @@ Real-time SSH Metrics (${sshConn.host}):
       }
       
       const prompt = `
-        Context: Saturno IA Infrastructure Management.
+        Context: Saturn Autonomous Infrastructure Management.
+        Engine: Ares Neural Engine v1.0
+        Memory: ContextP Organizational Knowledge Base
         Incident: ${incident.title} - ${incident.description}
         Server: ${server.name} (${server.os}, ${server.ip})
         ${realTimeMetrics}
@@ -727,6 +730,34 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
+  // ── AI Config Endpoint ──────────────────────────────────────────────────
+  app.get("/api/ai/config", (req, res) => {
+    res.json({
+      provider: process.env.AI_PROVIDER || process.env.GEMINI_API_KEY ? "gemini" : process.env.OPENAI_API_KEY ? "openai" : "none",
+      apiKey: "",
+      deepVerify: process.env.AI_DEEP_VERIFY !== "false",
+      autoRemediate: process.env.AI_AUTO_REMEDIATE === "true"
+    });
+  });
+
+  app.post("/api/ai/config", (req, res) => {
+    const { provider, apiKey, deepVerify, autoRemediate, endpoint } = req.body;
+    // In production this would persist to a secure store
+    if (provider === 'gemini' && apiKey) process.env.GEMINI_API_KEY = apiKey;
+    if (provider === 'openai' && apiKey) process.env.OPENAI_API_KEY = apiKey;
+    if (endpoint) process.env.AI_ENDPOINT = endpoint;
+    process.env.AI_DEEP_VERIFY = deepVerify ? "true" : "false";
+    process.env.AI_AUTO_REMEDIATE = autoRemediate ? "true" : "false";
+    process.env.AI_PROVIDER = provider;
+    
+    db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+      .run(`audit-${Date.now()}`, "USER", "AI_CONFIG_UPDATED", 
+        `AI provider set to ${provider}. Deep-Verify: ${deepVerify}, Auto-Remediate: ${autoRemediate}`, 
+        new Date().toISOString());
+    
+    res.json({ success: true, message: "AI configuration updated successfully" });
+  });
+
   // ── Background SSH Metrics Scheduler ──────────────────────────────────────
   if (process.env.NODE_ENV === "production") {
     setInterval(updateAllServerMetrics, 30000);
@@ -747,9 +778,10 @@ Real-time SSH Metrics (${sshConn.host}):
     });
   }
 
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || "80");
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Saturno Core v3.0.0 running on http://localhost:${PORT}`);
+    console.log(`Saturn Core v4.0.0 running on http://0.0.0.0:${PORT}`);
+    console.log(`Neural Engine: ARES 1.0.0`);
     console.log(`SSH Agent ready. Connect to servers via POST /api/ssh/connect`);
   });
 }

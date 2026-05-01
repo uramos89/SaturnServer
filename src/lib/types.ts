@@ -1,3 +1,4 @@
+// ── Saturn Types ────────────────────────────────────────────────────────
 
 export type ServerStatus = 'online' | 'offline' | 'degraded' | 'maintenance';
 
@@ -11,6 +12,7 @@ export interface ManagedServer {
   memory: number;
   lastCheck: string;
   tags: string[];
+  sshConnected?: boolean;
 }
 
 export interface Incident {
@@ -52,4 +54,30 @@ export interface NotificationConfig {
   destination: string;
   config: string;
   enabled: boolean;
+}
+
+export interface AIConfig {
+  provider: 'gemini' | 'openai' | 'ollama' | 'anthropic' | 'none';
+  apiKey: string;
+  endpoint?: string;
+  model?: string;
+  deepVerify: boolean;
+  autoRemediate: boolean;
+}
+
+export interface SshConnection {
+  id: string;
+  serverId: string;
+  host: string;
+  port: number;
+  username: string;
+  status: 'connecting' | 'connected' | 'disconnected' | 'error';
+  metrics?: {
+    cpu: number;
+    memory: number;
+    disk: number;
+    uptime: number;
+    kernel: string;
+    loadAvg: number[];
+  };
 }
