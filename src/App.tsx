@@ -66,6 +66,269 @@ interface ConfiguredProvider {
   enabled: number;
 }
 
+interface UserData {
+  id: string;
+  username: string;
+  role: string;
+}
+
+// ── Login View ────────────────────────────────────────────────────────
+const LoginView = ({ onLogin, t }: { onLogin: (u: UserData) => void, t: (k: string) => string }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        onLogin(data.user);
+      } else {
+        setError(data.error || 'Invalid credentials');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md immersive-card p-8"
+      >
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 mx-auto mb-6 rounded-full border-2 border-orange-500 flex items-center justify-center shadow-[0_0_30px_rgba(249,115,22,0.3)]">
+            <div className="w-8 h-1.5 bg-orange-500 rounded-full" />
+          </div>
+          <h1 className="text-2xl font-black text-white tracking-[0.2em] mb-2 uppercase">SATURN</h1>
+          <p className="text-slate-500 text-xs uppercase tracking-widest">Neural Infrastructure Core</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Username</label>
+            <div className="relative">
+              <User size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                placeholder="admin"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Password</label>
+            <div className="relative">
+              <Lock size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
+          {error && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[10px] text-rose-400">
+              {error}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={loading || !username || !password}
+            className="w-full py-4 bg-orange-500 text-black text-xs font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-4"
+          >
+            {loading ? <RefreshCw size={14} className="animate-spin" /> : <><ShieldCheck size={14} /> Authenticate</>}
+          </button>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
+// ── User Manager Component ────────────────────────────────────────────
+const UserManager = ({ t }: { t: (k: string) => string }) => {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/users');
+      const data = await res.json();
+      setUsers(data);
+    } catch {} finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchUsers(); }, []);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) fetchUsers();
+      else alert(data.error);
+    } catch {}
+  };
+
+  const handleCreate = async () => {
+    if (!newUsername || newPassword.length < 8) return;
+    setCreating(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: newUsername, password: newPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowCreate(false);
+        setNewUsername('');
+        setNewPassword('');
+        fetchUsers();
+      } else {
+        setError(data.error);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-black text-white uppercase tracking-widest">User Management</h2>
+          <p className="text-xs text-slate-500">Manage Saturn application administrators</p>
+        </div>
+        <button 
+          onClick={() => setShowCreate(true)}
+          className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-orange-400 transition-all flex items-center gap-2"
+        >
+          <User size={12} /> Add Admin
+        </button>
+      </div>
+
+      <div className="immersive-card overflow-hidden">
+        <div className="grid grid-cols-4 p-4 border-b border-white/5 text-[10px] font-black text-slate-500 uppercase tracking-widest bg-white/[0.02]">
+          <div>Username</div>
+          <div>Role</div>
+          <div>Created At</div>
+          <div className="text-right">Actions</div>
+        </div>
+        <div className="divide-y divide-white/5">
+          {users.map(u => (
+            <div key={u.id} className="grid grid-cols-4 p-4 items-center text-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500 font-bold">
+                  {u.username.charAt(0).toUpperCase()}
+                </div>
+                <span className="font-semibold text-white">{u.username}</span>
+              </div>
+              <div>
+                <span className="px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 text-[9px] font-black uppercase">
+                  {u.role}
+                </span>
+              </div>
+              <div className="text-slate-500 font-mono text-[10px]">
+                {new Date(u.created_at).toLocaleDateString()}
+              </div>
+              <div className="text-right">
+                <button 
+                  onClick={() => handleDelete(u.id)}
+                  className="p-2 text-slate-500 hover:text-rose-500 transition-colors"
+                >
+                  <XCircle size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {loading && <div className="p-12 text-center text-slate-500 animate-pulse">Loading users...</div>}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showCreate && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="w-full max-w-sm immersive-card p-6"
+            >
+              <h3 className="text-sm font-black text-white uppercase tracking-widest mb-6">Create New Admin</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Username</label>
+                  <input
+                    type="text"
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
+                    className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                    placeholder="john_doe"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                    placeholder="Minimum 8 characters"
+                  />
+                </div>
+                {error && <div className="text-[10px] text-rose-400">{error}</div>}
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => setShowCreate(false)}
+                    className="flex-1 py-3 bg-white/5 text-slate-400 text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-white/10"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleCreate}
+                    disabled={creating || !newUsername || newPassword.length < 8}
+                    className="flex-1 py-3 bg-orange-500 text-black text-xs font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 disabled:opacity-30"
+                  >
+                    {creating ? 'Creating...' : 'Create'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 // ── Onboarding Wizard (3-Step: AI Provider + SMTP + Admin User) ────────
 const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: string) => string }) => {
   const [step, setStep] = useState(0);
@@ -763,7 +1026,7 @@ const ServerRow = ({ server, onClick, t }: { server: ManagedServer, onClick: () 
 );
 
 // ── IncidentCard ───────────────────────────────────────────────────────
-const IncidentCard = ({ incident, onAnalyze, t }: { incident: Incident, onAnalyze: () => void, t: (k: string) => string }) => (
+const IncidentCard = ({ incident, onAnalyze, onResolve, t }: { incident: Incident, onAnalyze: () => void, onResolve: (id: string) => void, t: (k: string) => string }) => (
   <motion.div 
     initial={{ opacity: 0, x: -20 }}
     animate={{ opacity: 1, x: 0 }}
@@ -795,16 +1058,63 @@ const IncidentCard = ({ incident, onAnalyze, t }: { incident: Incident, onAnalyz
       </span>
     </div>
     <p className="text-xs text-slate-400 leading-relaxed mb-3">{incident.description}</p>
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between gap-2">
       <span className="text-[9px] text-slate-600 font-mono">{incident.status}</span>
-      {incident.status === 'open' && (
-        <button
-          onClick={onAnalyze}
-          className="text-[10px] font-black uppercase tracking-widest bg-orange-500/20 text-orange-400 px-3 py-1.5 rounded-lg hover:bg-orange-500/30 transition-all"
-        >
-          Analyze
-        </button>
-      )}
+      <div className="flex gap-2">
+        {incident.status === 'open' && (
+          <>
+            <button
+              onClick={onAnalyze}
+              className="text-[10px] font-black uppercase tracking-widest bg-orange-500/20 text-orange-400 px-3 py-1.5 rounded-lg hover:bg-orange-500/30 transition-all"
+            >
+              Analyze
+            </button>
+            <button
+              onClick={() => onResolve(incident.id)}
+              className="text-[10px] font-black uppercase tracking-widest bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg hover:bg-emerald-500/30 transition-all"
+            >
+              Resolve
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  </motion.div>
+);
+
+// ── CredentialCard ─────────────────────────────────────────────────────
+const CredentialCard = ({ cred, onDelete, onScan }: { cred: any, onDelete: (id: string) => void, onScan: (id: string) => void }) => (
+  <motion.div 
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 hover:border-orange-500/30 transition-all group"
+  >
+    <div className="flex items-start justify-between mb-4">
+      <div className="flex items-center gap-3">
+        <div className={cn(
+          "p-2 rounded-xl",
+          cred.provider === 'aws' ? "bg-orange-500/10 text-orange-500" :
+          cred.provider === 'gcp' ? "bg-sky-500/10 text-sky-500" :
+          "bg-blue-600/10 text-blue-500"
+        )}>
+          <Globe size={18} />
+        </div>
+        <div>
+          <div className="text-sm font-bold text-white uppercase tracking-wider">{cred.name}</div>
+          <div className="text-[10px] text-slate-500 uppercase">{cred.provider} • {cred.type}</div>
+        </div>
+      </div>
+      <button onClick={() => onDelete(cred.id)} className="p-2 text-slate-600 hover:text-rose-500 transition-colors">
+        <Trash2 size={14} />
+      </button>
+    </div>
+    <div className="flex gap-2">
+      <button 
+        onClick={() => onScan(cred.id)}
+        className="flex-1 py-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all flex items-center justify-center gap-2"
+      >
+        <RefreshCw size={12} /> Scan Account
+      </button>
     </div>
   </motion.div>
 );
@@ -823,10 +1133,20 @@ export default function App() {
   const [selectedServer, setSelectedServer] = useState<ManagedServer | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showCommandModal, setShowCommandModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [cloudCreds, setCloudCreds] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [remediationConfigs, setRemediationConfigs] = useState<any[]>([]);
+  const [globalConfig, setGlobalConfig] = useState<any>({ mode: 'auto', threshold: 0.7 });
+  const [selectedSkillId, setSelectedSkillId] = useState<string>('ps_remediation_v1');
+  const [importData, setImportData] = useState({ name: '', provider: 'aws', type: 'key', content: '' });
   const [commandHistory, setCommandHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState<any>(null);
+  const [user, setUser] = useState<UserData | null>(() => {
+    const saved = localStorage.getItem('saturn-user');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   // Connection form state
   const [connHost, setConnHost] = useState('');
@@ -845,21 +1165,32 @@ export default function App() {
   // AI Config state
   const [aiProvider, setAiProvider] = useState('gemini');
   const [aiApiKey, setAiApiKey] = useState('');
-  const [aiDeepVerify, setAiDeepVerify] = useState(true);
   const [aiAutoRemediate, setAiAutoRemediate] = useState(false);
+
+  // Detail View State
+  const [detailTab, setDetailTab] = useState<'overview' | 'users' | 'processes' | 'tasks' | 'network' | 'firewall' | 'apps' | 'web' | 'health' | 'backups' | 'security' | 'logs' | 'neural'>('overview');
+  const [serverLogs, setServerLogs] = useState('');
+  const [logLoading, setLogLoading] = useState(false);
+  const [neuralPrompt, setNeuralPrompt] = useState('');
+  const [neuralResult, setNeuralResult] = useState<any>(null);
+  const [neuralLoading, setNeuralLoading] = useState(false);
+  const [listOutputs, setListOutputs] = useState<Record<string, string>>({ users: '', processes: '', tasks: '', network: '', firewall: '', packages: '', webserver: '', health: '', backups: '', ssl: '', audit: '' });
 
   // SSE connection for real-time metrics
   useEffect(() => {
     if (onboarding) return;
     const fetchData = async () => {
       try {
-        const [sRes, iRes, aRes, nRes, aiRes, sshRes] = await Promise.all([
+        const [sRes, iRes, aRes, nRes, aiRes, sshRes, cRes, skRes, rRes] = await Promise.all([
           fetch('/api/servers'),
           fetch('/api/incidents'),
           fetch('/api/audit'),
           fetch('/api/notifications'),
           fetch('/api/ai/config'),
-          fetch('/api/ssh/connections')
+          fetch('/api/ssh/connections'),
+          fetch('/api/credentials'),
+          fetch('/api/skills'),
+          fetch('/api/remediation/config')
         ]);
         setServers(await sRes.json());
         setIncidents(await iRes.json());
@@ -867,6 +1198,11 @@ export default function App() {
         setNotifications(await nRes.json());
         setAiConfig(await aiRes.json());
         setSshConnections(await sshRes.json());
+        setCloudCreds(await cRes.json());
+        setSkills(await skRes.json());
+        const configs = await rRes.json();
+        setRemediationConfigs(configs);
+        setGlobalConfig(configs.find((c: any) => c.serverId === 'global') || { mode: 'auto', threshold: 0.7 });
       } catch (e) {
         console.error('Failed to fetch data:', e);
       } finally {
@@ -1002,6 +1338,168 @@ export default function App() {
     setAiConfig(await aiRes.json());
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('saturn-user');
+    setUser(null);
+  };
+
+  const handleLogin = (u: UserData) => {
+    localStorage.setItem('saturn-user', JSON.stringify(u));
+    setUser(u);
+  };
+
+  const handleFetchLogs = async () => {
+    if (!selectedServer) return;
+    setLogLoading(true);
+    try {
+      const res = await fetch(`/api/servers/${selectedServer.id}/logs`);
+      const data = await res.json();
+      setServerLogs(data.logs || data.error || 'No logs found');
+    } catch (e: any) {
+      setServerLogs(`Error: ${e.message}`);
+    } finally {
+      setLogLoading(false);
+    }
+  };
+
+  const handleGenerateNeuralScript = async () => {
+    if (!selectedServer || !neuralPrompt) return;
+    setNeuralLoading(true);
+    setNeuralResult(null);
+    try {
+      const res = await fetch('/api/neural/generate-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: neuralPrompt,
+          os: selectedServer.os,
+          context: { serverName: selectedServer.name, ip: selectedServer.ip }
+        })
+      });
+      const data = await res.json();
+      setNeuralResult(data);
+    } catch (e: any) {
+      alert(`AI Generation failed: ${e.message}`);
+    } finally {
+      setNeuralLoading(false);
+    }
+  };
+
+  const handleExecuteNeuralScript = async () => {
+    if (!selectedServer || !neuralPrompt) return;
+    setNeuralLoading(true);
+    try {
+      const res = await fetch('/api/skills/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          skillId: selectedSkillId,
+          prompt: neuralPrompt,
+          serverId: selectedServer.id
+        })
+      });
+      const data = await res.json();
+      setNeuralResult({ script: data.script, explanation: `Generated using ${data.skill} skill.` });
+    } catch (e: any) { alert(e.message); }
+    finally { setNeuralLoading(false); }
+  };
+
+  const handleApproveAndRun = async () => {
+    if (!selectedServer || !neuralResult) return;
+    setCmdLoading(true);
+    try {
+      const res = await fetch(`/api/servers/${selectedServer.id}/exec`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: neuralResult.script })
+      });
+      const data = await res.json();
+      setCmdResult(data);
+      if (data.success) {
+        setNeuralResult(null);
+        setNeuralPrompt('');
+        setDetailTab('overview');
+      }
+    } catch (e: any) {
+      alert(`Execution failed: ${e.message}`);
+    } finally {
+      setCmdLoading(false);
+    }
+  };
+
+  const handleFetchList = async (category: 'users' | 'tasks' | 'processes' | 'network' | 'firewall' | 'packages' | 'webserver' | 'health' | 'backups' | 'ssl' | 'audit') => {
+    if (!selectedServer) return;
+    try {
+      const res = await fetch(`/api/servers/${selectedServer.id}/${category}`);
+      const data = await res.json();
+      setListOutputs(prev => ({ ...prev, [category]: data.output || data.error }));
+    } catch (e: any) {
+      setListOutputs(prev => ({ ...prev, [category]: `Error: ${e.message}` }));
+    }
+  };
+
+  const handleResolveIncident = async (id: string) => {
+    try {
+      await fetch(`/api/incidents/${id}/resolve`, { method: 'POST' });
+      const iRes = await fetch('/api/incidents');
+      const iData = await iRes.json();
+      setIncidents(iData);
+    } catch (e: any) {
+      alert(`Failed to resolve incident: ${e.message}`);
+    }
+  };
+
+  const handleImportCredential = async () => {
+    try {
+      await fetch('/api/credentials/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(importData)
+      });
+      setShowImportModal(false);
+      setImportData({ name: '', provider: 'aws', type: 'key', content: '' });
+      const res = await fetch('/api/credentials');
+      setCloudCreds(await res.json());
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const handleDeleteCredential = async (id: string) => {
+    if (!confirm('Are you sure? This will revoke access to associated servers.')) return;
+    try {
+      await fetch(`/api/credentials/${id}`, { method: 'DELETE' });
+      const res = await fetch('/api/credentials');
+      setCloudCreds(await res.json());
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const handleCloudScan = async (credId: string) => {
+    try {
+      const res = await fetch('/api/cloud/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credId })
+      });
+      const data = await res.json();
+      alert(`Scan complete. Discovered ${data.discovered} new servers.`);
+      const sRes = await fetch('/api/servers');
+      setServers(await sRes.json());
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const handleUpdateRemediationMode = async (serverId: string | null, mode: string, skillId?: string) => {
+    try {
+      await fetch('/api/remediation/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverId, mode, skillId })
+      });
+      const res = await fetch('/api/remediation/config');
+      const configs = await res.json();
+      setRemediationConfigs(configs);
+      if (!serverId || serverId === 'global') setGlobalConfig(configs.find((c: any) => c.serverId === 'global'));
+    } catch (e: any) { alert(e.message); }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────
   if (onboarding) {
     return (
@@ -1009,6 +1507,10 @@ export default function App() {
         <OnboardingWizard onComplete={() => setOnboarding(false)} t={t} />
       </div>
     );
+  }
+
+  if (!user) {
+    return <LoginView onLogin={handleLogin} t={t} />;
   }
 
   if (loading) {
@@ -1050,6 +1552,9 @@ export default function App() {
                 { id: 'servers', label: t('nav.servers'), icon: Server },
                 { id: 'incidents', label: t('nav.incidents'), icon: AlertTriangle },
                 { id: 'terminal', label: t('nav.terminal'), icon: Terminal },
+                { id: 'credentials', label: 'Credentials', icon: Key },
+                { id: 'contextp', label: 'ContextP', icon: Brain },
+                { id: 'users', label: 'Users', icon: User },
                 { id: 'audit', label: t('nav.audit'), icon: Logs },
               ].map(tab => (
                 <button
@@ -1067,6 +1572,24 @@ export default function App() {
                 </button>
               ))}
             </nav>
+            <div className="hidden lg:flex bg-black/40 border border-white/10 p-1 rounded-xl ml-4">
+              {[
+                { id: 'auto', label: '🤖 AUTO', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                { id: 'skill', label: '🧠 SKILL', color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                { id: 'manual', label: '🔧 MANUAL', color: 'text-slate-400', bg: 'bg-white/5' }
+              ].map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => handleUpdateRemediationMode('global', m.id)}
+                  className={cn(
+                    "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                    globalConfig.mode === m.id ? `${m.bg} ${m.color}` : "text-slate-600 hover:text-slate-400"
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -1085,6 +1608,18 @@ export default function App() {
             >
               <Settings size={16} />
             </button>
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-xl text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 transition-all"
+              title="Logout"
+            >
+              <Unplug size={16} />
+            </button>
+            <div className="flex items-center gap-2 pl-3 border-l border-white/5">
+              <div className="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center text-black font-black text-[10px]">
+                {user.username.charAt(0).toUpperCase()}
+              </div>
+            </div>
             <button
               onClick={() => setLang(lang === 'en' ? 'es' : 'en')}
               className="px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest bg-white/5 text-slate-400 hover:bg-white/10"
@@ -1141,7 +1676,7 @@ export default function App() {
             {/* Recent Incidents */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {incidents.slice(0, 4).map(inc => (
-                <IncidentCard key={inc.id} incident={inc} onAnalyze={() => handleAnalyze(inc.id)} t={t} />
+                <IncidentCard key={inc.id} incident={inc} onAnalyze={() => handleAnalyze(inc.id)} onResolve={handleResolveIncident} t={t} />
               ))}
             </div>
           </motion.div>
@@ -1300,25 +1835,337 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Command History */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <History size={14} className="text-slate-500" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('server.history')}</span>
-                  </div>
-                  <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
-                    {commandHistory.map((h: any) => (
-                      <div key={h.id} className="p-2 rounded-lg bg-white/[0.02] text-[10px] font-mono">
-                        <span className="text-emerald-400">$</span>{' '}
-                        <span className="text-slate-300">{h.command}</span>
-                        <span className="text-slate-600 ml-2">• {new Date(h.timestamp).toLocaleTimeString()}</span>
+                {/* Tabs for Details */}
+                <div className="flex border-b border-white/5 mb-6 overflow-x-auto no-scrollbar">
+                  {['overview', 'users', 'processes', 'tasks', 'network', 'firewall', 'apps', 'web', 'health', 'backups', 'security', 'logs', 'neural'].map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setDetailTab(t as any)}
+                      className={cn(
+                        "px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 whitespace-nowrap",
+                        detailTab === t ? "border-orange-500 text-orange-500" : "border-transparent text-slate-500 hover:text-white"
+                      )}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+
+                {detailTab === 'overview' && (
+                  <div className="space-y-6">
+                    {/* Command History */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <History size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('server.history')}</span>
                       </div>
-                    ))}
-                    {commandHistory.length === 0 && (
-                      <p className="text-[10px] text-slate-600">{t('server.history.empty')}</p>
+                      <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
+                        {commandHistory.map((h: any) => (
+                          <div key={h.id} className="p-2 rounded-lg bg-white/[0.02] text-[10px] font-mono">
+                            <span className="text-emerald-400">$</span>{' '}
+                            <span className="text-slate-300">{h.command}</span>
+                            <span className="text-slate-600 ml-2">• {new Date(h.timestamp).toLocaleTimeString()}</span>
+                          </div>
+                        ))}
+                        {commandHistory.length === 0 && (
+                          <p className="text-[10px] text-slate-600">{t('server.history.empty')}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'users' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <User size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Remote Users & Groups</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleFetchList('users')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                        <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`create a new user named "deploy" with bash shell`); }} className="text-[9px] font-black uppercase text-emerald-500">Add User</button>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[300px] overflow-y-auto custom-scrollbar">
+                      <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.users || "Click Refresh to load list..."}</pre>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'processes' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Activity size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Running Processes</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleFetchList('processes')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                        <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`kill process with pid `); }} className="text-[9px] font-black uppercase text-rose-500">Kill Process</button>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[300px] overflow-y-auto custom-scrollbar">
+                      <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.processes || "Click Refresh to load list..."}</pre>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'tasks' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Calendar size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Scheduled Tasks</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleFetchList('tasks')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                        <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`schedule a new task that runs "echo hello" every day at 3am`); }} className="text-[9px] font-black uppercase text-emerald-500">Add Task</button>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[300px] overflow-y-auto custom-scrollbar">
+                      <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.tasks || "Click Refresh to load list..."}</pre>
+                    </div>
+                  </div>
+                )}
+                {detailTab === 'network' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Globe size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Network Interfaces & Routing</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleFetchList('network')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                        <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`configure static ip 192.168.1.100 on eth0`); }} className="text-[9px] font-black uppercase text-rose-500">Configure IP</button>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[400px] overflow-y-auto custom-scrollbar">
+                      <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.network || "Click Refresh to load list..."}</pre>
+                    </div>
+                    <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-400">
+                      <AlertTriangle size={12} className="inline mr-2" />
+                      <strong>WARNING:</strong> Network changes may disconnect your current session. Use static IPs with caution.
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'firewall' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Shield size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Firewall Rules</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleFetchList('firewall')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                        <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`allow incoming traffic on port 8080 tcp`); }} className="text-[9px] font-black uppercase text-emerald-500">Add Rule</button>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[400px] overflow-y-auto custom-scrollbar">
+                      <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.firewall || "Click Refresh to load list..."}</pre>
+                    </div>
+                  </div>
+                )}
+                {detailTab === 'apps' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Package size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Installed Packages</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleFetchList('packages')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                        <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`install nodejs and npm`); }} className="text-[9px] font-black uppercase text-emerald-500">Install App</button>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[400px] overflow-y-auto custom-scrollbar">
+                      <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.packages || "Click Refresh to load list..."}</pre>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'web' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Layout size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Web Servers & Virtual Hosts</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleFetchList('webserver')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                        <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`create a new nginx virtual host for domain "example.com" pointing to "/var/www/html"`); }} className="text-[9px] font-black uppercase text-emerald-500">Add Site</button>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[400px] overflow-y-auto custom-scrollbar">
+                      <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.webserver || "Click Refresh to load list..."}</pre>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'health' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <HeartPulse size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Disk Health & SMART</span>
+                      </div>
+                      <button onClick={() => handleFetchList('health')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[400px] overflow-y-auto custom-scrollbar">
+                      <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.health || "Click Refresh to load list..."}</pre>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'backups' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Save size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Backup Management</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleFetchList('backups')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                        <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`create a daily backup of /etc and /var/www to /backup`); }} className="text-[9px] font-black uppercase text-emerald-500">New Backup</button>
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[400px] overflow-y-auto custom-scrollbar">
+                      <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.backups || "Click Refresh to load list..."}</pre>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'security' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* SSL Certificates */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Lock size={14} className="text-slate-500" />
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">SSL Certificates</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleFetchList('ssl')} className="text-[9px] font-black uppercase text-orange-500">Refresh</button>
+                            <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`renew ssl certificate for my-domain.com`); }} className="text-[9px] font-black uppercase text-emerald-500">Renew</button>
+                          </div>
+                        </div>
+                        <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[300px] overflow-y-auto custom-scrollbar">
+                          <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.ssl || "Click Refresh to load SSL info..."}</pre>
+                        </div>
+                      </div>
+
+                      {/* Security Audit */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <ShieldAlert size={14} className="text-slate-500" />
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Security Audit</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleFetchList('audit')} className="text-[9px] font-black uppercase text-orange-500">Run Audit</button>
+                            <button onClick={() => { setDetailTab('neural'); setNeuralPrompt(`harden ssh: disable root login and change port to 2222`); }} className="text-[9px] font-black uppercase text-rose-500">Harden SSH</button>
+                          </div>
+                        </div>
+                        <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[300px] overflow-y-auto custom-scrollbar">
+                          <pre className="text-slate-400 whitespace-pre-wrap">{listOutputs.audit || "Click Run Audit to scan..."}</pre>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'logs' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Logs size={14} className="text-slate-500" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">System Logs</span>
+                      </div>
+                      <button 
+                        onClick={handleFetchLogs}
+                        className="text-[9px] font-black uppercase text-orange-500 hover:text-orange-400"
+                      >
+                        Refresh Logs
+                      </button>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-[10px] h-[400px] overflow-y-auto custom-scrollbar">
+                      {logLoading ? (
+                        <div className="h-full flex items-center justify-center text-slate-600 animate-pulse italic">Fetching logs from server...</div>
+                      ) : (
+                        <pre className="text-slate-400 whitespace-pre-wrap">{serverLogs || "No logs fetched yet."}</pre>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {detailTab === 'neural' && (
+                  <div className="space-y-6">
+                    <div className="p-6 rounded-2xl bg-orange-500/5 border border-orange-500/10">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Brain size={14} className="text-orange-500" />
+                        <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Neural Script Generator</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mb-4 italic">
+                        Describe what you want to do on this server (e.g., "list all docker containers" or "rotate system logs"). Saturn will generate and execute the appropriate script.
+                      </p>
+                      <div className="flex gap-2">
+                        <select
+                          value={selectedSkillId}
+                          onChange={(e) => setSelectedSkillId(e.target.value)}
+                          className="bg-black/60 border border-white/10 rounded-xl p-3 text-[10px] uppercase font-black tracking-widest text-orange-500 outline-none"
+                        >
+                          {skills.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={neuralPrompt}
+                          onChange={(e) => setNeuralPrompt(e.target.value)}
+                          placeholder="What would you like to do?"
+                          className="flex-1 bg-black/60 border border-white/10 rounded-xl p-3 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                        />
+                        <button
+                          onClick={handleExecuteNeuralScript}
+                          disabled={neuralLoading || !neuralPrompt}
+                          className="px-6 py-2 bg-orange-500 text-black text-xs font-black uppercase rounded-xl hover:bg-orange-400 disabled:opacity-30"
+                        >
+                          {neuralLoading ? 'Generating...' : 'Generate'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {neuralResult && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="immersive-card p-6 border-orange-500/20"
+                      >
+                        <div className="text-xs font-bold text-white mb-2">{neuralResult.description}</div>
+                        <pre className="p-4 bg-black/80 rounded-xl border border-white/10 text-[10px] text-emerald-400 font-mono mb-4 overflow-x-auto">
+                          {neuralResult.script}
+                        </pre>
+                        <div className="space-y-2 mb-4">
+                          <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Identified Risks:</div>
+                          {neuralResult.risks.map((r: string, i: number) => (
+                            <div key={i} className="text-[10px] text-rose-400 flex items-center gap-2">
+                              <AlertTriangle size={10} /> {r}
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          onClick={handleExecuteNeuralScript}
+                          disabled={cmdLoading}
+                          className="w-full py-3 bg-emerald-500 text-black text-xs font-black uppercase tracking-widest rounded-xl hover:bg-emerald-400"
+                        >
+                          {cmdLoading ? 'Executing...' : 'Approve & Execute'}
+                        </button>
+                      </motion.div>
                     )}
                   </div>
-                </div>
+                )}
               </motion.div>
             )}
           </motion.div>
@@ -1330,7 +2177,7 @@ export default function App() {
             <h2 className="text-lg font-black text-white uppercase tracking-widest mb-6">{t('nav.incidents')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {incidents.map(inc => (
-                <IncidentCard key={inc.id} incident={inc} onAnalyze={() => handleAnalyze(inc.id)} t={t} />
+                <IncidentCard key={inc.id} incident={inc} onAnalyze={() => handleAnalyze(inc.id)} onResolve={handleResolveIncident} t={t} />
               ))}
               {incidents.length === 0 && (
                 <div className="col-span-2 p-12 text-center">
@@ -1389,6 +2236,101 @@ export default function App() {
           </motion.div>
         )}
 
+        {/* Credentials */}
+        {activeTab === 'credentials' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-lg font-black text-white uppercase tracking-widest mb-1">Cloud Credentials</h2>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest">Manage AWS, GCP and Azure authentication</p>
+              </div>
+              <button 
+                onClick={() => setShowImportModal(true)}
+                className="px-6 py-2.5 bg-white text-black text-xs font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 transition-all flex items-center gap-2"
+              >
+                <Plus size={14} /> Import Credential
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {cloudCreds.map(cred => (
+                <CredentialCard 
+                  key={cred.id} 
+                  cred={cred} 
+                  onDelete={handleDeleteCredential}
+                  onScan={handleCloudScan}
+                />
+              ))}
+              {cloudCreds.length === 0 && (
+                <div className="col-span-3 p-12 text-center immersive-card border-dashed border-2 border-white/5">
+                  <Key size={32} className="mx-auto mb-4 text-slate-700" />
+                  <p className="text-sm text-slate-500 uppercase tracking-widest font-black">No credentials found</p>
+                  <p className="text-[10px] text-slate-600 mt-2 italic">Import your first cloud account to discover servers</p>
+                </div>
+              )}
+            </div>
+
+            {/* Import Modal */}
+            {showImportModal && (
+              <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-lg immersive-card p-8">
+                  <h3 className="text-sm font-black text-white uppercase tracking-widest mb-6">Import Cloud Credential</h3>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Name</label>
+                        <input
+                          type="text"
+                          value={importData.name}
+                          onChange={e => setImportData({...importData, name: e.target.value})}
+                          placeholder="e.g. AWS Production"
+                          className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs outline-none focus:border-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Provider</label>
+                        <select
+                          value={importData.provider}
+                          onChange={e => setImportData({...importData, provider: e.target.value})}
+                          className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs outline-none"
+                        >
+                          <option value="aws">AWS</option>
+                          <option value="gcp">Google Cloud</option>
+                          <option value="azure">Azure</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase mb-2 block">Credential Content (JSON / PEM / AccessKey)</label>
+                      <textarea
+                        value={importData.content}
+                        onChange={e => setImportData({...importData, content: e.target.value})}
+                        rows={6}
+                        placeholder="Paste your credential file content here..."
+                        className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs font-mono outline-none focus:border-orange-500"
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-4">
+                      <button 
+                        onClick={() => setShowImportModal(false)}
+                        className="flex-1 py-3 border border-white/10 text-white text-[10px] font-black uppercase rounded-xl hover:bg-white/5"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={handleImportCredential}
+                        className="flex-1 py-3 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-orange-400"
+                      >
+                        Save & Encrypt
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {/* Audit */}
         {activeTab === 'audit' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -1423,6 +2365,17 @@ export default function App() {
                 )}
               </div>
             </div>
+          </motion.div>
+        )}
+
+        {/* User Management Content */}
+        {activeTab === 'users' && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="p-8"
+          >
+            <UserManager t={t} />
           </motion.div>
         )}
       </main>

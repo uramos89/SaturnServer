@@ -1,6 +1,7 @@
 import { NodeSSH } from "node-ssh";
 import os from "os";
 import path from "path";
+import { OSType } from "./types.js";
 
 export interface SSHConnectionConfig {
   host: string;
@@ -83,11 +84,52 @@ export class SSHAgent {
     }
   }
 
-  async getSystemMetrics(connKey: string): Promise<SystemMetrics> {
+  async getSystemMetrics(connKey: string, osType?: OSType): Promise<SystemMetrics> {
     const conn = this.connections.get(connKey);
     if (!conn) throw new Error(`No connection found: ${connKey}`);
 
     try {
+      // Determine OS if not provided
+      let actualOs = osType;
+      if (!actualOs) {
+        const checkOs = await conn.execCommand("uname -s", {});
+        actualOs = checkOs.stdout.toLowerCase().includes("linux") ? "linux" : "windows";
+      }
+
+      if (actualOs === "windows") {
+        // CPU
+        const cpuRes = await conn.execCommand('powershell -Command "Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average"', {});
+        const cpu = parseFloat(cpuRes.stdout) || 0;
+
+        // Memory
+        const memRes = await conn.execCommand('powershell -Command "$os = Get-CimInstance Win32_OperatingSystem; [math]::Round(($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize * 100, 1)"', {});
+        const memory = parseFloat(memRes.stdout) || 0;
+
+        // Disk (C:)
+        const diskRes = await conn.execCommand('powershell -Command "$d = Get-PSDrive C; [math]::Round(($d.Used / $d.Used + $d.Free) * 100, 1)"', {});
+        const disk = parseFloat(diskRes.stdout) || 0;
+
+        // Uptime
+        const uptimeRes = await conn.execCommand('powershell -Command "[int](New-TimeSpan -Start (Get-CimInstance Win32_OperatingSystem).LastBootUpTime -End (Get-Date)).TotalSeconds"', {});
+        const uptime = parseInt(uptimeRes.stdout) || 0;
+
+        // Details
+        const osRes = await conn.execCommand('powershell -Command "(Get-CimInstance Win32_OperatingSystem).Caption"', {});
+        const os = osRes.stdout.trim() || "Windows";
+        
+        const hostRes = await conn.execCommand("hostname", {});
+        const hostname = hostRes.stdout.trim();
+
+        const kernelRes = await conn.execCommand('powershell -Command "(Get-CimInstance Win32_OperatingSystem).Version"', {});
+        const kernel = kernelRes.stdout.trim();
+
+        const procsRes = await conn.execCommand('powershell -Command "(Get-Process).Count"', {});
+        const processes = parseInt(procsRes.stdout) || 0;
+
+        return { cpu, memory, disk, uptime, os, hostname, kernel, processes, loadAvg: [0, 0, 0] };
+      }
+
+      // Linux (existing logic)
       // CPU - using /proc/stat for accuracy
       const cpuResult = await conn.execCommand(
         `awk '{u=$2+$4; t=$2+$4+$5; if (NR==1) {u1=u; t1=t} else {printf "%.1f", (($2+$4)-u1)*100/(t-t1)}}' <(grep 'cpu ' /proc/stat) <(sleep 1; grep 'cpu ' /proc/stat)`,

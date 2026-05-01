@@ -985,5 +985,62 @@ else
 fi
 `;
     return this.buildResponse(script, `Run backup job ${backupId}`, ["Executes backup script"], "varies");
+  // ═══════════════════════════════════════════════════════════════════════
+  // SEC02 - Security Hardening
+  // ═══════════════════════════════════════════════════════════════════════
+
+  static security_audit(os: OSType, params: Record<string, any>): ScriptResponse {
+    if (os === "windows") {
+      const script = `${this.shebang(os)}
+echo "=== Open Ports ==="
+netstat -ano | findstr LISTENING | head -20
+echo ""
+echo "=== Failed Logins (last 10) ==="
+powershell -Command "Get-WinEvent -LogName Security -FilterXPath \"*[System[(EventID=4625)]]\" -MaxEvents 10 | Select-Object TimeCreated,@{n='User';e={$_.Properties[5].Value}},@{n='IP';e={$_.Properties[18].Value}} | Format-Table -AutoSize"
+`;
+      return this.buildResponse(script, "Security audit: open ports and failed logins", ["Read-only operation"], "1m");
+    }
+    const script = `${this.shebang(os)}
+echo "=== Open Ports ==="
+ss -tulpn | grep LISTEN | head -20
+echo ""
+echo "=== Failed SSH Logins (last 10) ==="
+grep "Failed password" /var/log/auth.log 2>/dev/null | tail -10 || journalctl _SYSTEMD_UNIT=ssh.service | grep "Failed password" | tail -10 || echo "(no failed logins found)"
+echo ""
+echo "=== Root Login Status ==="
+grep "^PermitRootLogin" /etc/ssh/sshd_config || echo "PermitRootLogin default (check config)"
+`;
+    return this.buildResponse(script, "Security audit: ports, logins and SSH config", ["Read-only operation"], "1m");
+  }
+
+  static security_hardening(os: OSType, params: Record<string, any>): ScriptResponse {
+    const { disableRoot, changeSSHPort } = params;
+    
+    if (os === "windows") {
+      const script = `${this.shebang(os)}
+${this.requireRoot(os)}
+echo "Windows hardening not fully automated. Recommendations:"
+echo "- Disable SMBv1"
+echo "- Enable Windows Defender"
+echo "- Set Password Complexity Policies"
+`;
+      return this.buildResponse(script, "Basic Windows Hardening", ["Informational only"], "1m");
+    }
+
+    const portCmd = changeSSHPort ? `sed -i 's/^#Port 22/Port ${changeSSHPort}/' /etc/ssh/sshd_config && sed -i 's/^Port 22/Port ${changeSSHPort}/' /etc/ssh/sshd_config` : "";
+    const rootCmd = disableRoot ? `sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config` : "";
+    
+    const script = `${this.shebang(os)}
+${this.requireRoot(os)}
+${this.errorHandler(os)}
+echo "Hardening SSH configuration..."
+${portCmd}
+${rootCmd}
+echo "Restarting SSH service..."
+systemctl restart ssh || service ssh restart
+echo "Hardening complete"
+echo "WARNING: If you changed the port, update Saturn connection settings!"
+`;
+    return this.buildResponse(script, "SSH Hardening (Disable Root/Change Port)", ["Risk of lockout - verify new settings before disconnecting"], "2m");
   }
 }

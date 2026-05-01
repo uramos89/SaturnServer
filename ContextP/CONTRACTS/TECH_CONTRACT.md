@@ -3,7 +3,7 @@
 
 **Priority:** 2  
 **Mutability:** MUTABLE (update when stack evolves)  
-**Version:** 1.0.0
+**Version:** 1.1.0
 
 ---
 
@@ -28,6 +28,21 @@
 - ALWAYS add inline comments for non-obvious logic
 - ALWAYS update README or docs when public API changes
 - Document technology decisions in TECH/[technology]/overview.md
+
+---
+
+## SECURITY RULES (Best Practices)
+
+### TS-01 — API Security
+- ALWAYS use appropriate HTTP methods (GET for read, POST for create, etc.)
+- ALWAYS return generic error messages to clients (log details only on server)
+- NEVER use auto-incremental IDs for sensitive public resources; PREFER UUIDs
+- ALWAYS implement Rate Limiting (Throttling) on public endpoints
+
+### TS-02 — Data Protection
+- ALWAYS use environment variables for secrets; NEVER commit them
+- ALWAYS encrypt sensitive data at rest (e.g., SSH keys)
+- ALWAYS validate and sanitize all user inputs to prevent SQLi and XSS
 
 ---
 

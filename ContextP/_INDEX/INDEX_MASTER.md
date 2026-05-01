@@ -1,10 +1,10 @@
 # INDEX MASTER — Saturn
 ## ContextP v2 Knowledge Hub
 
-**Last Updated:** 2026-05-01 15:55  
-**ContextP Version:** 2.0.0  
+**Last Updated:** 2026-05-01 16:35  
+**ContextP Version:** 2.1.0  
 **Project Phase:** active  
-**Ingest Status:** partial
+**Ingest Status:** completed
 
 ---
 
@@ -16,7 +16,7 @@
 | TECH-02 | React/Frontend | 90% | Dashboard, SPA | 2026-05-01 |
 | TECH-03 | SSH/Infrastructure | 85% | Observer, Repository | 2026-05-01 |
 | TECH-04 | SQLite/Database | 85% | Repository | 2026-05-01 |
-| TECH-05 | AI/LLM Integration | 80% | Strategy | 2026-05-01 |
+| TECH-05 | AI/LLM Integration | 80% | Strategy, Adapter | 2026-05-01 |
 
 ## 📐 Active Architectural Patterns
 
@@ -29,13 +29,14 @@
 | P-05 | Publisher-Subscriber | Notifications | 80% | Notification System |
 | P-06 | Middleware Chain | HTTP | 90% | Express Routes |
 | P-07 | File System Store | Knowledge | 75% | ContextP |
+| P-08 | Model Adapter | AI Core | 85% | Neural Engine (Proposed) |
 
 ## ✅ Active Contracts
 
 | Contract | File | Priority | Last Modified |
 |---------|------|---------|---------------|
 | ROOT_CONTRACT | CONTRACTS/ROOT_CONTRACT.md | 1 (MAX) | 2026-05-01 |
-| TECH_CONTRACT | CONTRACTS/TECH_CONTRACT.md | 2 | 2026-05-01 |
+| TECH_CONTRACT | CONTRACTS/TECH_CONTRACT.md | 2 | 2026-05-01 (v1.1.0) |
 | FUNC_CONTRACT | CONTRACTS/FUNC_CONTRACT.md | 3 | 2026-05-01 |
 | STRUCT_CONTRACT | CONTRACTS/STRUCT_CONTRACT.md | 4 | 2026-05-01 |
 | AUDIT_CONTRACT | CONTRACTS/AUDIT_CONTRACT.md | 5 | 2026-05-01 |
@@ -44,7 +45,8 @@
 
 | ID | Feature | Domain | Progress | Pattern Used | Next Step |
 |----|---------|--------|---------|--------------|-----------|
-| F-07 | ContextP Integration | Knowledge | 80% | File System Store | INGEST CODEBASE |
+| F-08 | AI Refactor | AI Core | 10% | Model Adapter | Modularize Providers |
+| F-09 | User Management | Admin | 100% | Repository | Feature Complete |
 
 ## ⚠️ Technical Debt
 

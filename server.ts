@@ -8,6 +8,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { sshAgent, type SSHConnectionConfig, type SystemMetrics } from "./src/lib/ssh-agent.js";
 import { ScriptGenerator } from "./src/lib/script-generator.js";
+import { ScriptValidator } from "./src/lib/script-validator.js";
 import { createAdminRouter } from "./src/lib/admin-router.js";
 import { getStatus as getContextPStatus, getContractContent, getIndexContent, getMetricsContent, writeAuditLog, getAuditLogs, getParams, getCpiniContent } from "./src/lib/contextp-service.js";
 
@@ -113,9 +114,10 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS audit_logs (
     id TEXT PRIMARY KEY,
-    type TEXT,
-    event TEXT,
+    type TEXT, -- SYSTEM, USER, NEURAL, COMPLIANCE
+    event TEXT, -- SSH_CONNECTED, CMD_EXECUTED, CRED_ACCESS
     detail TEXT,
+    metadata TEXT, -- JSON blob for compliance tags/info
     timestamp TEXT
   );
 
@@ -141,6 +143,35 @@ db.exec(`
     created_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS cloud_credentials (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    provider TEXT,
+    type TEXT,
+    encrypted_path TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS skills (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    language TEXT,
+    version TEXT,
+    description TEXT,
+    path TEXT, -- Path to YAML definition in SKILLS/
+    enabled INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS remediation_configs (
+    serverId TEXT PRIMARY KEY, -- 'global' for system-wide
+    mode TEXT DEFAULT 'auto', -- auto, skill, manual
+    skillId TEXT, -- only if mode is 'skill'
+    confidence_threshold REAL DEFAULT 0.7,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
@@ -149,6 +180,22 @@ db.exec(`
     created_at TEXT
   );
 `);
+
+// Initialize Identity Vault Directories
+const VAULT_BASE = 'IDENTITY/credentials_vault';
+const providers = ['aws', 'gcp', 'azure', 'onprem', 'providers'];
+providers.forEach(p => {
+  const dir = path.join(VAULT_BASE, p);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
+const SKILLS_BASE = 'SKILLS';
+const PARAMS_BASE = 'PARAMS';
+const skillDirs = ['powershell_remediation_v1', 'bash_remediation_v1', 'custom_skills'];
+[SKILLS_BASE, PARAMS_BASE].concat(skillDirs.map(d => path.join(SKILLS_BASE, d))).forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
+
+if (!fs.existsSync(path.join(VAULT_BASE, 'aws/keys'))) fs.mkdirSync(path.join(VAULT_BASE, 'aws/keys'), { recursive: true });
 
 // Add column migration for new columns (safe if they already exist)
 try { db.exec("ALTER TABLE servers ADD COLUMN disk REAL"); } catch {}
@@ -222,10 +269,12 @@ async function updateAllServerMetrics() {
   for (const conn of connections) {
     try {
       const key = `${conn.username}@${conn.host}:${conn.port}`;
-      // Check if we have an active connection
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(conn.serverId) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      
       let metrics: SystemMetrics;
       try {
-        metrics = await sshAgent.getSystemMetrics(key);
+        metrics = await sshAgent.getSystemMetrics(key, osType);
       } catch {
         // Reconnect
         const config: SSHConnectionConfig = {
@@ -237,18 +286,17 @@ async function updateAllServerMetrics() {
         if (conn.encryptedPassword) config.password = decrypt(conn.encryptedPassword);
         
         await sshAgent.connect(config);
-        metrics = await sshAgent.getSystemMetrics(key);
+        metrics = await sshAgent.getSystemMetrics(key, osType);
       }
       
-      const os = metrics.os.toLowerCase().includes("ubuntu") || metrics.os.toLowerCase().includes("debian") || metrics.os.toLowerCase().includes("centos") || metrics.os.toLowerCase().includes("red hat") || metrics.os.toLowerCase().includes("linux") ? "linux" :
-                 metrics.os.toLowerCase().includes("windows") ? "windows" : "unix";
+      const detectedOs = metrics.os.toLowerCase().includes("windows") ? "windows" : "linux";
 
       db.prepare(`UPDATE servers SET 
         cpu = ?, memory = ?, disk = ?, uptime = ?, os = ?, kernel = ?, 
         load_avg = ?, lastCheck = ?, status = ? WHERE id = ?`)
         .run(
           metrics.cpu, metrics.memory, metrics.disk, metrics.uptime,
-          os, metrics.kernel, JSON.stringify(metrics.loadAvg),
+          detectedOs, metrics.kernel, JSON.stringify(metrics.loadAvg),
           new Date().toISOString(),
           metrics.cpu > 90 || metrics.memory > 90 ? "degraded" : "online",
           conn.serverId
@@ -281,6 +329,12 @@ if (serverCount.count === 0) {
 }
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+
+function logAudit(type: string, event: string, detail: string, metadata: any = {}) {
+  const id = `audit-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  db.prepare("INSERT INTO audit_logs (id, type, event, detail, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(id, type, event, detail, JSON.stringify(metadata), new Date().toISOString());
+}
 
 async function startServer() {
   const app = express();
@@ -375,10 +429,7 @@ async function startServer() {
         );
 
       // Log audit
-      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-        .run(`audit-${Date.now()}`, "SYSTEM", "SSH_CONNECTED", 
-          `SSH connection established to ${username}@${host}:${port} (${metrics.hostname})`, 
-          new Date().toISOString());
+      logAudit("SYSTEM", "SSH_CONNECTED", `SSH connection established to ${username}@${host}:${port} (${metrics.hostname})`, { compliance_tags: ['GDPR', 'PCI-DSS'] });
 
       res.json({ 
         success: true, 
@@ -486,9 +537,7 @@ async function startServer() {
              result.stderr.substring(0, 1000), result.code, "admin", new Date().toISOString());
 
       // Audit log
-      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-        .run(`audit-${Date.now()}`, "USER", "CMD_EXECUTED", 
-          `Command executed on ${conn.host}: ${command.substring(0, 100)}`, new Date().toISOString());
+      logAudit("USER", "CMD_EXECUTED", `Command executed on ${conn.host}: ${command.substring(0, 100)}`, { command: command.substring(0, 500) });
 
       res.json({ success: true, ...result });
     } catch (error: any) {
@@ -528,9 +577,7 @@ async function startServer() {
       const result = await sshAgent.execScript(key, script);
 
       // Audit log
-      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-        .run(`audit-${Date.now()}`, "USER", "SCRIPT_EXECUTED",
-          `Remediation script executed on ${conn.host} (exit: ${result.code})`, new Date().toISOString());
+      logAudit("USER", "SCRIPT_EXECUTED", `Remediation script executed on ${conn.host} (exit: ${result.code})`);
 
       res.json({ success: true, ...result });
     } catch (error: any) {
@@ -577,16 +624,195 @@ async function startServer() {
   });
 
   app.get("/api/incidents", (req, res) => {
-    const incidents = db.prepare("SELECT * FROM incidents ORDER BY timestamp DESC").all();
+    const incidents = db.prepare("SELECT incidents.*, servers.name as serverName FROM incidents JOIN servers ON incidents.serverId = servers.id ORDER BY created_at DESC").all();
     res.json(incidents);
   });
 
-  app.get("/api/contextp", (req, res) => {
-    const entries = db.prepare("SELECT * FROM contextp_entries").all();
-    res.json(entries);
+  app.post("/api/incidents/:id/resolve", (req, res) => {
+    const { id } = req.params;
+    db.prepare("UPDATE incidents SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+    res.json({ success: true });
   });
 
-  app.get("/api/notifications", (req, res) => {
+  // ── Cloud Credentials ───────────────────────────────────────────────
+  app.get("/api/credentials", (req, res) => {
+    const creds = db.prepare("SELECT * FROM cloud_credentials ORDER BY created_at DESC").all();
+    res.json(creds);
+  });
+
+  app.post("/api/credentials/import", async (req, res) => {
+    const { name, provider, type, content, metadata } = req.body;
+    if (!name || !provider || !content) return res.status(400).json({ error: "Missing fields" });
+
+    const id = crypto.randomUUID();
+    const vaultPath = path.join(VAULT_BASE, provider, `${id}.age`);
+    
+    // Encryption logic (Simulating 'age' with AES-256-GCM for now)
+    const key = crypto.scryptSync(process.env.SATURN_MASTER_KEY || 'saturn-default-secret', 'salt', 32);
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update(content, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    
+    // Store as binary: [IV(12)][TAG(16)][DATA(...)]
+    const finalData = Buffer.concat([iv, tag, encrypted]);
+    fs.writeFileSync(vaultPath, finalData);
+
+    db.prepare(`
+      INSERT INTO cloud_credentials (id, name, provider, type, encrypted_path, metadata)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, name, provider, type, vaultPath, JSON.stringify(metadata || {}));
+
+    logAudit('SYSTEM', null, 'CREDENTIAL_IMPORT', `Imported ${provider} credential: ${name}`);
+    res.json({ success: true, id });
+  });
+
+  app.delete("/api/credentials/:id", (req, res) => {
+    const { id } = req.params;
+    const cred = db.prepare("SELECT * FROM cloud_credentials WHERE id = ?").get(id) as any;
+    if (cred) {
+      if (fs.existsSync(cred.encrypted_path)) fs.unlinkSync(cred.encrypted_path);
+      db.prepare("DELETE FROM cloud_credentials WHERE id = ?").run(id);
+      logAudit('SYSTEM', null, 'CREDENTIAL_REVOKE', `Revoked credential: ${cred.name}`);
+    }
+    res.json({ success: true });
+  });
+
+  app.post("/api/cloud/scan", async (req, res) => {
+    const { credId } = req.body;
+    const cred = db.prepare("SELECT * FROM cloud_credentials WHERE id = ?").get(credId) as any;
+    if (!cred) return res.status(404).json({ error: "Credential not found" });
+
+    // Mocking Cloud Scan (In a real implementation, this would use AWS/GCP/Azure SDK)
+    logAudit('SYSTEM', null, 'CLOUD_SCAN', `Scanning ${cred.provider} account using ${cred.name}`);
+    
+    // Simulate discovery
+    const mockServers = [
+      { id: crypto.randomUUID(), name: `ec2-${cred.provider}-01`, ip: '10.0.1.15', os: 'linux', provider: cred.provider },
+      { id: crypto.randomUUID(), name: `ec2-${cred.provider}-02`, ip: '10.0.1.20', os: 'windows', provider: cred.provider }
+    ];
+
+    mockServers.forEach(s => {
+      db.prepare(`
+        INSERT OR IGNORE INTO servers (id, name, ip, os, status, cloud_provider)
+        VALUES (?, ?, ?, ?, 'pending', ?)
+      `).run(s.id, s.name, s.ip, s.os, s.provider);
+    });
+
+    res.json({ success: true, discovered: mockServers.length });
+  });
+
+  // ── Skills System ───────────────────────────────────────────────────
+  app.get("/api/skills", (req, res) => {
+    const skills = db.prepare("SELECT * FROM skills WHERE enabled = 1").all();
+    res.json(skills);
+  });
+
+  // Seed default skills if empty
+  const existingSkills = db.prepare("SELECT COUNT(*) as c FROM skills").get() as any;
+  if (existingSkills.c === 0) {
+    db.prepare(`INSERT INTO skills (id, name, language, version, description, path) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('ps_remediation_v1', 'PowerShell Remediation Expert', 'powershell', '1.0', 'Expert in Windows Server remediation', 'SKILLS/powershell_remediation_v1/skill.yaml');
+    db.prepare(`INSERT INTO skills (id, name, language, version, description, path) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('bash_remediation_v1', 'Bash Linux Remediation', 'bash', '1.0', 'Expert in Linux system recovery', 'SKILLS/bash_remediation_v1/skill.yaml');
+  }
+
+  // ── Remediation Modes ───────────────────────────────────────────────
+  app.get("/api/remediation/config", (req, res) => {
+    const configs = db.prepare("SELECT * FROM remediation_configs").all();
+    res.json(configs);
+  });
+
+  app.post("/api/remediation/config", (req, res) => {
+    const { serverId, mode, skillId, threshold } = req.body;
+    db.prepare(`
+      INSERT OR REPLACE INTO remediation_configs (serverId, mode, skillId, confidence_threshold, updated_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(serverId || 'global', mode, skillId || null, threshold || 0.7);
+    res.json({ success: true });
+  });
+
+  // Seed global config
+  const globalCheck = db.prepare("SELECT COUNT(*) as c FROM remediation_configs WHERE serverId = 'global'").get() as any;
+  if (globalCheck.c === 0) {
+    db.prepare("INSERT INTO remediation_configs (serverId, mode, confidence_threshold) VALUES ('global', 'auto', 0.7)").run();
+  }
+
+  app.post("/api/skills/generate", async (req, res) => {
+    const { skillId, prompt, serverId, forceManual = false } = req.body;
+    
+    // Resolve Mode and Skill
+    const globalConfig = db.prepare("SELECT * FROM remediation_configs WHERE serverId = 'global'").get() as any;
+    const serverConfig = db.prepare("SELECT * FROM remediation_configs WHERE serverId = ?").get(serverId) as any;
+    const activeConfig = serverConfig || globalConfig;
+    
+    let targetSkillId = skillId;
+    if (!targetSkillId) {
+      targetSkillId = activeConfig.mode === 'skill' ? activeConfig.skillId : 'ps_remediation_v1'; // Default if auto
+    }
+
+    const skill = db.prepare("SELECT * FROM skills WHERE id = ?").get(targetSkillId) as any;
+    if (!skill) return res.status(404).json({ error: "Skill not found" });
+
+    const server = db.prepare("SELECT * FROM servers WHERE id = ?").get(serverId) as any;
+    const skillDef = fs.readFileSync(skill.path, 'utf8');
+    
+    const enhancedPrompt = `
+      INSTRUCCIÓN: ${prompt}
+      SKILL: ${skillDef}
+      SERVER: ${JSON.stringify(server)}
+      
+      REGLAS AUTÓNOMAS:
+      1. Genera el script completo.
+      2. Calcula un nivel de confianza (0.0 a 1.0) basado en la precisión del remedio.
+      3. Identifica si el script contiene comandos peligrosos (peligro: true/false).
+      4. Formato de respuesta JSON: { "script": "...", "confidence": 0.95, "dangerous": false, "explanation": "..." }
+    `;
+
+    try {
+      let result: any = {};
+      let attempts = 0;
+      const maxAttempts = 3;
+      let currentPrompt = enhancedPrompt;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        const response = await getLLMResponse('gemini', currentPrompt);
+        result = JSON.parse(response.replace(/```json/g, '').replace(/```/g, ''));
+        
+        // Validation
+        const validation = ScriptValidator.validate(result.script, skill.language);
+        if (validation.success) {
+          result.validation = { status: 'passed', errors: [] };
+          break;
+        } else {
+          result.validation = { status: 'failed', errors: validation.errors };
+          if (attempts < maxAttempts) {
+            currentPrompt = `
+              EL SCRIPT ANTERIOR TIENE ERRORES DE VALIDACIÓN. POR FAVOR CORRÍGELO.
+              ERRORES:
+              ${validation.errors.join('\n')}
+              
+              SCRIPT ORIGINAL:
+              ${result.script}
+              
+              RESPONDE SOLO CON EL JSON CORREGIDO.
+            `;
+          }
+        }
+      }
+      
+      // Autonomous Execution Logic
+      let status = "pending_approval";
+      const threshold = activeConfig.confidence_threshold || 0.7;
+      if (!forceManual && activeConfig.mode !== 'manual' && result.confidence >= threshold && !result.dangerous && result.validation.status === 'passed') {
+        status = "executing_autonomously";
+        logAudit("SYSTEM", "AUTO_REMEDIATION", `Executing autonomous fix for ${serverId} using ${skill.name}`, { confidence: result.confidence, validation: result.validation });
+      }
+
+      res.json({ success: true, ...result, status, skill: skill.name });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
     const configs = db.prepare("SELECT * FROM notification_configs").all();
     res.json(configs);
   });
@@ -601,7 +827,10 @@ async function startServer() {
 
   app.get("/api/audit", (req, res) => {
     const logs = db.prepare("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 100").all();
-    res.json(logs);
+    res.json(logs.map((l: any) => ({
+      ...l,
+      metadata: l.metadata ? JSON.parse(l.metadata) : {}
+    })));
   });
 
   app.get("/api/obpa/pending", (req, res) => {
@@ -787,6 +1016,301 @@ Real-time SSH Metrics (${sshConn.host}):
     db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
       .run(`audit-${Date.now()}`, "USER", "ADMIN_CREATED", `Admin user ${username} created`, createdAt);
     res.json({ success: true, id, message: "Admin user created successfully" });
+  });
+
+  // ── Server Logs ────────────────────────────────────────────────────────────
+  app.get("/api/servers/:id/logs", async (req, res) => {
+    const { id } = req.params;
+    const { lines, service } = req.query;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const scriptReq: ScriptRequest = {
+        category: "logs",
+        action: "get",
+        os: osType,
+        params: { lines: lines || 50, service }
+      };
+
+      const { script } = ScriptGenerator.generate(scriptReq);
+      const result = await sshAgent.execCommand(key, script);
+      
+      res.json({ logs: result.stdout });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ── System Actions (Phase 2) ───────────────────────────────────────────────
+  app.post("/api/servers/:id/action", async (req, res) => {
+    const { id } = req.params;
+    const { category, action, params, dryRun } = req.body;
+    
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const scriptReq: ScriptRequest = { category, action, os: osType, params, dryRun };
+
+      const { script, description, rollbackScript } = ScriptGenerator.generate(scriptReq);
+      
+      if (dryRun) {
+        return res.json({ success: true, dryRun: true, script, description });
+      }
+
+      const result = await sshAgent.execCommand(key, script);
+      
+      // Audit the action
+      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+        .run(`audit-${Date.now()}`, "SYSTEM", `ACTION_${category.toUpperCase()}_${action.toUpperCase()}`, 
+             `Executed ${description} on ${id}`, new Date().toISOString());
+
+      res.json({ success: result.code === 0, result, rollbackScript });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ── Resource Lists (Phase 2) ──────────────────────────────────────────────
+  app.get("/api/servers/:id/users", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "users", action: "list", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/tasks", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "tasks", action: "list", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/processes", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "processes", action: "list", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/network", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "network", action: "list", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/firewall", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "firewall", action: "list", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/packages", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "packages", action: "list", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/webserver", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "webserver", action: "list", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/health", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "smart", action: "info", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/backups", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "backups", action: "list", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/ssl", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "ssl", action: "list", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get("/api/servers/:id/audit", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      const { script } = ScriptGenerator.generate({ category: "security", action: "audit", os: osType, params: {} });
+      const result = await sshAgent.execCommand(key, script);
+      res.json({ output: result.stdout });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+  app.post("/api/neural/generate-script", async (req, res) => {
+    const { prompt, os, context } = req.body;
+    if (!prompt || !os) return res.status(400).json({ error: "Prompt and OS required" });
+
+    try {
+      const systemPrompt = `You are Saturn, a neural infrastructure manager. 
+Generate a high-quality ${os} administration script for the following request: "${prompt}".
+Include:
+1. The script (${os === 'windows' ? 'PowerShell' : 'Bash'})
+2. Description of what it does
+3. Risks involved
+4. Rollback script if possible
+
+Return ONLY a JSON object with the following structure:
+{
+  "script": "string",
+  "description": "string",
+  "risks": ["string"],
+  "rollbackScript": "string",
+  "estimatedTime": "string"
+}`;
+
+      const aiResponse = await generateAIResponse(
+        process.env.AI_PROVIDER || "gemini",
+        `${systemPrompt}\n\nContext: ${JSON.stringify(context || {})}`
+      );
+
+      // Extract JSON from potential markdown blocks
+      const jsonStr = aiResponse.match(/\{[\s\S]*\}/)?.[0] || aiResponse;
+      const result = JSON.parse(jsonStr);
+      
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ── Admin Login ────────────────────────────────────────────────────────────
+  app.post("/api/admin/login", (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: "Username and password required" });
+    }
+    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+    const [salt, hash] = user.password_hash.split(":");
+    const loginHash = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
+    
+    if (hash === loginHash) {
+      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+        .run(`audit-${Date.now()}`, "USER", "LOGIN_SUCCESS", `User ${username} logged in`, new Date().toISOString());
+      res.json({ success: true, user: { id: user.id, username: user.username, role: user.role } });
+    } else {
+      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+        .run(`audit-${Date.now()}`, "USER", "LOGIN_FAILURE", `Failed login attempt for ${username}`, new Date().toISOString());
+      res.status(401).json({ error: "Invalid credentials" });
+    }
+  });
+
+  // ── User Management ────────────────────────────────────────────────────────
+  app.get("/api/admin/users", (req, res) => {
+    const users = db.prepare("SELECT id, username, role, created_at FROM users").all();
+    res.json(users);
+  });
+
+  app.delete("/api/admin/users/:id", (req, res) => {
+    const { id } = req.params;
+    const userCount = db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number };
+    if (userCount.c <= 1) {
+      return res.status(400).json({ error: "Cannot delete the last admin user" });
+    }
+    db.prepare("DELETE FROM users WHERE id = ?").run(id);
+    db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+      .run(`audit-${Date.now()}`, "USER", "USER_DELETED", `User ${id} deleted`, new Date().toISOString());
+    res.json({ success: true });
   });
 
   // ── Reset Users (delete all users so onboarding re-creates them) ───────────

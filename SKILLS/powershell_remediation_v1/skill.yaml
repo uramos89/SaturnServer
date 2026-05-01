@@ -1,0 +1,26 @@
+id: ps_remediation_v1
+name: "PowerShell Remediation Expert"
+language: powershell
+version: "1.0"
+description: "Genera scripts idempotentes, seguros y auditables para Windows Server"
+constraints:
+  - "Todo script debe incluir parámetros -ComputerName (string), -Credential (PSCredential) y -WhatIf (switch)"
+  - "Usar `Write-Output` para logging estructurado (JSON)"
+  - "Manejar excepciones con `try/catch` y registrar en `$env:ProgramData\\Saturno\\logs\\`"
+  - "Nunca usar `Stop-Computer -Force` sin confirmación explícita en modo no-WhatIf"
+templates:
+  - path: "template.ps1"
+    placeholders:
+      - name: "action"
+        description: "Acción principal (Restart-Service, Set-ItemProperty, etc.)"
+      - name: "target"
+        description: "Nombre del servicio, ruta de registro, etc."
+      - name: "condition"
+        description: "Condición que detona la acción (ej. `(Get-Service Foo).Status -eq 'Stopped'`)"
+validation:
+  linter: "PSScriptAnalyzer"
+  ruleset: "ps_remediation_rules.json"
+contextp_integration:
+  tech_paths: ["TECH/windows/powershell/"]
+  func_paths: ["FUNC/windows/remediation/"]
+  template_paths: ["STRUCT/powershell/"]
