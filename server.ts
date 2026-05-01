@@ -137,6 +137,14 @@ db.exec(`
     enabled INTEGER DEFAULT 0,
     created_at TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT DEFAULT 'admin',
+    created_at TEXT
+  );
 `);
 
 // Add column migration for new columns (safe if they already exist)
@@ -282,7 +290,7 @@ async function startServer() {
     res.json({ 
       status: "ok", 
       timestamp: new Date().toISOString(), 
-      version: "4.0.0",
+      version: "0.1.0",
       engine: "ARES 1.0.0",
       ssh: { connected: sshCount.c, total: db.prepare("SELECT COUNT(*) as c FROM ssh_connections").get() as any },
       servers: serverCount.c
@@ -743,26 +751,43 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
-  // ── AI Providers & Models ──────────────────────────────────────────────
+  // ── AI Providers & Models (comprehensive list) ─────────────────────────
   const AI_PROVIDERS = [
-    { id: "openai", name: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1", "o1-mini", "o3-mini"] },
-    { id: "anthropic", name: "Anthropic", models: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-3.5-sonnet", "claude-3.5-haiku"] },
-    { id: "google", name: "Google AI", models: ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"] },
-    { id: "meta", name: "Meta (Llama)", models: ["llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3-70b", "llama-3-8b"] },
-    { id: "mistral", name: "Mistral AI", models: ["mistral-large", "mistral-medium", "mistral-small", "mixtral-8x7b", "codestral"] },
-    { id: "cohere", name: "Cohere", models: ["command-r-plus", "command-r", "command-light", "embed-english-v3", "embed-multilingual-v3"] },
-    { id: "deepseek", name: "DeepSeek", models: ["deepseek-chat", "deepseek-coder", "deepseek-v2", "deepseek-r1"] },
-    { id: "xai", name: "xAI (Grok)", models: ["grok-1", "grok-1.5", "grok-2"] },
-    { id: "perplexity", name: "Perplexity", models: ["sonar-pro", "sonar-small", "mixtral-8x7b-instruct"] },
-    { id: "together", name: "Together AI", models: ["mixtral-8x22b", "llama-3-70b", "deepseek-coder-33b", "qwen-72b"] },
-    { id: "fireworks", name: "Fireworks AI", models: ["llama-v3-70b", "mixtral-8x7b", "deepseek-coder-33b", "qwen-72b-chat"] },
-    { id: "groq", name: "Groq", models: ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it"] },
-    { id: "replicate", name: "Replicate", models: ["llama-3-70b", "mixtral-8x7b", "stable-diffusion", "whisper"] },
-    { id: "huggingface", name: "Hugging Face", models: ["mistral-7b", "llama-3-8b", "falcon-7b", "zephyr-7b", "codellama-34b"] },
-    { id: "ollama", name: "Ollama (Local)", models: ["llama3", "llama3.1", "mistral", "mixtral", "codellama", "deepseek-coder", "phi-3", "gemma-2", "qwen2", "yi-34b"] },
-    { id: "vllm", name: "vLLM (Self-Hosted)", models: ["llama-3-70b", "mixtral-8x22b", "qwen-72b", "custom-endpoint"] },
-    { id: "localai", name: "LocalAI", models: ["llama-3", "mistral", "phi-3", "falcon", "bert-embeddings"] },
-    { id: "custom", name: "Custom Endpoint", models: ["custom-model"] }
+    { id: "openai", name: "OpenAI", models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1", "o1-mini", "o3-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"] },
+    { id: "anthropic", name: "Anthropic", models: ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-3.5-sonnet", "claude-3.5-haiku", "claude-4-opus", "claude-4-sonnet"] },
+    { id: "google", name: "Google AI (Gemini)", models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash", "gemma-3-27b", "gemma-3-12b"] },
+    { id: "meta", name: "Meta (Llama)", models: ["llama-4-405b", "llama-4-90b", "llama-3.1-405b", "llama-3.1-70b", "llama-3.1-8b", "llama-3-70b", "llama-3-8b", "llama-guard-3"] },
+    { id: "mistral", name: "Mistral AI", models: ["mistral-large-2", "mistral-medium", "mistral-small", "mixtral-8x22b", "mixtral-8x7b", "codestral", "ministral-8b", "ministral-3b"] },
+    { id: "deepseek", name: "DeepSeek", models: ["deepseek-v3", "deepseek-r1", "deepseek-coder-v2", "deepseek-chat", "deepseek-coder", "deepseek-v2"] },
+    { id: "moonshot", name: "Moonshot AI", models: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"] },
+    { id: "cohere", name: "Cohere", models: ["command-r-plus", "command-r", "command-light", "command-a", "embed-english-v3", "embed-multilingual-v3", "rerank-v3"] },
+    { id: "xai", name: "xAI (Grok)", models: ["grok-2", "grok-2-mini", "grok-1.5", "grok-1"] },
+    { id: "perplexity", name: "Perplexity", models: ["sonar-pro", "sonar-small", "mixtral-8x7b-instruct", "llama-3-sonar-large"] },
+    { id: "together", name: "Together AI", models: ["mixtral-8x22b", "llama-3-70b", "deepseek-coder-33b", "qwen-72b", "qwen-110b"] },
+    { id: "fireworks", name: "Fireworks AI", models: ["llama-v3-70b", "mixtral-8x7b", "deepseek-coder-33b", "qwen-72b-chat", "yi-34b"] },
+    { id: "groq", name: "Groq", models: ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it", "llama-guard-3-8b"] },
+    { id: "replicate", name: "Replicate", models: ["llama-3-70b", "mixtral-8x7b", "stable-diffusion-3", "whisper", "flux-pro", "musicgen"] },
+    { id: "huggingface", name: "Hugging Face", models: ["mistral-7b", "llama-3-8b", "falcon-7b", "zephyr-7b", "codellama-34b", "phi-3", "qwen2-72b"] },
+    { id: "alibaba", name: "Alibaba (Qwen)", models: ["qwen-110b", "qwen-72b", "qwen-32b", "qwen-14b", "qwen-7b", "qwen2.5-72b", "qwen2.5-32b"] },
+    { id: "baidu", name: "Baidu (ERNIE)", models: ["ernie-4.0", "ernie-3.5", "ernie-bot-turbo", "ernie-lite"] },
+    { id: "tencent", name: "Tencent (Hunyuan)", models: ["hunyuan-large", "hunyuan-standard", "hunyuan-lite"] },
+    { id: "zhipu", name: "Zhipu AI (GLM)", models: ["glm-4", "glm-4v", "glm-3-turbo", "glm-4-plus"] },
+    { id: "minimax", name: "MiniMax", models: ["minimax-abab-6.5", "minimax-abab-5.5", "minimax-abab-5"] },
+    { id: "stepfun", name: "StepFun (Step)", models: ["step-2", "step-1v", "step-1"] },
+    { id: "01ai", name: "01.AI (Yi)", models: ["yi-large", "yi-medium", "yi-vision", "yi-34b", "yi-9b"] },
+    { id: "nvidia", name: "NVIDIA NIM", models: ["llama-3-70b-nim", "mixtral-8x22b-nim", "nemotron-4-340b"] },
+    { id: "ibm", name: "IBM Watsonx", models: ["granite-13b", "granite-8b", "granite-3b", "llama-3-70b-watsonx"] },
+    { id: "aws", name: "AWS Bedrock", models: ["claude-3-sonnet-bedrock", "claude-3-haiku-bedrock", "llama-3-70b-bedrock", "mistral-large-bedrock"] },
+    { id: "azure", name: "Azure OpenAI", models: ["gpt-4o-azure", "gpt-4-turbo-azure", "gpt-35-turbo-azure", "o1-azure"] },
+    { id: "gcp", name: "GCP Vertex AI", models: ["gemini-2.0-pro-vertex", "gemini-2.0-flash-vertex", "claude-3-sonnet-vertex", "llama-3-70b-vertex"] },
+    { id: "ollama", name: "Ollama (Local)", models: ["llama3", "llama3.1", "llama3.2", "mistral", "mixtral", "codellama", "deepseek-coder", "phi-3", "phi-4", "gemma-2", "gemma-3", "qwen2", "qwen2.5", "yi-34b", "falcon2", "starcoder2"] },
+    { id: "vllm", name: "vLLM (Self-Hosted)", models: ["llama-3-70b", "mixtral-8x22b", "qwen-72b", "qwen-110b", "custom-endpoint"] },
+    { id: "localai", name: "LocalAI", models: ["llama-3", "mistral", "phi-3", "phi-4", "falcon", "bert-embeddings", "whisper", "stable-diffusion"] },
+    { id: "lmstudio", name: "LM Studio", models: ["lm-studio-default", "custom-local-model"] },
+    { id: "textgen", name: "Oobabooga TextGen", models: ["textgen-default", "custom-textgen-model"] },
+    { id: "kobold", name: "KoboldCPP", models: ["kobold-default", "custom-kobold-model"] },
+    { id: "tabbyapi", name: "TabbyAPI", models: ["tabby-default", "custom-tabby-model"] },
+    { id: "custom", name: "Custom Endpoint (OpenAI-compatible)", models: ["custom-model"] }
   ];
 
   // GET /api/ai/providers - List all available AI providers and models
@@ -854,7 +879,7 @@ Real-time SSH Metrics (${sshConn.host}):
 
   const PORT = parseInt(process.env.PORT || "80");
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Saturn Core v4.0.0 running on http://0.0.0.0:${PORT}`);
+    console.log(`Saturn Core v0.1.0 running on http://0.0.0.0:${PORT}`);
     console.log(`Neural Engine: ARES 1.0.0`);
     console.log(`SSH Agent ready. Connect to servers via POST /api/ssh/connect`);
   });

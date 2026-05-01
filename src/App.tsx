@@ -160,7 +160,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
           transition={{ delay: 0.2 }}
           className="text-4xl font-black text-white tracking-[0.15em] mb-4"
         >
-          SATURN <span className="text-orange-500 font-light">v4.0</span>
+          SATURN <span className="text-orange-500 font-light">v0.1.0</span>
         </motion.h1>
         <motion.p 
           initial={{ opacity: 0 }}

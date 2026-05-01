@@ -138,7 +138,7 @@ const translations: Record<Language, Record<string, string>> = {
     'provider.none': 'None (Monitor Only)',
     
     // Onboarding
-    'onboarding.subtitle': 'Configure your AI provider to activate the Ares Neural Engine. Select from 18+ providers and 100+ models.',
+    'onboarding.subtitle': 'Configure your AI provider to activate the Ares Neural Engine. Select from 35+ providers and 200+ models.',
     'onboarding.select': 'Select AI Provider',
     'onboarding.select.desc': 'Choose your preferred AI provider from the list below. You can change this later in Settings.',
     'onboarding.configured': 'Configured',
@@ -153,9 +153,40 @@ const translations: Record<Language, Record<string, string>> = {
     'onboarding.start': 'Initialize Saturn',
     'onboarding.ready': 'Saturn is Ready',
     'onboarding.ready.desc': 'Neural engine initialized. Redirecting to dashboard...',
+    
+    // Admin User
+    'admin.create': 'Create Admin Account',
+    'admin.create.desc': 'Set up your administrator credentials to secure the platform.',
+    'admin.username': 'Username',
+    'admin.password': 'Password',
+    'admin.confirm': 'Confirm Password',
+    'admin.create.btn': 'Create Account',
+    'admin.error.match': 'Passwords do not match',
+    'admin.error.short': 'Password must be at least 8 characters',
+    'admin.success': 'Admin account created successfully',
+    
+    // SMTP Configuration
+    'smtp.title': 'SMTP Email Configuration',
+    'smtp.desc': 'Configure SMTP settings for email alerts and notifications.',
+    'smtp.host': 'SMTP Host',
+    'smtp.port': 'SMTP Port',
+    'smtp.user': 'SMTP Username',
+    'smtp.pass': 'SMTP Password',
+    'smtp.from': 'From Email',
+    'smtp.to': 'Alert Recipient Email',
+    'smtp.secure': 'Use TLS/SSL',
+    'smtp.test': 'Test Connection',
+    'smtp.save': 'Save SMTP Config',
+    'smtp.saved': 'SMTP configuration saved',
+    'smtp.test.success': 'Test email sent successfully',
+    'smtp.test.fail': 'Failed to send test email',
+    
+    // Settings model display
+    'settings.ai.model': 'Selected Model',
+    'settings.ai.model.none': 'No model selected',
+    'settings.ai.provider.name': 'Provider Name',
   },
 
-  
   es: {
     'app.name': 'SATURN',
     'app.tagline': 'Plataforma Autónoma de Infraestructura',
@@ -292,7 +323,7 @@ const translations: Record<Language, Record<string, string>> = {
     'provider.none': 'Ninguno (Solo Monitoreo)',
     
     // Onboarding
-    'onboarding.subtitle': 'Configura tu proveedor de IA para activar el Motor Neural Ares. Selecciona entre 18+ proveedores y 100+ modelos.',
+    'onboarding.subtitle': 'Configura tu proveedor de IA para activar el Motor Neural Ares. Selecciona entre 35+ proveedores y 200+ modelos.',
     'onboarding.select': 'Selecciona Proveedor IA',
     'onboarding.select.desc': 'Elige tu proveedor de IA preferido de la lista. Puedes cambiarlo después en Configuración.',
     'onboarding.configured': 'Configurado',
@@ -307,6 +338,38 @@ const translations: Record<Language, Record<string, string>> = {
     'onboarding.start': 'Inicializar Saturn',
     'onboarding.ready': 'Saturn está Listo',
     'onboarding.ready.desc': 'Motor neural inicializado. Redirigiendo al dashboard...',
+    
+    // Admin User
+    'admin.create': 'Crear Cuenta Admin',
+    'admin.create.desc': 'Configura tus credenciales de administrador para asegurar la plataforma.',
+    'admin.username': 'Usuario',
+    'admin.password': 'Contraseña',
+    'admin.confirm': 'Confirmar Contraseña',
+    'admin.create.btn': 'Crear Cuenta',
+    'admin.error.match': 'Las contraseñas no coinciden',
+    'admin.error.short': 'La contraseña debe tener al menos 8 caracteres',
+    'admin.success': 'Cuenta de administrador creada exitosamente',
+    
+    // SMTP Configuration
+    'smtp.title': 'Configuración SMTP de Correo',
+    'smtp.desc': 'Configura los ajustes SMTP para alertas y notificaciones por correo.',
+    'smtp.host': 'Servidor SMTP',
+    'smtp.port': 'Puerto SMTP',
+    'smtp.user': 'Usuario SMTP',
+    'smtp.pass': 'Contraseña SMTP',
+    'smtp.from': 'Correo Remitente',
+    'smtp.to': 'Correo Destinatario de Alertas',
+    'smtp.secure': 'Usar TLS/SSL',
+    'smtp.test': 'Probar Conexión',
+    'smtp.save': 'Guardar Config SMTP',
+    'smtp.saved': 'Configuración SMTP guardada',
+    'smtp.test.success': 'Correo de prueba enviado exitosamente',
+    'smtp.test.fail': 'Error al enviar correo de prueba',
+    
+    // Settings model display
+    'settings.ai.model': 'Modelo Seleccionado',
+    'settings.ai.model.none': 'Ningún modelo seleccionado',
+    'settings.ai.provider.name': 'Nombre del Proveedor',
   }
 };
 
