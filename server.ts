@@ -1796,7 +1796,15 @@ Real-time SSH Metrics (${sshConn.host}):
     });
   }
 
-  const PORT = parseInt(process.env.PORT || (process.env.NODE_ENV === "production" ? "80" : "3000"));
+  const PORT = process.env.PORT;
+  if (!PORT) {
+    console.error("\n" + "=".repeat(50));
+    console.error("FATAL: La variable PORT no está definida en el entorno.");
+    console.error("Asegúrate de que el archivo .env contiene PORT=3000");
+    console.error("=".repeat(50) + "\n");
+    process.exit(1);
+  }
+
   const httpServer = createServer(app);
   initSocket(httpServer);
 

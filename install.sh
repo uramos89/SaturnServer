@@ -99,19 +99,29 @@ echo -e "│"
 # 4. Environment & Start
 echo -e "├─ ${BOLD}[4/4] Finalizing configuration...${NC}"
 if [ ! -f ".env" ]; then
-  echo -e "│  Generating .env file..."
+  echo -e "│  Generating new .env file..."
   cat > .env <<EOF
 PORT=3000
 NODE_ENV=production
 EOF
-  
-  PEPPER=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-  echo "SSH_ENCRYPTION_PEPPER=$PEPPER" >> .env
-  JWT=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-  echo "JWT_SECRET=$JWT" >> .env
-  KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-  echo "SATURN_MASTER_KEY=$KEY" >> .env
+else
+  echo -e "│  Validating existing .env file..."
+  # Ensure PORT is set to 3000 to avoid permission issues with port 80
+  if ! grep -q "^PORT=" .env; then
+    echo "PORT=3000" >> .env
+    echo -e "│  ${YELLOW}Added PORT=3000 to .env${NC}"
+  fi
 fi
+
+# Ensure mandatory keys exist
+for key in "SSH_ENCRYPTION_PEPPER" "JWT_SECRET" "SATURN_MASTER_KEY"; do
+  if ! grep -q "^$key=" .env; then
+    VAL=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+    echo "$key=$VAL" >> .env
+    echo -e "│  ${YELLOW}Generated $key${NC}"
+  fi
+done
+
 
 echo -e "│  Restarting PM2 process..."
 pm2 stop saturn 2>/dev/null || true
