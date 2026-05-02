@@ -1,6 +1,6 @@
 # Saturn Autonomous Administrative System (v0.6.0)
 
-Saturn is an advanced, AI-driven server administration platform designed for heterogeneous environments (Linux & Windows) across on-premise and multi-cloud infrastructures. Inspired by Webmin but rebuilt for the age of autonomous agents, Saturn leverages the **ARES Neural Engine** to generate and execute administrative scripts via SSH and WinRM.
+Saturn is an advanced, AI-driven server administration platform designed for heterogeneous environments (Linux & Windows) across on-premise and multi-cloud infrastructures. Saturn leverages the **ARES Neural Engine** to generate and execute administrative scripts via SSH and WinRM.
 
 ## 🚀 Key Features
 
