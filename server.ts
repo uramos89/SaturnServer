@@ -476,6 +476,9 @@ async function startServer() {
   const app = express();
   
   // ── SATURN-X Security Headers ─────────────────────────────────────────────
+  // TEMPORARILY DISABLED: Helmet headers are blocking Vite module script execution
+  // and CSS loading on the client side in production. Need to isolate the issue.
+  /*
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -489,6 +492,7 @@ async function startServer() {
       },
     },
   }));
+  */
   
   // ── SATURN-X Rate Limiting ────────────────────────────────────────────────
   const globalLimiter = rateLimit({
