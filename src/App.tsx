@@ -1808,7 +1808,6 @@ export default function App() {
       { id: 'processes', label: 'Processes', icon: Cpu }, 
       { id: 'network', label: 'Network', icon: Globe }, 
       { id: 'firewall', label: 'Firewall', icon: ShieldCheck }, 
-      { id: 'backups', label: 'Backups', icon: Database }, 
       { id: 'tasks', label: 'Tasks', icon: Logs }, 
       { id: 'users', label: 'Users', icon: Users },
       { id: 'packages', label: 'Packages', icon: Package },

@@ -1367,6 +1367,7 @@ Real-time SSH Metrics (${sshConn.host}):
       const key = `${conn.username}@${conn.host}:${conn.port}`;
       const { script } = ScriptGenerator.generate({ category: "processes", action: "list", os: osType, params: {} });
       const result = await sshAgent.execCommand(key, script);
+      console.log(`[DEBUG] Processes output for ${id}:`, result.stdout);
       try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
@@ -1381,6 +1382,7 @@ Real-time SSH Metrics (${sshConn.host}):
       const key = `${conn.username}@${conn.host}:${conn.port}`;
       const { script } = ScriptGenerator.generate({ category: "network", action: "list", os: osType, params: {} });
       const result = await sshAgent.execCommand(key, script);
+      console.log(`[DEBUG] Network output for ${id}:`, result.stdout);
       try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });

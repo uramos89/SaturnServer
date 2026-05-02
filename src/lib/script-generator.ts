@@ -294,21 +294,17 @@ echo "Task ${taskId} removed from crontab"
     return this.buildResponse(script, `Delete task ${taskId}`, ["Removes from crontab"], "30s");
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // S03 - Processes
-  // ═══════════════════════════════════════════════════════════════════════
-
   static processes_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-powershell -Command "Get-Process -IncludeUserName -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 20 | Select-Object @{Name='pid';Expression={$_.Id}}, @{Name='user';Expression={$_.UserName}}, @{Name='name';Expression={$_.ProcessName}}, @{Name='cpu';Expression={[math]::Round($_.CPU, 2)}}, @{Name='mem';Expression={[math]::Round($_.WorkingSet64 / 1MB, 2)}}, @{Name='state';Expression={if($_.Responding){'Running'}else{'Not Responding'}}} | ConvertTo-Json -Compress"
+powershell -Command "Get-Process | Sort-Object CPU -Descending | Select-Object -First 20 | Select-Object @{Name='pid';Expression={$_.Id}}, @{Name='user';Expression={'N/A'}}, @{Name='name';Expression={$_.ProcessName}}, @{Name='cpu';Expression={[math]::Round($_.CPU, 2)}}, @{Name='mem';Expression={[math]::Round($_.WorkingSet64 / 1MB, 2)}}, @{Name='state';Expression={if($_.Responding){'Running'}else{'Not Responding'}}} | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List top 20 processes by CPU as JSON", ["Read-only operation"], "30s");
+      return this.buildResponse(script, "List top 20 processes as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
 ps -eo pcpu,pmem,pid,user,stat,comm --sort=-pcpu 2>/dev/null | head -21 | tail -20 | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"cpu\\":\\"%s%%\\",\\"mem\\":\\"%s%%\\",\\"pid\\":\\"%s\\",\\"user\\":\\"%s\\",\\"state\\":\\"%s\\",\\"name\\":\\"%s\\"}", $1, $2, $3, $4, $5, $6} END{print "]"}'
 `;
-    return this.buildResponse(script, "List top 20 processes by CPU as JSON", ["Read-only operation"], "30s");
+    return this.buildResponse(script, "List top 20 processes as JSON", ["Read-only operation"], "30s");
   }
 
   static processes_kill(os: OSType, params: Record<string, any>): ScriptResponse {
@@ -449,12 +445,6 @@ echo "Log rotation completed"
   static network_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-powershell -Command "$res = @(); foreach($a in Get-NetAdapter -ErrorAction SilentlyContinue){ $ip = Get-NetIPAddress -InterfaceIndex $a.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1; $route = Get-NetRoute -InterfaceIndex $a.InterfaceIndex -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1; $dns = Get-DnsClientServerAddress -InterfaceIndex $a.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue; $stats = Get-NetAdapterStatistics -Name $a.Name -ErrorAction SilentlyContinue; $res += @{ iface=$a.Name; status=$a.Status; ip=if($ip){$ip.IPAddress}else{'None'}; mask=if($ip){$ip.PrefixLength}else{0}; mac=$a.MacAddress; gateway=if($route){$route.NextHop}else{'None'}; dns=if($dns){$dns.ServerAddresses -join ', '}else{'None'}; rx=$stats.ReceivedBytes; tx=$stats.SentBytes } }; $res | ConvertTo-Json -Compress"
-`;
-      return this.buildResponse(script, "List network interfaces with advanced properties as JSON", ["Read-only operation"], "30s");
-    }
-    const script = `${this.shebang(os)}
-ip -br addr 2>/dev/null | awk 'BEGIN{printf "["} {
     if(NR>1)printf ",";
     iface=$1; status=$2; split($3,a,"/"); ip=a[1]; mask=a[2];
     "ip route show dev " iface " | grep default | awk \"{print \\$3}\"" | getline gateway;
