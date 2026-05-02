@@ -32,8 +32,8 @@ async function ensureConnected(
       port: conn.port,
       username: conn.username,
     };
-    if (conn.encryptedKey) config.privateKey = conn.encryptedKey;
-    if (conn.encryptedPassword) config.password = conn.encryptedPassword;
+    if (conn.encryptedKey) config.privateKey = decrypt(conn.encryptedKey);
+    if (conn.encryptedPassword) config.password = decrypt(conn.encryptedPassword);
     await sshAgent.connect(config);
   }
   return key;
@@ -116,7 +116,8 @@ export function createAdminRouter(
   sshAgent: SSHAgent,
   scriptGenerator: {
     generate: (req: ScriptRequest) => ScriptResponse;
-  }
+  },
+  decrypt: (text: string) => string
 ): Router {
   const router = Router();
 
@@ -131,11 +132,18 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("users", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "USER", "USERS_LISTED", `Listed users on ${serverId}`);
+      
+      if (result.code !== 0) {
+        console.error("Users list script failed:", result.stderr);
+        throw new Error(`Script failed with code ${result.code}: ${result.stderr}`);
+      }
+
       let users = [];
       try {
         users = JSON.parse(result.stdout);
       } catch (e) {
-        console.error("Failed to parse users JSON:", result.stdout);
+        console.error("Failed to parse users JSON. Raw output:", result.stdout);
+        throw new Error("Invalid JSON output from users script");
       }
       res.json({ success: true, users, raw: result });
     })

@@ -1839,7 +1839,7 @@ Return ONLY a JSON object with the following structure:
   });
 
   // ── Fase 2: Admin Router (Server Administration) ──────────────────────────
-  const adminRouter = createAdminRouter(db, sshAgent, ScriptGenerator);
+  const adminRouter = createAdminRouter(db, sshAgent, ScriptGenerator, decrypt);
   app.use(adminRouter);
 
   // ── ARES Neural Core Worker ───────────────────────────────────────────────
