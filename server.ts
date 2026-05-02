@@ -1240,6 +1240,14 @@ async function startServer() {
     res.json({ id, success: true });
   });
 
+  app.get("/api/notifications", (req, res) => {
+    const configs = db.prepare("SELECT * FROM notification_configs").all();
+    res.json(configs.map((c: any) => ({
+      ...c,
+      config: c.config ? JSON.parse(c.config) : {}
+    })));
+  });
+
   app.get("/api/audit", (req, res) => {
     const logs = db.prepare("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 100").all();
     res.json(logs.map((l: any) => ({
