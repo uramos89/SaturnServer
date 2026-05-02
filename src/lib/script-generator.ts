@@ -65,7 +65,7 @@ export class ScriptGenerator {
   static users_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${ScriptGenerator.shebang(os)}
-powershell -Command "$users = @(Get-LocalUser); if($users.Count -gt 0){ $users | ForEach-Object { $groups = @(Get-LocalGroup | Where-Object { (Get-LocalGroupMember -Group $_ -ErrorAction SilentlyContinue).Name -match $_.Name } | Select-Object -ExpandProperty Name); [PSCustomObject]@{ username=$_.Name; active=$_.Enabled; description=($_.Description -if $null -eq $_.Description -then 'None' -else $_.Description); groups=($groups -join ', ') } } | ConvertTo-Json -Compress } else { echo '[]' }"
+powershell -Command "$users = @(Get-LocalUser); if($users.Count -gt 0){ $users | ForEach-Object { $groups = @(Get-LocalGroup | Where-Object { (Get-LocalGroupMember -Group $_ -ErrorAction SilentlyContinue).Name -match $_.Name } | Select-Object -ExpandProperty Name); [PSCustomObject]@{ username=$_.Name; active=$_.Enabled; description=($_.Description + ''); groups=($groups -join ', ') } } | ConvertTo-Json -Compress } else { echo '[]' }"
 `;
       return ScriptGenerator.buildResponse(script, "List local users as JSON", ["Read-only operation"], "30s");
     }

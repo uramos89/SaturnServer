@@ -143,7 +143,7 @@ export function createAdminRouter(
         users = JSON.parse(result.stdout);
       } catch (e) {
         console.error("Failed to parse users JSON. Raw output:", result.stdout);
-        throw new Error("Invalid JSON output from users script");
+        throw new Error(`Invalid JSON output from users script: ${result.stdout.substring(0, 200)}`);
       }
       res.json({ success: true, users, raw: result });
     })
@@ -205,6 +205,7 @@ export function createAdminRouter(
       const os = getServerOs(db, serverId);
       const sr = scriptGenerator.generate(buildRequest("users", "groups", os, { username, groups, groupAction: action }));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
+      if (result.code !== 0) throw new Error(`Script failed: ${result.stderr} | Output: ${result.stdout}`);
       auditLog(db, "USER", "USER_GROUPS_MODIFIED", `${action} groups ${groups.join(",")} for ${username} on ${serverId}`);
       res.json({ success: true, data: result.stdout, raw: result });
     })
@@ -225,7 +226,8 @@ export function createAdminRouter(
       try {
         tasks = JSON.parse(result.stdout);
       } catch (e) {
-        console.error("Failed to parse tasks JSON:", result.stdout);
+        console.error("Failed to parse tasks JSON. Raw output:", result.stdout);
+        throw new Error(`Invalid JSON output from tasks script: ${result.stdout.substring(0, 200)}`);
       }
       res.json({ success: true, tasks, raw: result });
     })
@@ -419,7 +421,8 @@ export function createAdminRouter(
       try {
         firewall = JSON.parse(result.stdout);
       } catch (e) {
-        console.error("Failed to parse firewall JSON:", result.stdout);
+        console.error("Failed to parse firewall JSON. Raw output:", result.stdout);
+        throw new Error(`Invalid JSON output from firewall script: ${result.stdout.substring(0, 200)}`);
       }
       res.json({ success: true, firewall, raw: result });
     })
