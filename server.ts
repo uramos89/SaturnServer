@@ -13,6 +13,7 @@ import { ScriptValidator } from "./src/lib/script-validator.js";
 import { createAdminRouter } from "./src/lib/admin-router.js";
 import { getStatus as getContextPStatus, getContractContent, getIndexContent, getMetricsContent, writeAuditLog, getAuditLogs, getParams, getCpiniContent } from "./src/lib/contextp-service.js";
 import { ARESWorker } from "./src/lib/ares-worker.js";
+import { initLLMService, getLLMResponse } from "./src/services/llm-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,8 +22,13 @@ const __dirname = path.dirname(__filename);
 const db = new Database("saturn.db");
 db.pragma("journal_mode = WAL");
 
-// Encryption key for SSH credentials (derived from machine + a secret pepper)
-const ENCRYPTION_KEY = crypto.createHash("sha256").update(process.env.SSH_ENCRYPTION_PEPPER || "saturn-default-pepper-change-me").digest();
+// Encryption key for SSH credentials
+if (!process.env.SSH_ENCRYPTION_PEPPER || process.env.SSH_ENCRYPTION_PEPPER === "saturn-default-pepper-change-me") {
+  console.error("[SECURITY] SSH_ENCRYPTION_PEPPER environment variable is required and cannot be the default.");
+  console.error("[SECURITY] Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
+  process.exit(1);
+}
+const ENCRYPTION_KEY = crypto.createHash("sha256").update(process.env.SSH_ENCRYPTION_PEPPER).digest();
 
 function encrypt(text: string): string {
   const iv = crypto.randomBytes(16);
@@ -1271,259 +1277,9 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
-  // ── System Actions (Phase 2) ───────────────────────────────────────────────
-  app.post("/api/servers/:id/action", async (req, res) => {
-    const { id } = req.params;
-    const { category, action, params, dryRun } = req.body;
-    
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+  // ── Resource Lists & Actions are handled by AdminRouter ─────────────────────
 
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const scriptReq: ScriptRequest = { category, action, os: osType, params, dryRun };
-
-      const { script, description, rollbackScript } = ScriptGenerator.generate(scriptReq);
-      
-      if (dryRun) {
-        return res.json({ success: true, dryRun: true, script, description });
-      }
-
-      const result = await sshAgent.execCommand(key, script);
-      
-      // Audit the action
-      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-        .run(`audit-${Date.now()}`, "SYSTEM", `ACTION_${category.toUpperCase()}_${action.toUpperCase()}`, 
-             `Executed ${description} on ${id}`, new Date().toISOString());
-
-      res.json({ success: result.code === 0, result, rollbackScript });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ── Resource Lists (Phase 2) ──────────────────────────────────────────────
-  app.get("/api/servers/:id/users", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "users", action: "list", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/tasks", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "tasks", action: "list", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/processes", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "processes", action: "list", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      console.log(`[DEBUG] Processes output for ${id}:`, result.stdout);
-      try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/network", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "network", action: "list", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      console.log(`[DEBUG] Network output for ${id}:`, result.stdout);
-      try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/firewall", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "firewall", action: "list", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/packages", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "packages", action: "list", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/webserver", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "webserver", action: "list", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/health", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "smart", action: "info", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/backups", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "backups", action: "list", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/ssl", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "ssl", action: "list", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.get("/api/servers/:id/audit", async (req, res) => {
-    const { id } = req.params;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      const { script } = ScriptGenerator.generate({ category: "security", action: "audit", os: osType, params: {} });
-      const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.post("/api/servers/:id/tab/:category/:action", async (req, res) => {
-    const { id, category, action } = req.params;
-    const params = req.body;
-    try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-      if (!conn) return res.status(404).json({ error: "No SSH connection" });
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
-      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
-      const key = `${conn.username}@${conn.host}:${conn.port}`;
-      
-      const { script } = ScriptGenerator.generate({ category, action, os: osType, params });
-      if (!script) return res.status(400).json({ error: "Invalid action or category" });
-      
-      const result = await sshAgent.execCommand(key, script);
-      
-      db.prepare(`INSERT INTO command_history (id, serverId, command, stdout, stderr, exitCode, executedBy, timestamp) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(`cmd-${Date.now()}`, id, `${category}:${action}`, result.stdout.substring(0, 5000), 
-             result.stderr.substring(0, 1000), result.code, "admin", new Date().toISOString());
-
-      res.json({ success: true, ...result });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
-
-  app.post("/api/neural/generate-script", async (req, res) => {
-    const { prompt, os, context } = req.body;
-    if (!prompt || !os) return res.status(400).json({ error: "Prompt and OS required" });
-
-    try {
-      const systemPrompt = `You are Saturn, a neural infrastructure manager. 
-Generate a high-quality ${os} administration script for the following request: "${prompt}".
-Include:
-1. The script (${os === 'windows' ? 'PowerShell' : 'Bash'})
-2. Description of what it does
-3. Risks involved
-4. Rollback script if possible
-
-Return ONLY a JSON object with the following structure:
-{
-  "script": "string",
-  "description": "string",
-  "risks": ["string"],
-  "rollbackScript": "string",
-  "estimatedTime": "string"
-}`;
-
-      const aiResponse = await generateAIResponse(
-        process.env.AI_PROVIDER || "gemini",
-        `${systemPrompt}\n\nContext: ${JSON.stringify(context || {})}`
-      );
-
-      // Extract JSON from potential markdown blocks
-      const jsonStr = aiResponse.match(/\{[\s\S]*\}/)?.[0] || aiResponse;
-      const result = JSON.parse(jsonStr);
-      
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ── Admin Login ────────────────────────────────────────────────────────────
+  initLLMService(db);
   app.post("/api/admin/login", (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -1813,8 +1569,8 @@ Return ONLY a JSON object with the following structure:
   app.use(adminRouter);
 
   // ── ARES Neural Core Worker ───────────────────────────────────────────────
-  // const aresWorker = new ARESWorker(db, sshAgent);
-  // aresWorker.start(60000);
+  const aresWorker = new ARESWorker(db, sshAgent);
+  aresWorker.start(60000);
 
   // ── Background SSH Metrics Scheduler ──────────────────────────────────────
   if (process.env.NODE_ENV === "production") {

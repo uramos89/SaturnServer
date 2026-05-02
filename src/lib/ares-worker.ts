@@ -81,9 +81,12 @@ Return your response in JSON format:
   "confidence": number (0.0 to 1.0)
 }`;
 
-      // Use the standalone LLM adapter to avoid circular deps with server.ts
-      const { getLLMResponse } = await import("./llm-adapter.js" as any);
-      const aiResponseRaw = await getLLMResponse("moonshot", prompt);
+      // Use the centralized LLM service to avoid circular deps
+      const activeProvider = this.db.prepare("SELECT provider FROM ai_providers WHERE enabled = 1 LIMIT 1").get() as any;
+      const provider = activeProvider?.provider || process.env.AI_PROVIDER || "moonshot";
+      
+      const { getLLMResponse } = await import("../services/llm-service.js");
+      const aiResponseRaw = await getLLMResponse(provider, prompt);
       
       let aiResult;
       try {

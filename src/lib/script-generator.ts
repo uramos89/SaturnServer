@@ -608,9 +608,6 @@ fi
 `;
     return ScriptGenerator.buildResponse(script, "List installed packages as JSON", ["Read-only operation"], "30s");
   }
-`;
-      return this.buildResponse(script, "List installed packages", ["Read-only operation"], "30s");
-  }
 
   static packages_install(os: OSType, params: Record<string, any>): ScriptResponse {
     const { packages } = params;
