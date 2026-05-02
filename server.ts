@@ -14,6 +14,7 @@ import { createAdminRouter } from "./src/lib/admin-router.js";
 import { getStatus as getContextPStatus, getContractContent, getIndexContent, getMetricsContent, writeAuditLog, getAuditLogs, getParams, getCpiniContent } from "./src/lib/contextp-service.js";
 import { ARESWorker } from "./src/lib/ares-worker.js";
 import { initLLMService, getLLMResponse } from "./src/services/llm-service.js";
+import { seedDatabase } from "./src/services/database-seed.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -444,20 +445,8 @@ ${history.map(h => `| ${h.name} | ${h.avg_cpu.toFixed(2)}% | ${h.avg_mem.toFixed
   db.prepare("DELETE FROM process_metrics_history WHERE timestamp < ?").run(fifteenDaysAgo);
 }
 
-// Seed Data (if empty) - keep mock servers as fallback
-const serverCount = db.prepare("SELECT COUNT(*) as count FROM servers").get() as { count: number };
-if (serverCount.count === 0) {
-  const insertServer = db.prepare("INSERT OR IGNORE INTO servers (id, name, ip, os, status, cpu, memory, disk, uptime, kernel, load_avg, lastCheck, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-  insertServer.run("srv-001", "local-dev", "127.0.0.1", "linux", "pending", 0, 0, 0, 0, "", "[]", new Date().toISOString(), "local,pending-ssh");
-  
-  // Initial ContextP Knowledge
-  const insertContext = db.prepare("INSERT OR IGNORE INTO contextp_entries (path, content, type, lastUpdated) VALUES (?, ?, ?, ?)");
-  insertContext.run("TECH/ssh/baseline.md", "# SSH Management\n- Port 22 default\n- Key-based auth preferred\n- Keepalive every 10s\n- Connection pooling enabled", "TECH", new Date().toISOString());
-  insertContext.run("TECH/linux/monitoring.md", "# Linux Monitoring Commands\n- CPU: /proc/stat\n- Memory: free\n- Disk: df\n- Uptime: /proc/uptime\n- Load: /proc/loadavg", "TECH", new Date().toISOString());
-  insertContext.run("CONTRACTS/root_contract.md", "# Root Contract\nEvery action must be audited. No direct root login.", "CONTRACTS", new Date().toISOString());
-  insertContext.run("PARAMS/preferences.md", "# User Preferences\n- Language: Spanish\n- AI Provider: Gemini 2.0\n- Strict Mode: Enabled", "PARAMS", new Date().toISOString());
-  insertContext.run("_INDEX/INDEX_MASTER.md", "# Index Master\n- TECH: General documentation\n- SSH: Connection management\n- CONTRACTS: Root rules\n- AUDIT: Execution history", "INDEX", new Date().toISOString());
-}
+// Seed Data (if empty)
+seedDatabase(db);
 
 
 function logAudit(type: string, event: string, detail: string, metadata: any = {}) {

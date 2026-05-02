@@ -743,6 +743,34 @@ export function createAdminRouter(
     })
   );
 
+  // ---- Console Execution (Ticket B-01) ----
+  router.post(
+    "/api/admin/servers/:serverId/console/exec",
+    wrapHandler(async (req, res) => {
+      const { serverId } = req.params;
+      const { command } = req.body;
+      if (!command) {
+        res.status(400).json({ error: "command is required" });
+        return;
+      }
+      
+      const key = await ensureConnected(db, sshAgent, serverId);
+      const result = await sshAgent.execCommand(key, command);
+      
+      // Log to audit and command_history
+      auditLog(db, "USER", "CONSOLE_EXEC", `Console exec on ${serverId}: ${command.substring(0, 100)}`);
+      
+      db.prepare(`INSERT INTO command_history (id, serverId, command, stdout, stderr, exitCode, executedBy, timestamp) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(`cmd-${Date.now()}`, serverId, command, 
+             result.stdout.substring(0, 5000), 
+             result.stderr.substring(0, 1000), 
+             result.code, "admin", new Date().toISOString());
+      
+      res.json({ success: true, ...result });
+    })
+  );
+
   // ---- Generic Tab Action ----
 
   // POST /api/admin/servers/:serverId/tab/:category/:action

@@ -9,21 +9,7 @@ import {
 } from "lucide-react";
 import AdminPanel from "./AdminPanel.js";
 
-interface ManagedServer {
-  id: string;
-  name: string;
-  ip: string;
-  os: string;
-  status: string;
-  cpu: number;
-  memory: number;
-  disk: number;
-  uptime: number;
-  kernel: string;
-  load_avg: number[];
-  lastCheck: string;
-  tags: string[];
-}
+import type { ManagedServer } from '../lib/types.js';
 
 export default function AdminDashboard() {
   const [servers, setServers] = useState<ManagedServer[]>([]);

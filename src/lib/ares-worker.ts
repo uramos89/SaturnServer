@@ -81,9 +81,9 @@ Return your response in JSON format:
   "confidence": number (0.0 to 1.0)
 }`;
 
-      // Use the centralized LLM service to avoid circular deps
+      // Use the centralized LLM service with the provider configured by the user
       const activeProvider = this.db.prepare("SELECT provider FROM ai_providers WHERE enabled = 1 LIMIT 1").get() as any;
-      const provider = activeProvider?.provider || process.env.AI_PROVIDER || "moonshot";
+      const provider = activeProvider?.provider || process.env.AI_PROVIDER || "gemini";
       
       const { getLLMResponse } = await import("../services/llm-service.js");
       const aiResponseRaw = await getLLMResponse(provider, prompt);
