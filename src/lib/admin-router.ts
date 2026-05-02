@@ -520,11 +520,7 @@ export function createAdminRouter(
       
       let packages = [];
       try {
-        if (result.stdout.trim().startsWith("[")) {
-          packages = extractJson(result.stdout);
-        } else {
-          packages = result.stdout.split("\n").filter(l => l.trim() !== "").map(l => ({ name: l, version: "N/A" }));
-        }
+        packages = extractJson(result.stdout);
       } catch (e) { packages = []; }
 
       res.json({ success: true, data: packages, raw: result });
@@ -575,11 +571,7 @@ export function createAdminRouter(
       
       let sites = [];
       try {
-        if (result.stdout.trim().startsWith("[")) {
-          sites = extractJson(result.stdout);
-        } else {
-          sites = result.stdout.split("\n").filter(l => l.trim() !== "").map(l => ({ domain: l, root: "N/A", state: "Unknown" }));
-        }
+        sites = extractJson(result.stdout);
       } catch (e) { sites = []; }
 
       res.json({ success: true, data: sites, raw: result });
@@ -601,28 +593,26 @@ export function createAdminRouter(
     })
   );
 
-  // ---- H01 - SMART ----
-
-  // GET /api/admin/servers/:serverId/smart
+  // ---- H01 - Health ----
+  
+  // GET /api/admin/servers/:serverId/health
   router.get(
-    "/api/admin/servers/:serverId/smart",
+    "/api/admin/servers/:serverId/health",
     wrapHandler(async (req, res) => {
       const { serverId } = req.params;
       const os = getServerOs(db, serverId);
-      const sr = scriptGenerator.generate(buildRequest("smart", "info", os));
+      const sr = scriptGenerator.generate(buildRequest("health", "info", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
-      auditLog(db, "SMART", "SMART_INFO_FETCHED", `Fetched SMART info on ${serverId}`);
+      auditLog(db, "HEALTH", "HEALTH_INFO_FETCHED", `Fetched health info on ${serverId}`);
       
-      let disks = [];
+      let health = [];
       try {
-        if (result.stdout.trim().startsWith("[")) {
-          disks = extractJson(result.stdout);
-        } else {
-          disks = [{ name: "Main Drive", health: "Unknown", type: "N/A", size: "N/A", raw: result.stdout }];
-        }
-      } catch (e) { disks = []; }
+        health = extractJson(result.stdout);
+      } catch (e) { 
+        health = [{ name: "Main Drive", health: "Unknown", type: "N/A", size: "N/A", raw: result.stdout }];
+      }
 
-      res.json({ success: true, data: disks, raw: result });
+      res.json({ success: true, data: health, raw: result });
     })
   );
 
@@ -764,7 +754,9 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest(category as any, action, os, req.body));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "TAB_ACTION", `${category.toUpperCase()}_${action.toUpperCase()}`, `Executed ${action} on ${category} for ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      let data: any = result.stdout;
+      try { if (result.stdout.trim().startsWith("[") || result.stdout.trim().startsWith("{")) data = extractJson(result.stdout); } catch(e) {}
+      res.json({ success: true, data, raw: result });
     })
   );
 

@@ -593,31 +593,21 @@ iptables -D INPUT ${ruleId} 2>/dev/null && echo "Rule ${ruleId} deleted" || echo
   static packages_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${ScriptGenerator.shebang(os)}
-echo "=== Installed Programs ==="
-powershell -Command "Get-WmiObject -Class Win32_Product | Select-Object Name,Version,Vendor | Format-Table -AutoSize"
-echo ""
-echo "=== Winget Available ==="
-where winget 2>nul && winget list --accept-source-agreements 2>nul || echo "winget not installed"
+powershell -Command "$pkgs = @(Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object @{Name='name';Expression={$_.DisplayName}}, @{Name='version';Expression={$_.DisplayVersion}}, @{Name='vendor';Expression={$_.Publisher}} | Where-Object { $_.name -ne $null } | Select-Object -First 50); if($pkgs.Count -gt 0){ $pkgs | ConvertTo-Json -Compress } else { echo '[]' }"
 `;
-      return ScriptGenerator.buildResponse(script, "List installed packages", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "List installed packages as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
-echo "=== Package Manager ==="
-if command -v apt &>/dev/null; then
-  echo "APT (Debian/Ubuntu)"
-  dpkg -l | head -50
-elif command -v dnf &>/dev/null; then
-  echo "DNF (Fedora/RHEL)"
-  dnf list installed | head -50
-elif command -v yum &>/dev/null; then
-  echo "YUM (CentOS/RHEL)"
-  yum list installed | head -50
-elif command -v zypper &>/dev/null; then
-  echo "Zypper (OpenSUSE)"
-  zypper se --installed-only | head -50
+if command -v dpkg-query &>/dev/null; then
+  dpkg-query -W -f='\${Package} \${Version} \${Architecture}\\n' | head -n 50 | awk '{printf "{\\"name\\":\\"%s\\",\\"version\\":\\"%s\\",\\"architecture\\":\\"%s\\"},", $1, $2, $3}' | sed 's/,$//' | awk '{print "[" $0 "]"}'
+elif command -v rpm &>/dev/null; then
+  rpm -qa --qf '{\\"name\\":\\"%{NAME}\\",\\"version\\":\\"%{VERSION}\\",\\"architecture\\":\\"%{ARCH}\\"},' | head -n 50 | sed 's/,$//' | awk '{print "[" $0 "]"}'
 else
-  echo "Unknown package manager"
+  echo "[]"
 fi
+`;
+    return ScriptGenerator.buildResponse(script, "List installed packages as JSON", ["Read-only operation"], "30s");
+  }
 `;
       return this.buildResponse(script, "List installed packages", ["Read-only operation"], "30s");
   }
@@ -698,22 +688,20 @@ echo "Removal complete"
   static webserver_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-echo "=== IIS Sites ==="
-powershell -Command "Get-Website | Select-Object Name,PhysicalPath,State,Bindings | Format-Table -AutoSize"
+powershell -Command "if(Get-Module -ListAvailable WebAdministration){ $sites = @(Get-Website | Select-Object @{Name='domain';Expression={$_.Name}}, @{Name='root';Expression={$_.PhysicalPath}}, @{Name='state';Expression={$_.State}}, @{Name='type';Expression={'IIS'}}); if($sites.Count -gt 0){ $sites | ConvertTo-Json -Compress } else { echo '[]' } } else { echo '[]' }"
 `;
-      return this.buildResponse(script, "List IIS web sites", ["Read-only operation"], "30s");
+      return this.buildResponse(script, "List IIS sites as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
-echo "=== Apache Sites ==="
-ls -la /etc/apache2/sites-enabled/ 2>/dev/null || ls -la /etc/httpd/sites-enabled/ 2>/dev/null || echo "(no Apache)"
-echo ""
-echo "=== Nginx Sites ==="
-ls -la /etc/nginx/sites-enabled/ 2>/dev/null || ls -la /etc/nginx/conf.d/ 2>/dev/null || echo "(no Nginx)"
-echo ""
-echo "=== Listening Web Ports ==="
-ss -tlnp 2>/dev/null | grep -E ':(80|443) ' || netstat -tlnp 2>/dev/null | grep -E ':(80|443) '
+if [ -d /etc/nginx/sites-enabled ]; then
+  ls /etc/nginx/sites-enabled/ | awk '{printf "{\\"domain\\":\\"%s\\",\\"root\\":\\"/etc/nginx/sites-available/%s\\",\\"state\\":\\"Enabled\\",\\"type\\":\\"Nginx\\"},", $1, $1}' | sed 's/,$//' | awk '{print "[" $0 "]"}'
+elif [ -d /etc/apache2/sites-enabled ]; then
+  ls /etc/apache2/sites-enabled/ | awk '{printf "{\\"domain\\":\\"%s\\",\\"root\\":\\"/etc/apache2/sites-available/%s\\",\\"state\\":\\"Enabled\\",\\"type\\":\\"Apache\\"},", $1, $1}' | sed 's/,$//' | awk '{print "[" $0 "]"}'
+else
+  echo "[]"
+fi
 `;
-    return this.buildResponse(script, "List web server virtual hosts", ["Read-only operation"], "30s");
+    return this.buildResponse(script, "List web server vhosts as JSON", ["Read-only operation"], "30s");
   }
 
   static webserver_create(os: OSType, params: Record<string, any>): ScriptResponse {
@@ -807,26 +795,26 @@ done
   static ssl_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-echo "=== SSL Certificates ==="
-powershell -Command "Get-ChildItem Cert:\\LocalMachine\\My | Select-Object Subject,Issuer,NotAfter,Thumbprint | Format-Table -AutoSize"
+powershell -Command "$certs = @(Get-ChildItem Cert:\\LocalMachine\\My | Select-Object @{Name='subject';Expression={$_.Subject}}, @{Name='issuer';Expression={$_.Issuer}}, @{Name='expires';Expression={$_.NotAfter.ToString()}}, @{Name='thumbprint';Expression={$_.Thumbprint}}); if($certs.Count -gt 0){ $certs | ConvertTo-Json -Compress } else { echo '[]' }"
 `;
-      return this.buildResponse(script, "List SSL certificates in Windows store", ["Read-only operation"], "30s");
+      return this.buildResponse(script, "List SSL certificates as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
-echo "=== SSL Certificates ==="
-for cert in /etc/letsencrypt/live/*/fullchain.pem; do
-  if [ -f "$cert" ]; then
-    domain=$(echo $cert | cut -d/ -f6)
-    echo "--- $domain ---"
-    openssl x509 -in $cert -noout -subject -dates 2>/dev/null || true
-    echo ""
-  fi
-done
-echo ""
-echo "=== Other Certificates ==="
-ls -la /etc/ssl/certs/*.pem 2>/dev/null | head -10 || echo "(no other certs)"
+# Linux: List certs from common paths
+(
+  echo "["
+  for cert in /etc/letsencrypt/live/*/fullchain.pem; do
+    if [ -f "$cert" ]; then
+      domain=$(echo $cert | cut -d/ -f6)
+      expires=$(openssl x509 -in $cert -noout -enddate | cut -d= -f2)
+      issuer=$(openssl x509 -in $cert -noout -issuer | cut -d= -f2-)
+      printf "{\\"subject\\":\\"%s\\",\\"issuer\\":\\"%s\\",\\"expires\\":\\"%s\\",\\"thumbprint\\":\\"N/A\\"}," "$domain" "$issuer" "$expires"
+    fi
+  done
+  echo "null]"
+) | sed 's/,null/ /g' | sed 's/null//g'
 `;
-    return this.buildResponse(script, "List SSL certificates", ["Read-only operation"], "30s");
+    return this.buildResponse(script, "List SSL certificates as JSON", ["Read-only operation"], "30s");
   }
 
   static ssl_renew(os: OSType, params: Record<string, any>): ScriptResponse {
