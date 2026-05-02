@@ -81,8 +81,8 @@ Return your response in JSON format:
   "confidence": number (0.0 to 1.0)
 }`;
 
-      // Dynamically import getLLMResponse from server.ts to avoid circular deps
-      const { getLLMResponse } = await import("../../server.js" as any);
+      // Use the standalone LLM adapter to avoid circular deps with server.ts
+      const { getLLMResponse } = await import("./llm-adapter.js" as any);
       const aiResponseRaw = await getLLMResponse("moonshot", prompt);
       
       let aiResult;

@@ -331,36 +331,6 @@ async function sendNotification(type: string, title: string, message: string, se
   }
 }
 
-// LLM Adapter Logic
-export async function getLLMResponse(provider: string, prompt: string) {
-  if (provider === 'gemini') {
-    const result = await genAI.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-    });
-    return result.text;
-  } else if (provider === 'openai') {
-    const axios = (await import("axios")).default;
-    const response = await axios.post("https://api.openai.com/v1/chat/completions", {
-      model: "gpt-4-turbo",
-      messages: [{ role: "user", content: prompt }]
-    }, {
-      headers: { "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` }
-    });
-    return response.data.choices[0].message.content;
-  } else if (provider === 'moonshot') {
-    const axios = (await import("axios")).default;
-    const response = await axios.post("https://api.moonshot.cn/v1/chat/completions", {
-      model: process.env.MOONSHOT_MODEL || "moonshot-v1-8k",
-      messages: [{ role: "user", content: prompt }]
-    }, {
-      headers: { "Authorization": `Bearer ${process.env.MOONSHOT_API_KEY}` }
-    });
-    return response.data.choices[0].message.content;
-  }
-  throw new Error(`Provider ${provider} not supported`);
-}
-
 // Background metrics updater
 let lastProcessUpdate = 0;
 async function updateAllServerMetrics() {
@@ -483,7 +453,6 @@ if (serverCount.count === 0) {
   insertContext.run("_INDEX/INDEX_MASTER.md", "# Index Master\n- TECH: General documentation\n- SSH: Connection management\n- CONTRACTS: Root rules\n- AUDIT: Execution history", "INDEX", new Date().toISOString());
 }
 
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 function logAudit(type: string, event: string, detail: string, metadata: any = {}) {
   const id = `audit-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
@@ -1863,6 +1832,7 @@ Return ONLY a JSON object with the following structure:
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
+      res.setHeader('Content-Type', 'text/html');
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
