@@ -1756,7 +1756,9 @@ Real-time SSH Metrics (${sshConn.host}):
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("*", (req, res, next) => {
+      // Don't intercept API routes - let them 404 naturally
+      if (req.path.startsWith("/api/")) return next();
       res.setHeader('Content-Type', 'text/html');
       res.sendFile(path.join(distPath, "index.html"));
     });
