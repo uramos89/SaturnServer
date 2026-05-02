@@ -301,14 +301,14 @@ echo "Task ${taskId} removed from crontab"
   static processes_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-powershell -Command "Get-Process -IncludeUserName -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 50 | Select-Object @{Name='pid';Expression={$_.Id}}, @{Name='user';Expression={$_.UserName}}, @{Name='cpu';Expression={[math]::Round($_.CPU, 2)}}, @{Name='mem';Expression={[math]::Round($_.WorkingSet/1MB, 2)}}, @{Name='vsz';Expression={[math]::Round($_.VirtualMemorySize/1MB, 2)}}, @{Name='rss';Expression={[math]::Round($_.WorkingSet/1MB, 2)}}, @{Name='state';Expression={if($_.Responding){'Running'}else{'Not Responding'}}}, @{Name='name';Expression={$_.ProcessName}} | ConvertTo-Json -Compress"
+powershell -Command "Get-Process -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 20 | Select-Object @{Name='pid';Expression={$_.Id}}, @{Name='name';Expression={$_.ProcessName}}, @{Name='cpu';Expression={[math]::Round($_.CPU, 2)}}, @{Name='mem';Expression={[math]::Round($_.WorkingSet64 / 1MB, 2)}}, @{Name='state';Expression={if($_.Responding){'Running'}else{'Not Responding'}}} | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List top 50 processes by CPU as JSON", ["Read-only operation"], "30s");
+      return this.buildResponse(script, "List top 20 processes by CPU as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
-ps -ax --no-headers -o pid=,user=,pcpu=,pmem=,vsz=,rss=,stat=,comm= --sort=-pcpu 2>/dev/null | head -n 50 | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"pid\\":\\"%s\\",\\"user\\":\\"%s\\",\\"cpu\\":\\"%s\\",\\"mem\\":\\"%s\\",\\"vsz\\":\\"%s\\",\\"rss\\":\\"%s\\",\\"state\\":\\"%s\\",\\"name\\":\\"%s\\"}", $1, $2, $3, $4, $5, $6, $7, $8} END{print "]"}'
+ps -eo pcpu,pmem,pid,comm --sort=-pcpu 2>/dev/null | head -21 | tail -20 | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"cpu\\":\\"%s%%\\",\\"mem\\":\\"%s%%\\",\\"pid\\":\\"%s\\",\\"name\\":\\"%s\\"}", $1, $2, $3, $4} END{print "]"}'
 `;
-    return this.buildResponse(script, "List top 50 processes as JSON", ["Read-only operation"], "30s");
+    return this.buildResponse(script, "List top 20 processes by CPU as JSON", ["Read-only operation"], "30s");
   }
 
   static processes_kill(os: OSType, params: Record<string, any>): ScriptResponse {

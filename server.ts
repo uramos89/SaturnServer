@@ -153,6 +153,17 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS process_metrics_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    serverId TEXT,
+    pid TEXT,
+    name TEXT,
+    cpu REAL,
+    mem REAL,
+    timestamp TEXT,
+    FOREIGN KEY (serverId) REFERENCES servers(id)
+  );
+
   CREATE TABLE IF NOT EXISTS skills (
     id TEXT PRIMARY KEY,
     name TEXT,
@@ -348,6 +359,7 @@ async function getLLMResponse(provider: string, prompt: string) {
 }
 
 // Background metrics updater
+let lastProcessUpdate = 0;
 async function updateAllServerMetrics() {
   const connections = db.prepare("SELECT * FROM ssh_connections WHERE status = 'connected'").all() as any[];
   
@@ -390,12 +402,67 @@ async function updateAllServerMetrics() {
       db.prepare("UPDATE ssh_connections SET lastConnected = ? WHERE id = ?")
         .run(new Date().toISOString(), conn.id);
 
+      // Collect top processes every 5 minutes
+      if (Date.now() - lastProcessUpdate > 5 * 60 * 1000) {
+        const { script: procScript } = ScriptGenerator.generate({ category: "processes", action: "list", os: osType, params: {} });
+        const processResult = await sshAgent.execCommand(key, procScript);
+        try {
+          const processes = JSON.parse(processResult.stdout);
+          const insertProcess = db.prepare("INSERT INTO process_metrics_history (serverId, pid, name, cpu, mem, timestamp) VALUES (?, ?, ?, ?, ?, ?)");
+          const nowIso = new Date().toISOString();
+          for (const p of (Array.isArray(processes) ? processes : [])) {
+             const cpuVal = parseFloat(p.cpu?.toString().replace('%', '') || '0');
+             const memVal = parseFloat(p.mem?.toString().replace('%', '') || '0');
+             insertProcess.run(conn.serverId, p.pid || '0', p.name || 'unknown', cpuVal, memVal, nowIso);
+          }
+        } catch (e) {
+          console.error(`Failed to parse processes for ${conn.host}`);
+        }
+      }
+
     } catch (error: any) {
       console.error(`Failed to update metrics for ${conn.host}:`, error.message);
       db.prepare("UPDATE servers SET status = 'offline', lastCheck = ? WHERE id = ?")
         .run(new Date().toISOString(), conn.serverId);
     }
   }
+  if (Date.now() - lastProcessUpdate > 5 * 60 * 1000) {
+    lastProcessUpdate = Date.now();
+    archiveMetricsToContextP();
+  }
+}
+
+async function archiveMetricsToContextP() {
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const servers = db.prepare("SELECT * FROM servers").all() as any[];
+  
+  for (const s of servers) {
+    const history = db.prepare("SELECT name, AVG(cpu) as avg_cpu, AVG(mem) as avg_mem FROM process_metrics_history WHERE serverId = ? AND timestamp > ? GROUP BY name ORDER BY avg_cpu DESC LIMIT 10").all(s.id, yesterday) as any[];
+    
+    if (history.length > 0) {
+      const summary = `### Daily Process Metrics Summary: ${s.name} (${s.ip})
+**Period:** ${yesterday} to ${new Date().toISOString()}
+
+| Process | Avg CPU | Avg Mem |
+|---------|---------|---------|
+${history.map(h => `| ${h.name} | ${h.avg_cpu.toFixed(2)}% | ${h.avg_mem.toFixed(2)}MB |`).join('\n')}
+
+*Data archived for ContextP compliance.*`;
+
+      writeAuditLog({
+        id: `METRICS-${s.id}-${Date.now()}`,
+        date: new Date().toISOString().split('T')[0],
+        type: "success",
+        domain: "AUDIT",
+        title: `Process Metrics Summary - ${s.name}`,
+        detail: summary
+      });
+    }
+  }
+  
+  // Cleanup old metrics (15 days)
+  const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare("DELETE FROM process_metrics_history WHERE timestamp < ?").run(fifteenDaysAgo);
 }
 
 // Seed Data (if empty) - keep mock servers as fallback
