@@ -162,7 +162,7 @@ export function createAdminRouter(
         console.error("Failed to parse users JSON. Raw output:", result.stdout);
         throw new Error(`Invalid JSON output from users script: ${result.stdout.substring(0, 200)}`);
       }
-      res.json({ success: true, users, raw: result });
+      res.json({ success: true, data: users, raw: result });
     })
   );
 
@@ -246,7 +246,7 @@ export function createAdminRouter(
         console.error("Failed to parse tasks JSON. Raw output:", result.stdout);
         throw new Error(`Invalid JSON output from tasks script: ${result.stdout.substring(0, 200)}`);
       }
-      res.json({ success: true, tasks, raw: result });
+      res.json({ success: true, data: tasks, raw: result });
     })
   );
 
@@ -298,7 +298,7 @@ export function createAdminRouter(
       } catch (e) {
         console.error("Failed to parse processes JSON:", result.stdout);
       }
-      res.json({ success: true, processes, raw: result });
+      res.json({ success: true, data: processes, raw: result });
     })
   );
 
@@ -400,7 +400,7 @@ export function createAdminRouter(
         level: line.toLowerCase().includes("error") ? "Error" : line.toLowerCase().includes("warn") ? "Warning" : "Info"
       }));
 
-      res.json({ success: true, logs, raw: result });
+      res.json({ success: true, data: logs, raw: result });
     })
   );
 
@@ -435,7 +435,7 @@ export function createAdminRouter(
       } catch (e) {
         console.error("Failed to parse network JSON:", result.stdout);
       }
-      res.json({ success: true, network, raw: result });
+      res.json({ success: true, data: network, raw: result });
     })
   );
 
@@ -471,7 +471,7 @@ export function createAdminRouter(
         console.error("Failed to parse firewall JSON. Raw output:", result.stdout);
         throw new Error(`Invalid JSON output from firewall script: ${result.stdout.substring(0, 200)}`);
       }
-      res.json({ success: true, firewall, raw: result });
+      res.json({ success: true, data: firewall, raw: result });
     })
   );
 
@@ -527,7 +527,7 @@ export function createAdminRouter(
         }
       } catch (e) { packages = []; }
 
-      res.json({ success: true, packages, raw: result });
+      res.json({ success: true, data: packages, raw: result });
     })
   );
 
@@ -582,7 +582,7 @@ export function createAdminRouter(
         }
       } catch (e) { sites = []; }
 
-      res.json({ success: true, sites, raw: result });
+      res.json({ success: true, data: sites, raw: result });
     })
   );
 
@@ -622,7 +622,7 @@ export function createAdminRouter(
         }
       } catch (e) { disks = []; }
 
-      res.json({ success: true, disks, raw: result });
+      res.json({ success: true, data: disks, raw: result });
     })
   );
 
@@ -647,7 +647,7 @@ export function createAdminRouter(
         }
       } catch (e) { certificates = []; }
 
-      res.json({ success: true, certificates, raw: result });
+      res.json({ success: true, data: certificates, raw: result });
     })
   );
 
@@ -687,7 +687,7 @@ export function createAdminRouter(
         }
       } catch (e) { backups = []; }
 
-      res.json({ success: true, backups, raw: result });
+      res.json({ success: true, data: backups, raw: result });
     })
   );
 
@@ -750,6 +750,21 @@ export function createAdminRouter(
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "SCRIPT", "SCRIPT_EXECUTED", `Executed ${category}/${action} on ${serverId}`);
       res.json({ success: true, data: result.stdout, raw: result, script: sr.script });
+    })
+  );
+
+  // ---- Generic Tab Action ----
+
+  // POST /api/admin/servers/:serverId/tab/:category/:action
+  router.post(
+    "/api/admin/servers/:serverId/tab/:category/:action",
+    wrapHandler(async (req, res) => {
+      const { serverId, category, action } = req.params;
+      const os = getServerOs(db, serverId);
+      const sr = scriptGenerator.generate(buildRequest(category as any, action, os, req.body));
+      const result = await execOnServer(db, sshAgent, serverId, sr.script);
+      auditLog(db, "TAB_ACTION", `${category.toUpperCase()}_${action.toUpperCase()}`, `Executed ${action} on ${category} for ${serverId}`);
+      res.json({ success: true, data: result.stdout, raw: result });
     })
   );
 

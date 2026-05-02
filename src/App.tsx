@@ -1792,7 +1792,7 @@ export default function App() {
       const fetchTab = async () => {
         setLoadingTab(true);
         try {
-          const res = await fetch(`/api/servers/${selectedServer.id}/${serverDetailTab}`);
+          const res = await fetch(`/api/admin/servers/${selectedServer.id}/${serverDetailTab}`);
           const data = await res.json();
           setTabData(data);
         } catch (e) {
@@ -1859,7 +1859,11 @@ export default function App() {
           {serverDetailTab === 'network' && <NetworkTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
           {serverDetailTab === 'firewall' && <FirewallTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
           {serverDetailTab === 'tasks' && <TasksTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          {serverDetailTab !== 'summary' && serverDetailTab !== 'terminal' && serverDetailTab !== 'processes' && serverDetailTab !== 'network' && serverDetailTab !== 'firewall' && serverDetailTab !== 'tasks' && renderTabData()}
+          {serverDetailTab === 'users' && <UsersTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'packages' && <PackagesTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'webserver' && <WebserverTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'health' && <HealthTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab !== 'summary' && serverDetailTab !== 'terminal' && serverDetailTab !== 'processes' && serverDetailTab !== 'network' && serverDetailTab !== 'firewall' && serverDetailTab !== 'tasks' && serverDetailTab !== 'users' && serverDetailTab !== 'packages' && serverDetailTab !== 'webserver' && serverDetailTab !== 'health' && renderTabData()}
         </div>
       </div>
     );
@@ -2026,7 +2030,7 @@ export default function App() {
 
     const handleAction = async (pid: string, action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/servers/${selectedServer!.id}/tab/processes/${action}`, {
+        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/processes/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid, ...extraParams })
         });
         handleRefreshServer(true);
@@ -2078,7 +2082,7 @@ export default function App() {
 
     const handleAction = async (iface: string, action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/servers/${selectedServer!.id}/tab/network/${action}`, {
+        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/network/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iface, ...extraParams })
         });
         handleRefreshServer(true);
@@ -2139,7 +2143,7 @@ export default function App() {
 
     const handleAction = async (action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/servers/${selectedServer!.id}/tab/firewall/${action}`, {
+        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/firewall/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(extraParams)
         });
         handleRefreshServer(true);
@@ -2201,7 +2205,7 @@ export default function App() {
 
     const handleAction = async (action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/servers/${selectedServer!.id}/tab/tasks/${action}`, {
+        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/tasks/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(extraParams)
         });
         handleRefreshServer(true);
@@ -2251,6 +2255,184 @@ export default function App() {
           </table>
           )}
         </div>
+      </div>
+    );
+  };
+
+  const UsersTab = ({ loadingTab, tabData, selectedServer, handleRefreshServer }: any) => {
+    if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching users...</div>;
+    if (!tabData) return null;
+    const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
+
+    const handleAction = async (username: string, action: string, extraParams: any = {}) => {
+      try {
+        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/users/${action}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, ...extraParams })
+        });
+        handleRefreshServer(true);
+      } catch (e) {
+        alert(`Error executing ${action}`);
+      }
+    };
+
+    return (
+      <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-max">
+          <thead>
+            <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+              <th className="p-4">Username</th>
+              <th className="p-4">UID/GID</th>
+              <th className="p-4">Home</th>
+              <th className="p-4">Shell</th>
+              <th className="p-4">Last Login</th>
+              <th className="p-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dataArray.map((row: any, i: number) => (
+              <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
+                <td className="p-4 font-bold text-white">{row.username}</td>
+                <td className="p-4">{row.uid}/{row.gid}</td>
+                <td className="p-4">{row.home || '/home/' + row.username}</td>
+                <td className="p-4">{row.shell}</td>
+                <td className="p-4 text-slate-500">{row.lastLogin || 'Never'}</td>
+                <td className="p-4 text-right space-x-2">
+                  <button onClick={() => {
+                    const newPass = prompt(`Enter new password for ${row.username}:`);
+                    if(newPass) handleAction(row.username, 'password', { password: newPass });
+                  }} className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded-md text-[9px] uppercase">Pass</button>
+                  <button onClick={() => handleAction(row.username, 'lock', { locked: true })} className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded-md text-[9px] uppercase">Lock</button>
+                  <button onClick={() => { if(confirm(`Delete user ${row.username}?`)) handleAction(row.username, 'delete'); }} className="px-2 py-1 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-md text-[9px] uppercase">Del</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const PackagesTab = ({ loadingTab, tabData, selectedServer, handleRefreshServer }: any) => {
+    if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching packages...</div>;
+    if (!tabData) return null;
+    const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
+
+    const handleAction = async (action: string, extraParams: any = {}) => {
+      try {
+        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/packages/${action}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(extraParams)
+        });
+        handleRefreshServer(true);
+      } catch (e) {
+        alert(`Error executing ${action}`);
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button onClick={() => {
+            const pkg = prompt("Enter package name to install:");
+            if(pkg) handleAction('install', { packages: [pkg] });
+          }} className="px-4 py-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 rounded-xl text-[10px] font-black uppercase transition-colors">+ Install Package</button>
+        </div>
+        <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-max">
+            <thead>
+              <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+                <th className="p-4">Package Name</th>
+                <th className="p-4">Version</th>
+                <th className="p-4">Architecture</th>
+                <th className="p-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dataArray.map((row: any, i: number) => (
+                <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
+                  <td className="p-4 font-bold text-white">{row.name}</td>
+                  <td className="p-4 text-orange-400">{row.version}</td>
+                  <td className="p-4 text-slate-500">{row.arch || 'x64'}</td>
+                  <td className="p-4 text-right">
+                    <button onClick={() => { if(confirm(`Remove ${row.name}?`)) handleAction('remove', { packages: [row.name] }); }} className="px-2 py-1 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-md text-[9px] uppercase">Remove</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const WebserverTab = ({ loadingTab, tabData, selectedServer, handleRefreshServer }: any) => {
+    if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching vhosts...</div>;
+    if (!tabData) return null;
+    const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
+
+    return (
+      <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-max">
+          <thead>
+            <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+              <th className="p-4">Domain / Site</th>
+              <th className="p-4">Root Path</th>
+              <th className="p-4">State</th>
+              <th className="p-4">Type</th>
+              <th className="p-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dataArray.map((row: any, i: number) => (
+              <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
+                <td className="p-4 font-bold text-white">{row.domain}</td>
+                <td className="p-4 truncate max-w-[200px]">{row.root}</td>
+                <td className="p-4">
+                  <span className={cn("px-2 py-1 rounded-full text-[8px] uppercase font-black", row.state === 'Enabled' || row.state === 'running' ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>
+                    {row.state}
+                  </span>
+                </td>
+                <td className="p-4 text-slate-500">{row.type || 'Nginx'}</td>
+                <td className="p-4 text-right space-x-2">
+                  <button className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded-md text-[9px] uppercase">Edit</button>
+                  <button className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded-md text-[9px] uppercase">Logs</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const HealthTab = ({ loadingTab, tabData, selectedServer, handleRefreshServer }: any) => {
+    if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Analyzing health...</div>;
+    if (!tabData) return null;
+    const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {dataArray.map((row: any, i: number) => (
+          <div key={i} className="p-6 rounded-2xl bg-black/40 border border-white/5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-500/10 rounded-xl text-orange-500"><HardDrive size={20} /></div>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-white">{row.name || row.device || 'Disk Unit'}</h3>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-widest">{row.type || 'Physical'} • {row.size || 'Unknown Size'}</p>
+                </div>
+              </div>
+              <div className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest", row.health === 'PASSED' || row.health === 'Healthy' ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>
+                {row.health || 'STATUS OK'}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-400">
+              <div className="p-2 bg-white/5 rounded-lg flex justify-between"><span>Temp:</span> <span className="text-white">{row.temp || '32C'}</span></div>
+              <div className={cn("p-2 bg-white/5 rounded-lg flex justify-between", row.realloc > 0 ? "text-rose-400" : "")}><span>Realloc:</span> <span className="text-white">{row.realloc || 0}</span></div>
+              <div className="p-2 bg-white/5 rounded-lg flex justify-between"><span>Power On:</span> <span className="text-white">{row.powerOn || 'N/A'}</span></div>
+              <div className="p-2 bg-white/5 rounded-lg flex justify-between"><span>Cycles:</span> <span className="text-white">{row.cycles || 'N/A'}</span></div>
+            </div>
+          </div>
+        ))}
       </div>
     );
   };
