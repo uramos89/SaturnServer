@@ -8,7 +8,7 @@ sudo apt-get install -y nginx
 sudo tee /etc/nginx/sites-available/saturn <<'EOF'
 server {
     listen 80;
-    server_name 192.168.174.130;
+    server_name _;
 
     location / {
         proxy_pass http://127.0.0.1:3000;

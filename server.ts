@@ -490,8 +490,10 @@ async function startServer() {
         imgSrc: ["'self'", "data:", "blob:"],
         connectSrc: ["'self'", "ws:", "wss:"],
         workerSrc: ["'self'", "blob:"],
+        upgradeInsecureRequests: null,
       },
     },
+    hsts: false,
     crossOriginResourcePolicy: { policy: "cross-origin" },
     crossOriginEmbedderPolicy: false
   }));

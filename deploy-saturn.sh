@@ -48,7 +48,7 @@ if [ ! -f "$ENV_FILE" ]; then
   cat > "$ENV_FILE" <<EOF
 # Saturn Core - Environment (Servidor de Pruebas)
 NODE_ENV=production
-PORT=80
+PORT=3000
 APP_URL=http://192.168.174.130
 
 # SEGURIDAD - Cambiar en producción real
@@ -66,11 +66,15 @@ fi
 
 # 4. Instalar dependencias
 echo "[4/6] Instalando dependencias npm..."
-npm ci --omit=dev 2>/dev/null || npm install
+npm install
 
 # 5. Build frontend
 echo "[5/6] Compilando frontend..."
 npm run build
+if [ ! -d "dist" ]; then
+  echo "ERROR: Build falló — no se encontró dist/"
+  exit 1
+fi
 
 # 6. Iniciar con PM2
 echo "[6/6] Iniciando servicio..."
@@ -83,7 +87,7 @@ pm2 delete saturn 2>/dev/null || true
 
 # Puerto 80 requiere permisos o redirección
 # Si no eres root, usamos puerto 3000 con nginx como proxy
-pm2 start tsx --name saturn -- server.ts
+NODE_ENV=production pm2 start tsx --name saturn -- server.ts
 
 pm2 save
 pm2 status
