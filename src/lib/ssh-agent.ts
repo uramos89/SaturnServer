@@ -81,12 +81,17 @@ export class SSHAgent {
     }
   }
 
-  async execCommand(connKey: string, command: string): Promise<ExecResult> {
+  async execCommand(connKey: string, command: string, timeoutMs: number = 30000): Promise<ExecResult> {
     const conn = this.connections.get(connKey);
     if (!conn) throw new Error(`No connection found: ${connKey}`);
 
     try {
-      const result = await conn.execCommand(command, {});
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error(`Command timed out after ${timeoutMs}ms`)), timeoutMs)
+      );
+      const execPromise = conn.execCommand(command, {});
+      
+      const result = await Promise.race([execPromise, timeoutPromise]) as any;
       return {
         stdout: result.stdout || "",
         stderr: result.stderr || "",
@@ -203,13 +208,15 @@ export class SSHAgent {
   }
 
   async testConnection(config: SSHConnectionConfig): Promise<{ success: boolean; message: string; metrics?: SystemMetrics }> {
+    let key: string | null = null;
     try {
-      const key = await this.connect(config);
+      key = await this.connect(config);
       const metrics = await this.getSystemMetrics(key);
-      await this.disconnect(key);
       return { success: true, message: `Connected to ${config.host}`, metrics };
     } catch (error: any) {
       return { success: false, message: error.message };
+    } finally {
+      if (key) await this.disconnect(key);
     }
   }
 

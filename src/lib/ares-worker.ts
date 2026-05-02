@@ -37,7 +37,11 @@ export class ARESWorker {
       const openIncidents = this.db.prepare("SELECT * FROM incidents WHERE status = 'open'").all() as any[];
       
       for (const incident of openIncidents) {
-        await this.analyzeIncident(incident);
+        try {
+          await this.analyzeIncident(incident);
+        } catch (err) {
+          console.error(`[ARES] Fatal error analyzing incident ${incident.id}:`, err);
+        }
       }
     } catch (error) {
       console.error("[ARES] Error in processing cycle:", error);

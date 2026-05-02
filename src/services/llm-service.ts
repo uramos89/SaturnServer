@@ -5,8 +5,8 @@ import Database from "better-sqlite3";
 /**
  * Initializes the LLM service.
  */
-export function initLLMService(_database: Database.Database): void {
-  // Database reference kept for future persistent AI config if needed
+export function initLLMService(): void {
+  // Service initialized. Environment keys prioritized over database config.
 }
 
 /**
@@ -31,7 +31,8 @@ export async function getLLMResponse(provider: string, prompt: string): Promise<
     return response.text();
 
   } else if (provider === "moonshot") {
-    apiKey = process.env.MOONSHOT_API_KEY || "sk-kJbI3dShXfqumW0D6vXrkkU9A9G0HK1q8uO2PE0NUzXu9qbb";
+    apiKey = process.env.MOONSHOT_API_KEY || "";
+    if (!apiKey) throw new Error("MOONSHOT_API_KEY is not configured.");
     
     const response = await axios.post("https://api.moonshot.cn/v1/chat/completions", {
       model: "moonshot-v1-8k",

@@ -64,7 +64,16 @@ export async function execViaBastion(tunnelKey: string, command: string, config:
     const targetKeyPath = `/tmp/target_key_${Date.now()}`;
     
     if (config.targetKey) {
-        await bastion.execCommand(`echo "${config.targetKey}" > ${targetKeyPath} && chmod 600 ${targetKeyPath}`);
+        const fs = await import("fs");
+        const path = await import("path");
+        const os = await import("os");
+        const localTempKey = path.join(os.tmpdir(), `saturn_target_key_${Date.now()}`);
+        fs.writeFileSync(localTempKey, config.targetKey, { mode: 0o600 });
+        
+        await bastion.putFile(localTempKey, targetKeyPath);
+        await bastion.execCommand(`chmod 600 ${targetKeyPath}`);
+        
+        fs.unlinkSync(localTempKey);
     }
 
     const sshCmd = `ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${config.targetKey ? `-i ${targetKeyPath}` : ''} -p ${config.targetPort} ${config.targetUser}@${config.targetHost} "${command}"`;

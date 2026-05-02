@@ -20,7 +20,10 @@ export function decryptCredential(vaultPath: string): any {
   const tag = data.slice(12, 28);
   const encrypted = data.slice(28);
   
-  const masterKey = process.env.SATURN_MASTER_KEY || 'saturn-default-secret';
+  const masterKey = process.env.SATURN_MASTER_KEY;
+  if (!masterKey || masterKey === 'saturn-default-secret') {
+    throw new Error("[SECURITY] SATURN_MASTER_KEY must be set to a secure secret in .env");
+  }
   const key = crypto.scryptSync(masterKey, 'salt', 32);
   
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);

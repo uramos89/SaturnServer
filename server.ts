@@ -259,62 +259,7 @@ skillDirs.forEach(d => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-// Database Seeding Logic
-try {
-  const userCount = db.prepare("SELECT count(*) as count FROM users").get() as { count: number };
-  if (userCount.count === 0) {
-    db.prepare("INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)").run(
-      crypto.randomUUID(), "admin", "f6385a49c95d9a96e392d476f57ee13f8c8574c3d82a17537672ec1d4f40f09a", "administrator", new Date().toISOString()
-    );
-  }
-
-  const serverCount = db.prepare("SELECT count(*) as count FROM servers").get() as { count: number };
-  if (serverCount.count === 0) {
-    const servers = [
-      { id: 'srv-01', name: 'SATURN-CORE-01', ip: '10.0.0.10', os: 'Ubuntu 22.04', status: 'online', cpu: 12, memory: 45 },
-      { id: 'srv-02', name: 'ARES-NEURAL-NODE', ip: '10.0.0.11', os: 'Debian 11', status: 'online', cpu: 85, memory: 92 },
-      { id: 'srv-03', name: 'DB-REPLICA-ALPHA', ip: '10.0.0.12', os: 'CentOS 9', status: 'degraded', cpu: 40, memory: 30 }
-    ];
-    const stmt = db.prepare("INSERT INTO servers (id, name, ip, os, status, cpu, memory, disk, uptime, kernel, lastCheck) VALUES (?, ?, ?, ?, ?, ?, ?, 20, 1000, '5.15.0-generic', ?)");
-    servers.forEach(s => stmt.run(s.id, s.name, s.ip, s.os, s.status, s.cpu, s.memory, new Date().toISOString()));
-    db.prepare("INSERT INTO remediation_configs (serverId, mode, confidence_threshold) VALUES ('global', 'auto', 0.8)").run();
-    db.prepare("INSERT INTO remediation_configs (serverId, mode, confidence_threshold) VALUES ('srv-02', 'manual', 0.9)").run();
-  }
-
-  const skillCount = db.prepare("SELECT count(*) as count FROM skills").get() as { count: number };
-  if (skillCount.count === 0) {
-    const skills = [
-      { id: 'sk-01', name: 'Docker Ghost Image Purge', desc: 'Identifies and removes dangling images and containers that are consuming disk space without valid references.', lang: 'bash', ver: '1.2.0' },
-      { id: 'sk-02', name: 'Nginx Configuration Hardening', desc: 'Applies security headers (HSTS, X-Frame-Options) and disables weak TLS protocols.', lang: 'python', ver: '2.0.1' },
-      { id: 'sk-03', name: 'ZFS Pool Scrub & Verify', desc: 'Performs a deep integrity check of the storage pool and reports any checksum errors.', lang: 'bash', ver: '1.0.5' },
-      { id: 'sk-04', name: 'Memory Leak Neural Detector', desc: 'Ares neural pattern matching to detect slow memory leaks in Node.js applications over 24h windows.', lang: 'javascript', ver: '3.1.0' }
-    ];
-    const stmt = db.prepare("INSERT INTO skills (id, name, description, language, version, path) VALUES (?, ?, ?, ?, ?, '')");
-    skills.forEach(s => stmt.run(s.id, s.name, s.desc, s.lang, s.ver));
-  }
-
-  const proactiveCount = db.prepare("SELECT count(*) as count FROM proactive_activities").get() as { count: number };
-  if (proactiveCount.count === 0) {
-    db.prepare("INSERT INTO proactive_activities (id, name, skillId, condition, schedule, targetType, targets) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-      crypto.randomUUID(), 'Weekly ZFS Scrub', 'sk-03', 'uptime > 168', '0 2 * * 0', 'group', '["db-cluster"]'
-    );
-    db.prepare("INSERT INTO proactive_activities (id, name, skillId, condition, schedule, targetType, targets) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-      crypto.randomUUID(), 'Auto-Purge Docker Artifacts', 'sk-01', 'disk_usage > 85', '0 * * * *', 'all', '[]'
-    );
-  }
-
-  const incidentCount = db.prepare("SELECT count(*) as count FROM incidents").get() as { count: number };
-  if (incidentCount.count === 0) {
-    db.prepare("INSERT INTO incidents (id, serverId, severity, title, description, status, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-      crypto.randomUUID(), 'srv-02', 'warning', 'High Memory Utilization', 'ARES node is operating at 92% memory capacity. Swap usage detected.', 'open', new Date().toISOString()
-    );
-    db.prepare("INSERT INTO incidents (id, serverId, severity, title, description, status, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-      crypto.randomUUID(), 'srv-03', 'critical', 'Replication Lag Spike', 'DB-REPLICA-ALPHA is 45 seconds behind master. Network degradation suspected.', 'open', new Date(Date.now() - 3600000).toISOString()
-    );
-  }
-} catch (e) {
-  console.error("Seeding error:", e);
-}
+// Database initialization handled by seedDatabase in background tasks section.
 
 [SKILLS_BASE, PARAMS_BASE].concat(skillDirs.map(d => path.join(SKILLS_BASE, d))).forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -361,7 +306,12 @@ async function sendNotification(type: string, title: string, message: string, se
 // Background metrics updater
 let lastProcessUpdate = 0;
 async function updateAllServerMetrics() {
-  const connections = db.prepare("SELECT * FROM ssh_connections WHERE status = 'connected'").all() as any[];
+  const connections = db.prepare(`
+    SELECT sc.*, s.name as serverName 
+    FROM ssh_connections sc 
+    JOIN servers s ON sc.serverId = s.id 
+    WHERE sc.status = 'connected'
+  `).all() as any[];
   
   for (const conn of connections) {
     try {
@@ -403,7 +353,7 @@ async function updateAllServerMetrics() {
         .run(new Date().toISOString(), conn.id);
 
       // Evaluate Thresholds (Ticket T-01)
-      evaluateThresholds(conn.serverId, metrics, db);
+      evaluateThresholds(conn.serverId, conn.serverName, metrics, db);
 
       // Emit Real-time Metrics (Ticket W-01)
       emitServerMetrics(conn.serverId, {

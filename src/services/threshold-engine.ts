@@ -24,7 +24,8 @@ const lastTriggered = new Map<string, number>(); // ruleId:serverId -> timestamp
  * Evaluates server metrics against configured thresholds.
  * If a threshold is exceeded, it creates an incident and triggers notifications.
  */
-export async function evaluateThresholds(serverId: string, server: any, db: Database): Promise<void> {
+export async function evaluateThresholds(serverId: string, serverName: string, metrics: any, db: Database): Promise<void> {
+  const server = { ...metrics, name: serverName };
   // Try to load custom thresholds for this server, fallback to defaults
   const customThresholds = db.prepare("SELECT * FROM threshold_configs WHERE serverId = ?").all(serverId) as any[];
   
