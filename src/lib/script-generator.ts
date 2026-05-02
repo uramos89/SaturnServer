@@ -70,6 +70,7 @@ powershell -Command "$users = @(Get-LocalUser); if($users.Count -gt 0){ $users |
       return ScriptGenerator.buildResponse(script, "List local users as JSON", ["Read-only operation"], "30s");
     }
     const script = `${ScriptGenerator.shebang(os)}
+# Linux users list
 awk -F: '$3>=1000 || $3==0 {print $1 "|" $3 "|" $6 "|" $7}' /etc/passwd | awk -F'|' 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"username\\":\\"%s\\",\\"uid\\":\\"%s\\",\\"home\\":\\"%s\\",\\"shell\\":\\"%s\\",\\"groups\\":\\"N/A\\"}", $1, $2, $3, $4} END{print "]"}'
 `;
     return ScriptGenerator.buildResponse(script, "List system users as JSON", ["Read-only operation"], "30s");
@@ -226,12 +227,13 @@ powershell -Command "$tasks = @(Get-ScheduledTask | Where-Object { $_.State -ne 
     const script = `${ScriptGenerator.shebang(os)}
 # Linux: Combine systemd timers and crontab
 (
-echo "["
-systemctl list-timers --all --no-pager --no-legend 2>/dev/null | awk '{printf "{\\"name\\":\\"%s\\",\\"state\\":\\"active\\",\\"nextRun\\":\\"%s %s\\",\\"path\\":\\"systemd\\"},", $6, $1, $2}'
-crontab -l 2>/dev/null | grep -v "^#" | awk '{gsub(/"/,"\\\\\""); printf "{\\"name\\":\\"cron\\",\\"state\\":\\"active\\",\\"nextRun\\":\\"cron\\",\\"path\\":\\"%s\\"},", $0}'
-echo "{\\"name\\":\\"END\\"}"
-echo "]"
-) | sed 's/,{\\"name\\":\\"END\\"}/ /' | sed 's/{\\"name\\":\\"END\\"}/[]/'
+  echo "["
+  # Systemd timers
+  systemctl list-timers --all --no-pager --no-legend 2>/dev/null | awk '{printf "{\\"name\\":\\"%s\\",\\"state\\":\\"%s\\",\\"nextRun\\":\\"%s %s\\",\\"path\\":\\"systemd\\"},", $6, $4, $1, $2}'
+  # Crontab
+  crontab -l 2>/dev/null | grep -v "^#" | awk '{gsub(/"/,"\\\\\""); printf "{\\"name\\":\\"cron\\",\\"state\\":\\"active\\",\\"nextRun\\":\\"cron\\",\\"path\\":\\"%s\\"},", $0}'
+  echo "null]"
+) | sed 's/,null/ /g' | sed 's/null//g'
 `;
     return ScriptGenerator.buildResponse(script, "List scheduled tasks as JSON", ["Read-only operation"], "30s");
   }
@@ -518,7 +520,7 @@ powershell -Command "$rules = @(Get-NetFirewallRule -Enabled True -ErrorAction S
     const script = `${ScriptGenerator.shebang(os)}
 # Linux: List iptables rules if available
 if command -v iptables &>/dev/null; then
-  iptables -L -n 2>/dev/null | awk 'BEGIN{printf "["} /Chain/ {next} /target/ {next} /^$/ {next} {if(NR>1 && p)printf ","; printf "{\\"name\\":\\"%s\\",\\"direction\\":\\"%s\\",\\"action\\":\\"%s\\",\\"id\\":\\"%s\\"}", $1, "IN/OUT", $3, $1; p=1} END{print "]"}'
+  iptables -L -n 2>/dev/null | awk 'BEGIN{printf "["} /Chain/ {next} /target/ {next} /^$/ {next} {if(p)printf ","; printf "{\\"name\\":\\"%s\\",\\"direction\\":\\"%s\\",\\"action\\":\\"%s\\",\\"id\\":\\"%s\\"}", $1, "IN/OUT", $3, $1; p=1} END{print "]"}'
 else
   echo "[]"
 fi

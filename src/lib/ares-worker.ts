@@ -63,18 +63,58 @@ export class ARESWorker {
           new Date().toISOString()
         );
 
-      // 2. Propose (Placeholder for AI logic integration)
+      // 2. Propose: Use AI to analyze and generate remediation
       this.db.prepare("UPDATE incidents SET status = 'analyzing' WHERE id = ?").run(incident.id);
       
-      console.log(`[ARES] Incident ${incident.id} marked as analyzing.`);
+      const prompt = `You are ARES (Autonomous Remediation Engine for Saturn). 
+Analyze the following incident and propose a solution.
+SERVER: ${server.name} (${server.os})
+INCIDENT: ${incident.title} - ${incident.description}
+SEVERITY: ${incident.severity}
+
+Propose a remediation plan. If possible, provide a script (Bash for Linux, PowerShell for Windows).
+Return your response in JSON format:
+{
+  "analysis": "string",
+  "proposal": "string",
+  "script": "string (the code only)",
+  "confidence": number (0.0 to 1.0)
+}`;
+
+      // Dynamically import getLLMResponse from server.ts to avoid circular deps
+      const { getLLMResponse } = await import("../../server.js" as any);
+      const aiResponseRaw = await getLLMResponse("moonshot", prompt);
+      
+      let aiResult;
+      try {
+        // AI might return markdown, clean it
+        const jsonMatch = aiResponseRaw.match(/\{[\s\S]*\}/);
+        aiResult = JSON.parse(jsonMatch ? jsonMatch[0] : aiResponseRaw);
+      } catch (e) {
+        aiResult = { analysis: aiResponseRaw, proposal: "Manual intervention required", script: "", confidence: 0.1 };
+      }
+
+      this.db.prepare(`UPDATE obpa_cycles SET 
+        phase = 'PROPOSE', 
+        proposal = ?, 
+        remediation_script = ?, 
+        confidence = ? 
+        WHERE id = ?`).run(
+          aiResult.proposal,
+          aiResult.script,
+          aiResult.confidence,
+          obpaId
+        );
+
+      console.log(`[ARES] Incident ${incident.id} analyzed by Moonshot AI.`);
 
       writeAuditLog({
         id: obpaId,
         date: new Date().toISOString(),
         type: "success",
-        domain: "TECH",
-        title: `ARES Analysis Started: ${incident.title}`,
-        detail: `ARES Neural Core is analyzing incident ${incident.id} for server ${server.name}.`
+        domain: "NEURAL",
+        title: `ARES Analysis Completed: ${incident.title}`,
+        detail: `ARES (Moonshot) proposed a solution with ${Math.round(aiResult.confidence * 100)}% confidence.`
       });
     } catch (e: any) {
       console.error(`[ARES] Failed to analyze incident ${incident.id}:`, e.message);

@@ -332,7 +332,7 @@ async function sendNotification(type: string, title: string, message: string, se
 }
 
 // LLM Adapter Logic
-async function getLLMResponse(provider: string, prompt: string) {
+export async function getLLMResponse(provider: string, prompt: string) {
   if (provider === 'gemini') {
     const result = await genAI.models.generateContent({
       model: "gemini-2.0-flash",
@@ -348,14 +348,15 @@ async function getLLMResponse(provider: string, prompt: string) {
       headers: { "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` }
     });
     return response.data.choices[0].message.content;
-  } else if (provider === 'ollama') {
+  } else if (provider === 'moonshot') {
     const axios = (await import("axios")).default;
-    const response = await axios.post("http://localhost:11434/api/generate", {
-      model: "llama3",
-      prompt: prompt,
-      stream: false
+    const response = await axios.post("https://api.moonshot.cn/v1/chat/completions", {
+      model: process.env.MOONSHOT_MODEL || "moonshot-v1-8k",
+      messages: [{ role: "user", content: prompt }]
+    }, {
+      headers: { "Authorization": `Bearer ${process.env.MOONSHOT_API_KEY}` }
     });
-    return response.data.response;
+    return response.data.choices[0].message.content;
   }
   throw new Error(`Provider ${provider} not supported`);
 }

@@ -39,6 +39,23 @@ async function ensureConnected(
   return key;
 }
 
+// ── Helper: extract JSON from string with noise
+function extractJson(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const match = text.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch (e) {
+        throw new Error(`Failed to parse extracted JSON: ${e.message}`);
+      }
+    }
+    throw new Error("No JSON block found in output");
+  }
+}
+
 // ── Helper: audit log entry
 function auditLog(
   db: Database.Database,
@@ -140,7 +157,7 @@ export function createAdminRouter(
 
       let users = [];
       try {
-        users = JSON.parse(result.stdout);
+        users = extractJson(result.stdout);
       } catch (e) {
         console.error("Failed to parse users JSON. Raw output:", result.stdout);
         throw new Error(`Invalid JSON output from users script: ${result.stdout.substring(0, 200)}`);
@@ -224,7 +241,7 @@ export function createAdminRouter(
       auditLog(db, "TASK", "TASKS_LISTED", `Listed tasks on ${serverId}`);
       let tasks = [];
       try {
-        tasks = JSON.parse(result.stdout);
+        tasks = extractJson(result.stdout);
       } catch (e) {
         console.error("Failed to parse tasks JSON. Raw output:", result.stdout);
         throw new Error(`Invalid JSON output from tasks script: ${result.stdout.substring(0, 200)}`);
@@ -277,7 +294,7 @@ export function createAdminRouter(
       auditLog(db, "PROCESS", "PROCESSES_LISTED", `Listed processes on ${serverId}`);
       let processes = [];
       try {
-        processes = JSON.parse(result.stdout);
+        processes = extractJson(result.stdout);
       } catch (e) {
         console.error("Failed to parse processes JSON:", result.stdout);
       }
@@ -325,7 +342,29 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("monitoring", "snapshot", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "MONITOR", "MONITORING_SNAPSHOT", `Took monitoring snapshot on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      
+      let snapshot: any = {};
+      try {
+        // Monitoring snapshot might be a mix of text and values, but our script-generator for snapshot returns text
+        // However, we want it to be JSON for the UI
+        if (result.stdout.trim().startsWith("{")) {
+          snapshot = extractJson(result.stdout);
+        } else {
+          // Fallback parsing for text output
+          const cpuMatch = result.stdout.match(/CPU: ([\d.]+)%/);
+          const memMatch = result.stdout.match(/Memory: ([\d.]+)%/);
+          const diskMatch = result.stdout.match(/Disk: ([\d.]+)%/);
+          snapshot = {
+            cpu: cpuMatch ? parseFloat(cpuMatch[1]) : 0,
+            memory: memMatch ? parseFloat(memMatch[1]) : 0,
+            disk: diskMatch ? parseFloat(diskMatch[1]) : 0,
+            raw: result.stdout
+          };
+        }
+      } catch (e) {
+        console.error("Failed to parse monitoring snapshot:", e);
+      }
+      res.json({ success: true, snapshot, raw: result });
     })
   );
 
@@ -353,7 +392,15 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("logs", "get", os, { lines: logLines || "50", service }));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "LOG", "LOGS_FETCHED", `Fetched logs on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      
+      const lines = result.stdout.split("\n").filter(l => l.trim() !== "");
+      const logs = lines.map(line => ({
+        timestamp: line.substring(0, 16),
+        message: line,
+        level: line.toLowerCase().includes("error") ? "Error" : line.toLowerCase().includes("warn") ? "Warning" : "Info"
+      }));
+
+      res.json({ success: true, logs, raw: result });
     })
   );
 
@@ -384,7 +431,7 @@ export function createAdminRouter(
       auditLog(db, "NETWORK", "NETWORK_INTERFACES_LISTED", `Listed network interfaces on ${serverId}`);
       let network = [];
       try {
-        network = JSON.parse(result.stdout);
+        network = extractJson(result.stdout);
       } catch (e) {
         console.error("Failed to parse network JSON:", result.stdout);
       }
@@ -419,7 +466,7 @@ export function createAdminRouter(
       auditLog(db, "FIREWALL", "FIREWALL_RULES_LISTED", `Listed firewall rules on ${serverId}`);
       let firewall = [];
       try {
-        firewall = JSON.parse(result.stdout);
+        firewall = extractJson(result.stdout);
       } catch (e) {
         console.error("Failed to parse firewall JSON. Raw output:", result.stdout);
         throw new Error(`Invalid JSON output from firewall script: ${result.stdout.substring(0, 200)}`);
@@ -470,7 +517,17 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("packages", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "PACKAGE", "PACKAGES_LISTED", `Listed packages on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      
+      let packages = [];
+      try {
+        if (result.stdout.trim().startsWith("[")) {
+          packages = extractJson(result.stdout);
+        } else {
+          packages = result.stdout.split("\n").filter(l => l.trim() !== "").map(l => ({ name: l, version: "N/A" }));
+        }
+      } catch (e) { packages = []; }
+
+      res.json({ success: true, packages, raw: result });
     })
   );
 
@@ -515,7 +572,17 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("webserver", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "WEBSERVER", "VHOSTS_LISTED", `Listed virtual hosts on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      
+      let sites = [];
+      try {
+        if (result.stdout.trim().startsWith("[")) {
+          sites = extractJson(result.stdout);
+        } else {
+          sites = result.stdout.split("\n").filter(l => l.trim() !== "").map(l => ({ domain: l, root: "N/A", state: "Unknown" }));
+        }
+      } catch (e) { sites = []; }
+
+      res.json({ success: true, sites, raw: result });
     })
   );
 
@@ -545,7 +612,17 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("smart", "info", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "SMART", "SMART_INFO_FETCHED", `Fetched SMART info on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      
+      let disks = [];
+      try {
+        if (result.stdout.trim().startsWith("[")) {
+          disks = extractJson(result.stdout);
+        } else {
+          disks = [{ name: "Main Drive", health: "Unknown", type: "N/A", size: "N/A", raw: result.stdout }];
+        }
+      } catch (e) { disks = []; }
+
+      res.json({ success: true, disks, raw: result });
     })
   );
 
@@ -560,7 +637,17 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("ssl", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "SSL", "SSL_CERTS_LISTED", `Listed SSL certs on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      
+      let certificates = [];
+      try {
+        if (result.stdout.trim().startsWith("[")) {
+          certificates = extractJson(result.stdout);
+        } else {
+          certificates = [];
+        }
+      } catch (e) { certificates = []; }
+
+      res.json({ success: true, certificates, raw: result });
     })
   );
 
@@ -590,7 +677,17 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("backups", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "BACKUP", "BACKUPS_LISTED", `Listed backups on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      
+      let backups = [];
+      try {
+        if (result.stdout.trim().startsWith("[")) {
+          backups = extractJson(result.stdout);
+        } else {
+          backups = result.stdout.split("\n").filter(l => l.trim() !== "").map(l => ({ name: l, size: "N/A", date: "N/A" }));
+        }
+      } catch (e) { backups = []; }
+
+      res.json({ success: true, backups, raw: result });
     })
   );
 
