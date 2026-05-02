@@ -476,7 +476,19 @@ async function startServer() {
   const app = express();
   
   // ── SATURN-X Security Headers ─────────────────────────────────────────────
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'", "ws:", "wss:"],
+        workerSrc: ["'self'", "blob:"],
+      },
+    },
+  }));
   
   // ── SATURN-X Rate Limiting ────────────────────────────────────────────────
   const globalLimiter = rateLimit({
