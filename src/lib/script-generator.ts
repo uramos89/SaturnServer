@@ -65,29 +65,14 @@ export class ScriptGenerator {
   static users_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${ScriptGenerator.shebang(os)}
-${ScriptGenerator.errorHandler(os)}
-echo "=== Users ==="
-powershell -Command "Get-LocalUser | Select-Object Name,Enabled,LastLogon,PasswordLastSet | Format-Table -AutoSize"
-echo "=== Groups ==="
-powershell -Command "Get-LocalGroup | Select-Object Name,Description | Format-Table -AutoSize"
+powershell -Command "$users = @(Get-LocalUser); if($users.Count -gt 0){ $users | ForEach-Object { $groups = @(Get-LocalGroup | Where-Object { (Get-LocalGroupMember -Group $_ -ErrorAction SilentlyContinue).Name -match $_.Name } | Select-Object -ExpandProperty Name); [PSCustomObject]@{ username=$_.Name; active=$_.Enabled; description=($_.Description -if $null -eq $_.Description -then 'None' -else $_.Description); groups=($groups -join ', ') } } | ConvertTo-Json -Compress } else { echo '[]' }"
 `;
-      return ScriptGenerator.buildResponse(script, "List all local users and groups", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "List local users as JSON", ["Read-only operation"], "30s");
     }
     const script = `${ScriptGenerator.shebang(os)}
-${ScriptGenerator.errorHandler(os)}
-echo "=== Users ==="
-cat /etc/passwd | awk -F: '{printf "%-20s UID=%-5s GID=%-5s Home=%-20s Shell=%s\\n", $1, $3, $4, $6, $7}'
-echo ""
-echo "=== Groups ==="
-cat /etc/group | awk -F: '{printf "%-20s GID=%-5s Members=%s\\n", $1, $3, $4}'
-echo ""
-echo "=== Sudoers ==="
-cat /etc/sudoers 2>/dev/null | grep -v "^#" | grep -v "^$" || echo "(no sudoers entries)"
-echo ""
-echo "=== Last Logins ==="
-last -n 20 2>/dev/null || echo "(no login history)"
+awk -F: '$3>=1000 || $3==0 {print $1\\":\\"$3\\":\\"$6\\":\\"$7}' /etc/passwd | awk -F: 'BEGIN{printf \\"[\\"} {if(NR>1)printf \\",\\"; printf \\"{\\\\\\"username\\\\\\":\\\\\\"%s\\\\\\",\\\\\\"uid\\\\\\":\\\\\\"%s\\\\\\",\\\\\\"home\\\\\\":\\\\\\"%s\\\\\\",\\\\\\"shell\\\\\\":\\\\\\"%s\\\\\\",\\\\\\"groups\\\\\\":\\\\\\"N/A\\\\\\"}\\", $1, $2, $3, $4} END{print \\"]\\"}'
 `;
-    return ScriptGenerator.buildResponse(script, "List all system users, groups, sudoers and last logins", ["Read-only operation"], "30s");
+    return ScriptGenerator.buildResponse(script, "List system users as JSON", ["Read-only operation"], "30s");
   }
 
   static users_create(os: OSType, params: Record<string, any>): ScriptResponse {
@@ -234,14 +219,21 @@ fi
   static tasks_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${ScriptGenerator.shebang(os)}
-powershell -Command "Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {$_.TaskPath -notlike '\\Microsoft\\*'} | Select-Object @{Name='id';Expression={$_.TaskName}}, @{Name='name';Expression={$_.TaskName}}, @{Name='state';Expression={[string]$_.State}}, @{Name='schedule';Expression={'N/A'}}, @{Name='command';Expression={if($_.Actions.Execute){$_.Actions.Execute}else{'N/A'}}}, @{Name='script';Expression=@{shebang=''}} | ConvertTo-Json -Compress"
+powershell -Command "$tasks = @(Get-ScheduledTask | Where-Object { $_.State -ne 'Disabled' } | Select-Object -First 30); if($tasks.Count -gt 0){ $tasks | ForEach-Object { $info = $_ | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue; [PSCustomObject]@{ name=$_.TaskName; state=$_.State; nextRun=(if($info.NextRunTime){$info.NextRunTime.ToString()}else{'N/A'}); path=$_.TaskPath } } | ConvertTo-Json -Compress } else { echo '[]' }"
 `;
       return ScriptGenerator.buildResponse(script, "List scheduled tasks as JSON", ["Read-only operation"], "30s");
     }
     const script = `${ScriptGenerator.shebang(os)}
-crontab -l 2>/dev/null | grep -v '^#' | grep -v '^$' | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"id\\":\\"%s\\",\\"name\\":\\"cron job\\",\\"state\\":\\"Active\\",\\"schedule\\":\\"%s %s %s %s %s\\",\\"command\\":\\"%s\\",\\"script\\":{\\"shebang\\":\\"\\"}}", NR, $1, $2, $3, $4, $5, $6} END{print "]"}'
+# Linux: Combine systemd timers and crontab
+(
+echo "["
+systemctl list-timers --all --no-pager --no-legend 2>/dev/null | awk '{printf "{\\"name\\":\\"%s\\",\\"state\\":\\"active\\",\\"nextRun\\":\\"%s %s\\",\\"path\\":\\"systemd\\"},", $6, $1, $2}'
+crontab -l 2>/dev/null | grep -v "^#" | awk '{gsub(/"/,"\\\\\""); printf "{\\"name\\":\\"cron\\",\\"state\\":\\"active\\",\\"nextRun\\":\\"cron\\",\\"path\\":\\"%s\\"},", $0}'
+echo "{\\"name\\":\\"END\\"}"
+echo "]"
+) | sed 's/,{\\"name\\":\\"END\\"}/ /' | sed 's/{\\"name\\":\\"END\\"}/[]/'
 `;
-    return ScriptGenerator.buildResponse(script, "List cron jobs as JSON", ["Read-only operation"], "30s");
+    return ScriptGenerator.buildResponse(script, "List scheduled tasks as JSON", ["Read-only operation"], "30s");
   }
 
   static tasks_create(os: OSType, params: Record<string, any>): ScriptResponse {

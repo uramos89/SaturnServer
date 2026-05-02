@@ -131,7 +131,13 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("users", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "USER", "USERS_LISTED", `Listed users on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      let users = [];
+      try {
+        users = JSON.parse(result.stdout);
+      } catch (e) {
+        console.error("Failed to parse users JSON:", result.stdout);
+      }
+      res.json({ success: true, users, raw: result });
     })
   );
 
@@ -207,7 +213,13 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("tasks", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "TASK", "TASKS_LISTED", `Listed tasks on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      let tasks = [];
+      try {
+        tasks = JSON.parse(result.stdout);
+      } catch (e) {
+        console.error("Failed to parse tasks JSON:", result.stdout);
+      }
+      res.json({ success: true, tasks, raw: result });
     })
   );
 
@@ -395,7 +407,13 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("firewall", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "FIREWALL", "FIREWALL_RULES_LISTED", `Listed firewall rules on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      let firewall = [];
+      try {
+        firewall = JSON.parse(result.stdout);
+      } catch (e) {
+        console.error("Failed to parse firewall JSON:", result.stdout);
+      }
+      res.json({ success: true, firewall, raw: result });
     })
   );
 

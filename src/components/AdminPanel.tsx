@@ -205,26 +205,28 @@ function UsersTab({ data, onAction }: { data: any; onAction: (action: string, bo
           <thead>
             <tr className="text-slate-500 border-b border-white/5">
               <th className="text-left py-2 px-2">Username</th>
-              <th className="text-left py-2 px-2">UID</th>
-              <th className="text-left py-2 px-2">GID</th>
-              <th className="text-left py-2 px-2">Home</th>
-              <th className="text-left py-2 px-2">Shell</th>
+              <th className="text-left py-2 px-2">Status</th>
+              <th className="text-left py-2 px-2">Groups</th>
+              <th className="text-left py-2 px-2">Description / Home</th>
               <th className="text-right py-2 px-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u: any, i: number) => (
               <tr key={i} className="border-b border-white/5 hover:bg-white/[0.02]">
-                <td className="py-2 px-2 text-white">{u.username || u.Name}</td>
-                <td className="py-2 px-2 text-slate-400">{u.uid || u.UID}</td>
-                <td className="py-2 px-2 text-slate-400">{u.gid || u.GID}</td>
-                <td className="py-2 px-2 text-slate-400">{u.home || u.Home}</td>
-                <td className="py-2 px-2 text-slate-400">{u.shell || u.Shell}</td>
+                <td className="py-2 px-2 text-white font-medium">{u.username}</td>
+                <td className="py-2 px-2">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${u.active !== false ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                    {u.active !== false ? "Active" : "Disabled"}
+                  </span>
+                </td>
+                <td className="py-2 px-2 text-slate-400 truncate max-w-[150px]">{u.groups || "N/A"}</td>
+                <td className="py-2 px-2 text-slate-500 italic">{u.description || u.home || "None"}</td>
                 <td className="py-2 px-2 text-right">
                   <div className="flex gap-1 justify-end">
-                    <button onClick={() => onAction("lock", { username: u.username || u.Name, locked: true })} className="p-1 hover:bg-white/10 rounded" title="Lock"><UserX className="w-3.5 h-3.5 text-yellow-400" /></button>
-                    <button onClick={() => onAction("lock", { username: u.username || u.Name, locked: false })} className="p-1 hover:bg-white/10 rounded" title="Unlock"><UserCheck className="w-3.5 h-3.5 text-green-400" /></button>
-                    <button onClick={() => onAction("delete", { username: u.username || u.Name })} className="p-1 hover:bg-white/10 rounded" title="Delete"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                    <button onClick={() => onAction("lock", { username: u.username, locked: true })} className="p-1 hover:bg-white/10 rounded" title="Lock"><UserX className="w-3.5 h-3.5 text-yellow-400" /></button>
+                    <button onClick={() => onAction("lock", { username: u.username, locked: false })} className="p-1 hover:bg-white/10 rounded" title="Unlock"><UserCheck className="w-3.5 h-3.5 text-green-400" /></button>
+                    <button onClick={() => onAction("delete", { username: u.username })} className="p-1 hover:bg-white/10 rounded" title="Delete"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
                   </div>
                 </td>
               </tr>
@@ -260,14 +262,15 @@ function TasksTab({ data, onAction }: { data: any; onAction: (action: string, bo
       )}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead><tr className="text-slate-500 border-b border-white/5"><th className="text-left py-2 px-2">Name</th><th className="text-left py-2 px-2">Schedule</th><th className="text-left py-2 px-2">Command</th><th className="text-right py-2 px-2">Actions</th></tr></thead>
+          <thead><tr className="text-slate-500 border-b border-white/5"><th className="text-left py-2 px-2">Name</th><th className="text-left py-2 px-2">Next Run</th><th className="text-left py-2 px-2">Status</th><th className="text-left py-2 px-2">Path/Source</th><th className="text-right py-2 px-2">Actions</th></tr></thead>
           <tbody>
             {tasks.map((t: any, i: number) => (
               <tr key={i} className="border-b border-white/5 hover:bg-white/[0.02]">
-                <td className="py-2 px-2 text-white">{t.name || t.TaskName}</td>
-                <td className="py-2 px-2 text-slate-400 font-mono">{t.schedule || t.TaskPath}</td>
-                <td className="py-2 px-2 text-slate-400 font-mono max-w-[300px] truncate">{t.command || t.TR}</td>
-                <td className="py-2 px-2 text-right"><button onClick={() => onAction("delete", { taskId: t.name || t.TaskName })} className="p-1 hover:bg-white/10 rounded"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button></td>
+                <td className="py-2 px-2 text-white font-medium">{t.name}</td>
+                <td className="py-2 px-2 text-slate-400 font-mono">{t.nextRun}</td>
+                <td className="py-2 px-2 text-slate-400">{t.state}</td>
+                <td className="py-2 px-2 text-slate-500 italic">{t.path}</td>
+                <td className="py-2 px-2 text-right"><button onClick={() => onAction("delete", { taskId: t.name })} className="p-1 hover:bg-white/10 rounded"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button></td>
               </tr>
             ))}
           </tbody>
@@ -405,15 +408,14 @@ function FirewallTab({ data, onAction }: { data: any; onAction: (action: string,
       )}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead><tr className="text-slate-500 border-b border-white/5"><th className="text-left py-2 px-2">Name</th><th className="text-left py-2 px-2">Direction</th><th className="text-left py-2 px-2">Action</th><th className="text-left py-2 px-2">Profile</th><th className="text-right py-2 px-2">Actions</th></tr></thead>
+          <thead><tr className="text-slate-500 border-b border-white/5"><th className="text-left py-2 px-2">Rule ID / Name</th><th className="text-left py-2 px-2">Direction</th><th className="text-left py-2 px-2">Action</th><th className="text-right py-2 px-2">Actions</th></tr></thead>
           <tbody>
             {rules.map((r: any, i: number) => (
               <tr key={i} className="border-b border-white/5 hover:bg-white/[0.02]">
-                <td className="py-2 px-2 text-white">{r.name || r.DisplayName}</td>
-                <td className="py-2 px-2 text-slate-400">{r.direction || r.Direction}</td>
-                <td className="py-2 px-2"><span className={`px-2 py-0.5 rounded-full text-xs ${(r.action || r.Action) === "ACCEPT" || (r.action || r.Action) === "Allow" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>{r.action || r.Action}</span></td>
-                <td className="py-2 px-2 text-slate-400">{r.profile || r.Profile}</td>
-                <td className="py-2 px-2 text-right"><button onClick={() => onAction("delete", { ruleId: r.name || r.DisplayName })} className="p-1 hover:bg-white/10 rounded"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button></td>
+                <td className="py-2 px-2 text-white font-medium">{r.name || r.id}</td>
+                <td className="py-2 px-2 text-slate-400">{r.direction}</td>
+                <td className="py-2 px-2"><span className={`px-2 py-0.5 rounded-full text-[10px] ${r.action === "ACCEPT" || r.action === "Allow" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>{r.action}</span></td>
+                <td className="py-2 px-2 text-right"><button onClick={() => onAction("delete", { ruleId: r.id || r.name })} className="p-1 hover:bg-white/10 rounded"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button></td>
               </tr>
             ))}
           </tbody>
