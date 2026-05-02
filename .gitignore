@@ -22,3 +22,5 @@ ContextP/
 !ContextP/PARAMS/*.md
 data/
 *.log
+
+scratch/
