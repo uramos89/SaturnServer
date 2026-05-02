@@ -51,14 +51,14 @@ try {
     $result = Run-Root $session "cd /opt/saturn && npm install --production=false 2>&1"
     Write-Output $result.Output
     
-    # 6. Build frontend
+    # 6. Building frontend
     Write-Output "=== 6. Building frontend ==="
     $result = Run-Root $session "cd /opt/saturn && npm run build 2>&1"
     Write-Output $result.Output
     
     # 7. Restart PM2 with NODE_ENV=production
-    Write-Output "=== 7. Restarting Saturn (production mode) ==="
-    $result = Run-Root $session "cd /opt/saturn && pm2 delete saturn 2>/dev/null; NODE_ENV=production pm2 start server.ts --interpreter tsx --name saturn --env NODE_ENV=production 2>&1"
+    Write-Host "=== 7. Restarting server (FORCE) ==="
+    $result = Run-Root $session "pm2 kill; cd /opt/saturn; git reset --hard origin/main; NODE_ENV=production pm2 start server.ts --interpreter tsx --name saturn --env NODE_ENV=production 2>&1"
     Write-Output $result.Output
     
     # 8. Save PM2 config

@@ -1832,9 +1832,9 @@ Return ONLY a JSON object with the following structure:
     });
   }
 
-  const PORT = parseInt(process.env.PORT || "80");
+  const PORT = parseInt(process.env.PORT || (process.env.NODE_ENV === "production" ? "80" : "3000"));
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Saturn Core v0.1.0 running on http://0.0.0.0:${PORT}`);
+    console.log(`Saturn Core v0.1.0-FIX running on http://0.0.0.0:${PORT} (NODE_ENV: ${process.env.NODE_ENV})`);
     console.log(`Neural Engine: ARES 1.0.0`);
     console.log(`SSH Agent ready. Connect to servers via POST /api/ssh/connect`);
   });
