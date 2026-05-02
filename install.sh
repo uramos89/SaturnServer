@@ -85,7 +85,16 @@ NODE_ENV=production pm2 start tsx --name saturn -- server.ts
 pm2 save
 
 echo "========================================="
-echo "  INSTALLATION COMPLETE!"
-echo "  URL: http://$(hostname -I | awk '{print $1}'):3000"
-echo "  Check logs with: pm2 logs saturn"
+echo "  🚀 SATURN-X INSTALLED SUCCESSFULLY!"
 echo "========================================="
+echo ""
+echo "  Access the platform at:"
+echo "  URL: http://$(hostname -I | awk '{print $1}'):3000"
+echo ""
+echo "  System Info:"
+echo "  - Dir:  $APP_DIR"
+echo "  - Port: 3000"
+echo "  - Logs: pm2 logs saturn"
+echo ""
+echo "========================================="
+
