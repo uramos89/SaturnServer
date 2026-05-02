@@ -1286,7 +1286,7 @@ Real-time SSH Metrics (${sshConn.host}):
       const key = `${conn.username}@${conn.host}:${conn.port}`;
       const { script } = ScriptGenerator.generate({ category: "tasks", action: "list", os: osType, params: {} });
       const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
+      try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
@@ -1300,7 +1300,7 @@ Real-time SSH Metrics (${sshConn.host}):
       const key = `${conn.username}@${conn.host}:${conn.port}`;
       const { script } = ScriptGenerator.generate({ category: "processes", action: "list", os: osType, params: {} });
       const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
+      try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
@@ -1314,7 +1314,7 @@ Real-time SSH Metrics (${sshConn.host}):
       const key = `${conn.username}@${conn.host}:${conn.port}`;
       const { script } = ScriptGenerator.generate({ category: "network", action: "list", os: osType, params: {} });
       const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
+      try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
@@ -1328,7 +1328,7 @@ Real-time SSH Metrics (${sshConn.host}):
       const key = `${conn.username}@${conn.host}:${conn.port}`;
       const { script } = ScriptGenerator.generate({ category: "firewall", action: "list", os: osType, params: {} });
       const result = await sshAgent.execCommand(key, script);
-      res.json({ output: result.stdout });
+      try { res.json({ data: JSON.parse(result.stdout) }); } catch { res.json({ data: [], raw: result.stdout }); }
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
@@ -1415,6 +1415,31 @@ Real-time SSH Metrics (${sshConn.host}):
       res.json({ output: result.stdout });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
+
+  app.post("/api/servers/:id/tab/:category/:action", async (req, res) => {
+    const { id, category, action } = req.params;
+    const params = req.body;
+    try {
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      if (!conn) return res.status(404).json({ error: "No SSH connection" });
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
+      const key = `${conn.username}@${conn.host}:${conn.port}`;
+      
+      const { script } = ScriptGenerator.generate({ category, action, os: osType, params });
+      if (!script) return res.status(400).json({ error: "Invalid action or category" });
+      
+      const result = await sshAgent.execCommand(key, script);
+      
+      db.prepare(`INSERT INTO command_history (id, serverId, command, stdout, stderr, exitCode, executedBy, timestamp) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(`cmd-${Date.now()}`, id, `${category}:${action}`, result.stdout.substring(0, 5000), 
+             result.stderr.substring(0, 1000), result.code, "admin", new Date().toISOString());
+
+      res.json({ success: true, ...result });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
   app.post("/api/neural/generate-script", async (req, res) => {
     const { prompt, os, context } = req.body;
     if (!prompt || !os) return res.status(400).json({ error: "Prompt and OS required" });

@@ -234,21 +234,14 @@ fi
   static tasks_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-echo "=== Scheduled Tasks ==="
-powershell -Command "Get-ScheduledTask | Where-Object {$_.TaskPath -notlike '\\\\Microsoft\\\\*'} | Select-Object TaskName,TaskPath,State | Format-Table -AutoSize"
+powershell -Command "Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {$_.TaskPath -notlike '\\Microsoft\\*'} | Select-Object @{Name='id';Expression={$_.TaskName}}, @{Name='name';Expression={$_.TaskName}}, @{Name='state';Expression={[string]$_.State}}, @{Name='schedule';Expression={'N/A'}}, @{Name='command';Expression={if($_.Actions.Execute){$_.Actions.Execute}else{'N/A'}}}, @{Name='script';Expression=@{shebang=''}} | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List scheduled tasks", ["Read-only operation"], "30s");
+      return this.buildResponse(script, "List scheduled tasks as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
-echo "=== Crontabs ==="
-for user in $(cut -f1 -d: /etc/passwd); do
-  crontab -l "\${user}" 2>/dev/null && echo "---"
-done
-echo ""
-echo "=== Systemd Timers ==="
-systemctl list-timers --all 2>/dev/null || echo "(no systemd timers)"
+crontab -l 2>/dev/null | grep -v '^#' | grep -v '^$' | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"id\\":\\"%s\\",\\"name\\":\\"cron job\\",\\"state\\":\\"Active\\",\\"schedule\\":\\"%s %s %s %s %s\\",\\"command\\":\\"%s\\",\\"script\\":{\\"shebang\\":\\"\\"}}", NR, $1, $2, $3, $4, $5, $6} END{print "]"}'
 `;
-    return this.buildResponse(script, "List all cron jobs and systemd timers", ["Read-only operation"], "30s");
+    return this.buildResponse(script, "List cron jobs as JSON", ["Read-only operation"], "30s");
   }
 
   static tasks_create(os: OSType, params: Record<string, any>): ScriptResponse {
@@ -308,22 +301,14 @@ echo "Task ${taskId} removed from crontab"
   static processes_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-echo "=== Processes ==="
-powershell -Command "Get-Process | Sort-Object CPU -Descending | Select-Object -First 50 Id,ProcessName,CPU,WorkingSet,StartTime | Format-Table -AutoSize"
+powershell -Command "Get-Process -IncludeUserName -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First 50 | Select-Object @{Name='pid';Expression={$_.Id}}, @{Name='user';Expression={$_.UserName}}, @{Name='cpu';Expression={[math]::Round($_.CPU, 2)}}, @{Name='mem';Expression={[math]::Round($_.WorkingSet/1MB, 2)}}, @{Name='vsz';Expression={[math]::Round($_.VirtualMemorySize/1MB, 2)}}, @{Name='rss';Expression={[math]::Round($_.WorkingSet/1MB, 2)}}, @{Name='state';Expression={if($_.Responding){'Running'}else{'Not Responding'}}}, @{Name='name';Expression={$_.ProcessName}} | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List top 50 processes by CPU", ["Read-only operation"], "30s");
+      return this.buildResponse(script, "List top 50 processes by CPU as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
-echo "=== Top Processes (by CPU) ==="
-ps aux --sort=-%cpu 2>/dev/null | head -30 || ps aux 2>/dev/null | head -30
-echo ""
-echo "=== System Load ==="
-uptime
-echo ""
-echo "=== Memory ==="
-free -h
+ps -ax --no-headers -o pid=,user=,pcpu=,pmem=,vsz=,rss=,stat=,comm= --sort=-pcpu 2>/dev/null | head -n 50 | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"pid\\":\\"%s\\",\\"user\\":\\"%s\\",\\"cpu\\":\\"%s\\",\\"mem\\":\\"%s\\",\\"vsz\\":\\"%s\\",\\"rss\\":\\"%s\\",\\"state\\":\\"%s\\",\\"name\\":\\"%s\\"}", $1, $2, $3, $4, $5, $6, $7, $8} END{print "]"}'
 `;
-    return this.buildResponse(script, "List processes sorted by CPU usage", ["Read-only operation"], "30s");
+    return this.buildResponse(script, "List top 50 processes as JSON", ["Read-only operation"], "30s");
   }
 
   static processes_kill(os: OSType, params: Record<string, any>): ScriptResponse {
@@ -464,34 +449,14 @@ echo "Log rotation completed"
   static network_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-echo "=== Network Interfaces ==="
-powershell -Command "Get-NetAdapter | Select-Object Name,InterfaceDescription,Status,LinkSpeed | Format-Table -AutoSize"
-echo ""
-echo "=== IP Configuration ==="
-powershell -Command "Get-NetIPAddress | Where-Object AddressFamily -eq 'IPv4' | Select-Object InterfaceAlias,IPAddress,PrefixLength | Format-Table -AutoSize"
-echo ""
-echo "=== DNS ==="
-powershell -Command "Get-DnsClientServerAddress | Select-Object InterfaceAlias,ServerAddresses | Format-Table -AutoSize"
-echo ""
-echo "=== Routing Table ==="
-powershell -Command "Get-NetRoute | Where-Object AddressFamily -eq 'IPv4' | Select-Object DestinationPrefix,NextHop,RouteMetric | Format-Table -AutoSize"
+powershell -Command "$res = @(); foreach($a in Get-NetAdapter -ErrorAction SilentlyContinue){ $ip = Get-NetIPAddress -InterfaceAlias $a.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1; $stats = Get-NetAdapterStatistics -Name $a.Name -ErrorAction SilentlyContinue; $res += @{ iface=$a.Name; status=$a.Status; ip=if($ip){$ip.IPAddress}else{'None'}; mask=if($ip){$ip.PrefixLength}else{0}; rx=$stats.ReceivedBytes; tx=$stats.SentBytes } }; $res | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List network interfaces, IPs, DNS and routes", ["Read-only operation"], "30s");
+      return this.buildResponse(script, "List network interfaces as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
-echo "=== Network Interfaces ==="
-ip -br addr 2>/dev/null || ifconfig 2>/dev/null
-echo ""
-echo "=== Routing Table ==="
-ip route 2>/dev/null || route -n 2>/dev/null
-echo ""
-echo "=== DNS ==="
-resolvectl status 2>/dev/null || cat /etc/resolv.conf 2>/dev/null
-echo ""
-echo "=== Listening Ports ==="
-ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null
+ip -br addr 2>/dev/null | awk 'BEGIN{printf "["} {if(NR>1)printf ","; split($3,a,"/"); printf "{\\"iface\\":\\"%s\\",\\"status\\":\\"%s\\",\\"ip\\":\\"%s\\",\\"mask\\":\\"%s\\"}", $1, $2, a[1], a[2]} END{print "]"}'
 `;
-    return this.buildResponse(script, "List network interfaces, routes, DNS and listening ports", ["Read-only operation"], "30s");
+    return this.buildResponse(script, "List network interfaces as JSON", ["Read-only operation"], "30s");
   }
 
   static network_configure(os: OSType, params: Record<string, any>): ScriptResponse {
@@ -551,22 +516,14 @@ echo "WARNING: Network changes may disconnect SSH session"
   static firewall_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-echo "=== Firewall Rules ==="
-powershell -Command "Get-NetFirewallRule | Where-Object Enabled -eq 'True' | Select-Object DisplayName,Direction,Action,Profile | Format-Table -AutoSize"
+powershell -Command "Get-NetFirewallRule -Enabled True -ErrorAction SilentlyContinue | Select-Object -First 50 | Select-Object @{Name='id';Expression={$_.InstanceID}}, @{Name='name';Expression={$_.DisplayName}}, @{Name='direction';Expression={[string]$_.Direction}}, @{Name='action';Expression={[string]$_.Action}} | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List firewall rules", ["Read-only operation"], "30s");
+      return this.buildResponse(script, "List firewall rules as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
-echo "=== iptables Rules ==="
-iptables -L -n --line-numbers 2>/dev/null || echo "(iptables not available)"
-echo ""
-echo "=== nftables ==="
-nft list ruleset 2>/dev/null || echo "(nftables not available)"
-echo ""
-echo "=== ufw Status ==="
-ufw status 2>/dev/null || echo "(ufw not available)"
+iptables -S 2>/dev/null | grep '^-A' | head -n 50 | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"id\\":\\"%s\\",\\"name\\":\\"%s\\",\\"direction\\":\\"%s\\",\\"action\\":\\"%s\\"}", NR, $2, $2, $4} END{print "]"}'
 `;
-    return this.buildResponse(script, "List firewall rules (iptables/nftables/ufw)", ["Read-only operation"], "30s");
+    return this.buildResponse(script, "List firewall rules as JSON", ["Read-only operation"], "30s");
   }
 
   static firewall_add(os: OSType, params: Record<string, any>): ScriptResponse {

@@ -1851,12 +1851,16 @@ export default function App() {
 
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl"><div className="flex items-center gap-4"><button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl"><ChevronLeft className="" size={18} /></button><div><div className="flex items-center gap-2 mb-1"><h2 className="text-sm font-black uppercase tracking-widest">{selectedServer?.name}</h2><div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer?.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} /></div><p className="text-[10px] font-medium text-slate-500 uppercase">{selectedServer?.ip} • {selectedServer?.os}</p></div></div><div className="flex items-center gap-3"><button onClick={handleRefreshServer} disabled={syncingServer} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-white/10 transition-colors disabled:opacity-50"><RefreshCw size={14} className={syncingServer ? "animate-spin" : ""} /> Sync</button><select value={remediationConfigs.find(c => c.serverId === selectedServer?.id)?.mode || 'global'} onChange={(e) => handleUpdateRemediationMode(selectedServer!.id, e.target.value)} className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none cursor-pointer"><option value="global">Mode: Global</option><option value="auto">Mode: Auto</option><option value="skill">Mode: Skill</option><option value="manual">Mode: Manual</option></select></div></div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl"><div className="flex items-center gap-4"><button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl"><ChevronLeft className="" size={18} /></button><div><div className="flex items-center gap-2 mb-1"><h2 className="text-sm font-black uppercase tracking-widest">{selectedServer?.name}</h2><div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer?.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} /></div><p className="text-[10px] font-medium text-slate-500 uppercase">{selectedServer?.ip} • {selectedServer?.os}</p></div></div><div className="flex items-center gap-3"><button onClick={() => handleRefreshServer(false)} disabled={syncingServer} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-white/10 transition-colors disabled:opacity-50"><RefreshCw size={14} className={syncingServer ? "animate-spin" : ""} /> Sync</button><select value={remediationConfigs.find(c => c.serverId === selectedServer?.id)?.mode || 'global'} onChange={(e) => handleUpdateRemediationMode(selectedServer!.id, e.target.value)} className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none cursor-pointer"><option value="global">Mode: Global</option><option value="auto">Mode: Auto</option><option value="skill">Mode: Skill</option><option value="manual">Mode: Manual</option></select></div></div>
         <div className="flex items-center gap-1 overflow-x-auto pb-2 custom-scrollbar">{tabs.map(t => <button key={t.id} onClick={() => setServerDetailTab(t.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", serverDetailTab === t.id ? "bg-orange-500 text-black" : "text-slate-500 hover:text-white hover:bg-white/5")}><t.icon size={14} /> {t.label}</button>)}</div>
         <div className="min-h-[500px]">
           {serverDetailTab === 'summary' && <ServerSummaryTab />}
           {serverDetailTab === 'terminal' && <TerminalTab />}
-          {serverDetailTab !== 'summary' && serverDetailTab !== 'terminal' && renderTabData()}
+          {serverDetailTab === 'processes' && <ProcessesTab />}
+          {serverDetailTab === 'network' && <NetworkTab />}
+          {serverDetailTab === 'firewall' && <FirewallTab />}
+          {serverDetailTab === 'tasks' && <TasksTab />}
+          {serverDetailTab !== 'summary' && serverDetailTab !== 'terminal' && serverDetailTab !== 'processes' && serverDetailTab !== 'network' && serverDetailTab !== 'firewall' && serverDetailTab !== 'tasks' && renderTabData()}
         </div>
       </div>
     );
@@ -2011,6 +2015,240 @@ export default function App() {
             autoFocus
           />
         </form>
+      </div>
+    );
+  };
+
+  const ProcessesTab = () => {
+    if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching processes...</div>;
+    if (!tabData) return null;
+    const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
+    if (dataArray.length === 0) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest">No processes available</div>;
+
+    const handleAction = async (pid: string, action: string, extraParams: any = {}) => {
+      try {
+        await fetch(`/api/servers/${selectedServer!.id}/tab/processes/${action}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid, ...extraParams })
+        });
+        handleRefreshServer(true);
+      } catch (e) {
+        alert(`Error executing ${action}`);
+      }
+    };
+
+    return (
+      <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-max">
+          <thead>
+            <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+              <th className="p-4">PID</th>
+              <th className="p-4">User</th>
+              <th className="p-4">Name</th>
+              <th className="p-4">CPU %</th>
+              <th className="p-4">Memory</th>
+              <th className="p-4">Status</th>
+              <th className="p-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dataArray.map((row: any, i: number) => (
+              <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
+                <td className="p-4">{row.pid}</td>
+                <td className="p-4">{row.user}</td>
+                <td className="p-4 truncate max-w-[150px] font-bold text-white">{row.name}</td>
+                <td className="p-4 text-orange-400">{row.cpu}</td>
+                <td className="p-4">{row.mem}</td>
+                <td className="p-4">{row.state}</td>
+                <td className="p-4 text-right space-x-2">
+                  <button onClick={() => handleAction(row.pid, 'renice', { priority: -10 })} className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded-md text-[9px] uppercase">Prioritize</button>
+                  <button onClick={() => handleAction(row.pid, 'kill', { signal: 'SIGTERM' })} className="px-2 py-1 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-md text-[9px] uppercase">Kill</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const NetworkTab = () => {
+    if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching network...</div>;
+    if (!tabData) return null;
+    const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
+    if (dataArray.length === 0) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest">No network data</div>;
+
+    const handleAction = async (iface: string, action: string, extraParams: any = {}) => {
+      try {
+        await fetch(`/api/servers/${selectedServer!.id}/tab/network/${action}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iface, ...extraParams })
+        });
+        handleRefreshServer(true);
+      } catch (e) {
+        alert(`Error executing ${action}`);
+      }
+    };
+
+    return (
+      <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-max">
+          <thead>
+            <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+              <th className="p-4">Interface</th>
+              <th className="p-4">Status</th>
+              <th className="p-4">IP Address</th>
+              <th className="p-4">Subnet Mask</th>
+              <th className="p-4">RX Bytes</th>
+              <th className="p-4">TX Bytes</th>
+              <th className="p-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dataArray.map((row: any, i: number) => (
+              <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
+                <td className="p-4 font-bold text-white">{row.iface}</td>
+                <td className="p-4">
+                  <span className={cn("px-2 py-1 rounded-full text-[8px] uppercase font-black", row.status?.toLowerCase() === 'up' ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>
+                    {row.status}
+                  </span>
+                </td>
+                <td className="p-4">{row.ip || 'N/A'}</td>
+                <td className="p-4">{row.mask || 'N/A'}</td>
+                <td className="p-4">{row.rx || 'N/A'}</td>
+                <td className="p-4">{row.tx || 'N/A'}</td>
+                <td className="p-4 text-right space-x-2">
+                  <button onClick={() => {
+                    const newIp = prompt("Enter new IP address:");
+                    if(newIp) handleAction(row.iface, 'configure', { ip: newIp, dhcp: false });
+                  }} className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded-md text-[9px] uppercase">Set IP</button>
+                  <button onClick={() => handleAction(row.iface, 'configure', { dhcp: true })} className="px-2 py-1 bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 rounded-md text-[9px] uppercase">DHCP</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const FirewallTab = () => {
+    if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching firewall...</div>;
+    if (!tabData) return null;
+    const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
+
+    const handleAction = async (action: string, extraParams: any = {}) => {
+      try {
+        await fetch(`/api/servers/${selectedServer!.id}/tab/firewall/${action}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(extraParams)
+        });
+        handleRefreshServer(true);
+      } catch (e) {
+        alert(`Error executing ${action}`);
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button onClick={() => {
+            const port = prompt("Enter port number to ALLOW (e.g. 8080):");
+            if(port) handleAction('add', { port, protocol: 'tcp', action: 'ACCEPT' });
+          }} className="px-4 py-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 rounded-xl text-[10px] font-black uppercase transition-colors">+ Open Port</button>
+        </div>
+        <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
+          {dataArray.length === 0 ? <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest">No firewall rules</div> : (
+          <table className="w-full text-left border-collapse min-w-max">
+            <thead>
+              <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+                <th className="p-4">ID</th>
+                <th className="p-4">Name/Chain</th>
+                <th className="p-4">Direction</th>
+                <th className="p-4">Action</th>
+                <th className="p-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dataArray.map((row: any, i: number) => (
+                <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
+                  <td className="p-4 text-slate-500">{row.id}</td>
+                  <td className="p-4 font-bold text-white">{row.name}</td>
+                  <td className="p-4">{row.direction}</td>
+                  <td className="p-4">
+                    <span className={cn("px-2 py-1 rounded-full text-[8px] uppercase font-black", (row.action === 'ACCEPT' || row.action === 'Allow') ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500")}>
+                      {row.action}
+                    </span>
+                  </td>
+                  <td className="p-4 text-right space-x-2">
+                    <button onClick={() => {
+                      if(confirm(`Delete rule ${row.id}?`)) handleAction('delete', { ruleId: row.id });
+                    }} className="px-2 py-1 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-md text-[9px] uppercase">Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const TasksTab = () => {
+    if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching tasks...</div>;
+    if (!tabData) return null;
+    const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
+
+    const handleAction = async (action: string, extraParams: any = {}) => {
+      try {
+        await fetch(`/api/servers/${selectedServer!.id}/tab/tasks/${action}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(extraParams)
+        });
+        handleRefreshServer(true);
+      } catch (e) {
+        alert(`Error executing ${action}`);
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button onClick={() => {
+            const command = prompt("Enter command to schedule:");
+            const schedule = prompt("Enter cron schedule (e.g. '0 * * * *'):");
+            if(command && schedule) handleAction('create', { command, schedule });
+          }} className="px-4 py-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 rounded-xl text-[10px] font-black uppercase transition-colors">+ New Task</button>
+        </div>
+        <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
+          {dataArray.length === 0 ? <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest">No scheduled tasks</div> : (
+          <table className="w-full text-left border-collapse min-w-max">
+            <thead>
+              <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+                <th className="p-4">Name</th>
+                <th className="p-4">Schedule</th>
+                <th className="p-4">Command</th>
+                <th className="p-4">State</th>
+                <th className="p-4">Shebang</th>
+                <th className="p-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dataArray.map((row: any, i: number) => (
+                <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
+                  <td className="p-4 font-bold text-white">{row.name}</td>
+                  <td className="p-4 text-orange-400">{row.schedule}</td>
+                  <td className="p-4 truncate max-w-[200px]">{row.command}</td>
+                  <td className="p-4">{row.state}</td>
+                  <td className="p-4 text-slate-500">{row.script?.shebang ? <span>{row.script.shebang}</span> : <span>—</span>}</td>
+                  <td className="p-4 text-right space-x-2">
+                    <button onClick={() => {
+                      if(confirm(`Delete task ${row.id}?`)) handleAction('delete', { taskId: row.id });
+                    }} className="px-2 py-1 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-md text-[9px] uppercase">Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          )}
+        </div>
       </div>
     );
   };
