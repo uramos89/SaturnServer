@@ -1856,10 +1856,10 @@ export default function App() {
         <div className="min-h-[500px]">
           {serverDetailTab === 'summary' && <ServerSummaryTab />}
           {serverDetailTab === 'terminal' && <TerminalTab />}
-          {serverDetailTab === 'processes' && <ProcessesTab />}
-          {serverDetailTab === 'network' && <NetworkTab />}
-          {serverDetailTab === 'firewall' && <FirewallTab />}
-          {serverDetailTab === 'tasks' && <TasksTab />}
+          {serverDetailTab === 'processes' && <ProcessesTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'network' && <NetworkTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'firewall' && <FirewallTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'tasks' && <TasksTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
           {serverDetailTab !== 'summary' && serverDetailTab !== 'terminal' && serverDetailTab !== 'processes' && serverDetailTab !== 'network' && serverDetailTab !== 'firewall' && serverDetailTab !== 'tasks' && renderTabData()}
         </div>
       </div>
@@ -2019,7 +2019,7 @@ export default function App() {
     );
   };
 
-  const ProcessesTab = () => {
+  const ProcessesTab = ({ loadingTab, tabData, selectedServer, handleRefreshServer }: any) => {
     if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching processes...</div>;
     if (!tabData) return null;
     const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
@@ -2071,7 +2071,7 @@ export default function App() {
     );
   };
 
-  const NetworkTab = () => {
+  const NetworkTab = ({ loadingTab, tabData, selectedServer, handleRefreshServer }: any) => {
     if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching network...</div>;
     if (!tabData) return null;
     const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
@@ -2133,7 +2133,7 @@ export default function App() {
     );
   };
 
-  const FirewallTab = () => {
+  const FirewallTab = ({ loadingTab, tabData, selectedServer, handleRefreshServer }: any) => {
     if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching firewall...</div>;
     if (!tabData) return null;
     const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
@@ -2195,7 +2195,7 @@ export default function App() {
     );
   };
 
-  const TasksTab = () => {
+  const TasksTab = ({ loadingTab, tabData, selectedServer, handleRefreshServer }: any) => {
     if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching tasks...</div>;
     if (!tabData) return null;
     const dataArray = Array.isArray(tabData.data) ? tabData.data : [];
