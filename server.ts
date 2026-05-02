@@ -543,7 +543,7 @@ async function startServer() {
     const { serverId } = req.body;
     if (!serverId) return res.status(400).json({ error: "serverId required" });
 
-    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(serverId) as any;
     if (!conn) return res.status(404).json({ error: "Connection not found" });
 
     const key = `${conn.username}@${conn.host}:${conn.port}`;
@@ -558,7 +558,7 @@ async function startServer() {
   // POST /api/servers/:id/refresh - Refresh metrics via SSH
   app.post("/api/servers/:id/refresh", async (req, res) => {
     const { id } = req.params;
-    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
     if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
 
     try {
@@ -606,7 +606,7 @@ async function startServer() {
     
     if (!command) return res.status(400).json({ error: "Command required" });
 
-    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
     if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
 
     try {
@@ -653,7 +653,7 @@ async function startServer() {
     
     if (!script) return res.status(400).json({ error: "Script required" });
 
-    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+    const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
     if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
 
     try {
@@ -1021,7 +1021,7 @@ async function startServer() {
 
   app.post("/api/obpa/approve", async (req, res) => {
     const { obpaId, approved } = req.body;
-    const cycle = db.prepare("SELECT * FROM obpa_cycles WHERE id = ?").get() as any;
+    const cycle = db.prepare("SELECT * FROM obpa_cycles WHERE id = ?").get(obpaId) as any;
     if (!cycle) return res.status(404).json({ error: "Cycle not found" });
 
     if (approved) {
@@ -1030,9 +1030,9 @@ async function startServer() {
         .run(`audit-${Date.now()}`, "USER", "REMEDIATION_APPROVED", `User approved remediation for incident ${cycle.incidentId}`, new Date().toISOString());
       
       // Execute remediation script via SSH if we have a connection
-      const incident = db.prepare("SELECT * FROM incidents WHERE id = ?").get() as any;
+      const incident = db.prepare("SELECT * FROM incidents WHERE id = ?").get(cycle.incidentId) as any;
       if (incident) {
-        const sshConn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get() as any;
+        const sshConn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(incident.serverId) as any;
         if (sshConn && cycle.remediation_script) {
           try {
             const key = `${sshConn.username}@${sshConn.host}:${sshConn.port}`;
@@ -1088,15 +1088,15 @@ async function startServer() {
   // Neural Core: OBPA Cycle with SSH context
   app.post("/api/neural/analyze", async (req, res) => {
     const { incidentId, provider = 'gemini' } = req.body;
-    const incident = db.prepare("SELECT * FROM incidents WHERE id = ?").get() as any;
-    const server = db.prepare("SELECT * FROM servers WHERE id = ?").get() as any;
+    const incident = db.prepare("SELECT * FROM incidents WHERE id = ?").get(incidentId) as any;
+    const server = db.prepare("SELECT * FROM servers WHERE id = ?").get(incident.serverId) as any;
     
     if (!incident || !server) return res.status(404).json({ error: "Not found" });
 
     try {
       // Get SSH real-time metrics if available
       let realTimeMetrics = "";
-      const sshConn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ? AND status = 'connected'").get() as any;
+      const sshConn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ? AND status = 'connected'").get(server.id) as any;
       if (sshConn) {
         try {
           const key = `${sshConn.username}@${sshConn.host}:${sshConn.port}`;
