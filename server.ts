@@ -1813,8 +1813,8 @@ Return ONLY a JSON object with the following structure:
   app.use(adminRouter);
 
   // ── ARES Neural Core Worker ───────────────────────────────────────────────
-  const aresWorker = new ARESWorker(db, sshAgent);
-  aresWorker.start(60000);
+  // const aresWorker = new ARESWorker(db, sshAgent);
+  // aresWorker.start(60000);
 
   // ── Background SSH Metrics Scheduler ──────────────────────────────────────
   if (process.env.NODE_ENV === "production") {
