@@ -4,14 +4,13 @@ import path from 'path';
 const filePath = 'src/App.tsx';
 const original = fs.readFileSync(filePath, 'utf8').split('\n');
 
-// Update imports to include everything needed
 const imports = `import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Server, Activity, Database, Brain, ShieldCheck, AlertTriangle, Terminal, 
   ChevronRight, ChevronLeft, Cpu, HardDrive, RefreshCw, Search, Bell, Settings, 
   LayoutDashboard, Logs, CheckCircle2, XCircle, Mail, Zap, Plug, Unplug, 
   TerminalSquare, History, Globe, Key, Wifi, User, Lock, Eye, EyeOff, Send, 
-  LogOut, Menu, Trash2, Folder, FileText, Play, Plus, Trash
+  LogOut, Menu, Trash2, Folder, FileText, Play, Plus, Trash, Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -23,8 +22,19 @@ import {
 } from 'recharts';
 `;
 
-// Helper components that were missing or need definition
 const helpers = `
+const StatCard = ({ title, value, icon: Icon, color }: any) => (
+  <div className="p-6 rounded-2xl bg-black/40 border border-white/5 group hover:border-orange-500/20 transition-all">
+    <div className="flex justify-between items-start mb-4">
+      <div className={cn("p-2 rounded-xl bg-white/5", color)}>
+        <Icon size={20} />
+      </div>
+    </div>
+    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-1">{title}</p>
+    <h3 className="text-2xl font-black text-white">{value}</h3>
+  </div>
+);
+
 const ServerCard = ({ server, onClick }: { server: ManagedServer, onClick: () => void }) => (
   <motion.div 
     whileHover={{ y: -4 }}
@@ -61,9 +71,8 @@ const ServerCard = ({ server, onClick }: { server: ManagedServer, onClick: () =>
 );
 `;
 
-// Keep everything until the App component starts (around line 1122 before my mess)
-// Actually, let's just keep the original stuff before line 1122
-const head = original.slice(51, 1122).join('\n'); // Start after original imports
+const head = original.slice(1028, 1122).join('\n'); // Keep original components like IncidentCard, OnboardingWizard, etc.
+// Wait, I should verify the line numbers for existing components in App.tsx
 
 const newBody = `
 export default function App() {
@@ -149,7 +158,7 @@ export default function App() {
   };
 
   const SidebarItem = ({ id, label, icon: Icon }: any) => (
-    <button onClick={() => { setActiveTab(id); setMobileMenuOpen(false); }}
+    <button onClick={() => { setActiveTab(id); setMobileMenuOpen(false); setSelectedServer(null); }}
       className={cn("flex items-center gap-3 w-full p-3 rounded-xl transition-all group", activeTab === id ? "bg-orange-500/10 text-orange-400" : "text-slate-500 hover:text-white hover:bg-white/5")}>
       <Icon size={20} className={cn("transition-transform group-hover:scale-110", activeTab === id ? "text-orange-500" : "text-slate-500")} />
       {(!sidebarCollapsed || mobileMenuOpen) && <span className="text-xs font-black uppercase tracking-widest">{label}</span>}
@@ -162,7 +171,7 @@ export default function App() {
         <StatCard title={t('stats.total')} value={servers.length} icon={Server} color="text-blue-500" />
         <StatCard title={t('stats.online')} value={servers.filter(s => s.status === 'online').length} icon={CheckCircle2} color="text-emerald-500" />
         <StatCard title={t('stats.incidents')} value={incidents.filter(i => i.status === 'open').length} icon={AlertTriangle} color="text-rose-500" />
-        <StatCard title=\"SSH Connected\" value={sshConnections.filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
+        <StatCard title={t('stats.ssh')} value={sshConnections.filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
@@ -201,7 +210,7 @@ export default function App() {
     const tabs = [{ id: 'summary', label: 'Summary', icon: LayoutDashboard }, { id: 'system', label: 'System', icon: Cpu }, { id: 'network', label: 'Network', icon: Globe }, { id: 'security', label: 'Security', icon: ShieldCheck }, { id: 'backups', label: 'Backups', icon: Database }, { id: 'tasks', label: 'Tasks', icon: Logs }, { id: 'terminal', label: 'Terminal', icon: Terminal }];
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl"><div className="flex items-center gap-4"><button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl"><ChevronLeft className=\"\" size={18} /></button><div><div className="flex items-center gap-2 mb-1"><h2 className="text-sm font-black uppercase tracking-widest">{selectedServer?.name}</h2><div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer?.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} /></div><p className="text-[10px] font-medium text-slate-500 uppercase">{selectedServer?.ip} • {selectedServer?.os}</p></div></div><div className="flex items-center gap-3"><button className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl"><RefreshCw size={14} /> Sync</button><select value={remediationConfigs.find(c => c.serverId === selectedServer?.id)?.mode || 'global'} onChange={(e) => handleUpdateRemediationMode(selectedServer!.id, e.target.value)} className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none"><option value="global">Mode: Global</option><option value="auto">Mode: Auto</option><option value="skill">Mode: Skill</option><option value="manual">Mode: Manual</option></select></div></div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl"><div className="flex items-center gap-4"><button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl"><ChevronLeft size={18} /></button><div><div className="flex items-center gap-2 mb-1"><h2 className="text-sm font-black uppercase tracking-widest">{selectedServer?.name}</h2><div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer?.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} /></div><p className="text-[10px] font-medium text-slate-500 uppercase">{selectedServer?.ip} • {selectedServer?.os}</p></div></div><div className="flex items-center gap-3"><button className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl"><RefreshCw size={14} /> Sync</button><select value={remediationConfigs.find(c => c.serverId === selectedServer?.id)?.mode || 'global'} onChange={(e) => handleUpdateRemediationMode(selectedServer!.id, e.target.value)} className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none"><option value="global">Mode: Global</option><option value="auto">Mode: Auto</option><option value="skill">Mode: Skill</option><option value="manual">Mode: Manual</option></select></div></div>
         <div className="flex items-center gap-1 overflow-x-auto pb-2 custom-scrollbar">{tabs.map(t => <button key={t.id} onClick={() => setServerDetailTab(t.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", serverDetailTab === t.id ? "bg-orange-500 text-black" : "text-slate-500 hover:text-white hover:bg-white/5")}><t.icon size={14} /> {t.label}</button>)}</div>
         <div className="min-h-[500px]">{serverDetailTab === 'summary' && <ServerSummaryTab />} {serverDetailTab !== 'summary' && <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest">{serverDetailTab} loading...</div>}</div>
       </div>
@@ -228,34 +237,53 @@ export default function App() {
   );
 
   const ContextPView = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Database className="text-orange-500" size={20} /><h2 className="text-sm font-black uppercase tracking-[0.2em]">Memory</h2></div></div><div className="grid grid-cols-1 lg:grid-cols-4 gap-8"><div className="lg:col-span-1 bg-black/40 border border-white/5 rounded-2xl p-4 overflow-y-auto max-h-[600px] custom-scrollbar">{contextPFiles.map((n, i) => <div key={i} className="p-2 hover:bg-white/5 rounded-lg text-slate-400 flex items-center gap-2\"><Database size={14} className=\"text-orange-500/50\" /><span className=\"text-[10px] font-black uppercase\">{n.name}</span></div>)}</div><div className="lg:col-span-3 bg-black/60 border border-white/5 rounded-2xl p-8 text-center"><Brain size={48} className="text-slate-800 mx-auto mb-4" /><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Select a file to analyze</p></div></div></div>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Database className="text-orange-500" size={20} /><h2 className="text-sm font-black uppercase tracking-[0.2em]">Memory</h2></div></div><div className="grid grid-cols-1 lg:grid-cols-4 gap-8"><div className="lg:col-span-1 bg-black/40 border border-white/5 rounded-2xl p-4 overflow-y-auto max-h-[600px] custom-scrollbar">{contextPFiles.map((n, i) => <div key={i} className="p-2 hover:bg-white/5 rounded-lg text-slate-400 flex items-center gap-2"><Database size={14} className="text-orange-500/50" /><span className="text-[10px] font-black uppercase">{n.name}</span></div>)}</div><div className="lg:col-span-3 bg-black/60 border border-white/5 rounded-2xl p-8 text-center"><Brain size={48} className="text-slate-800 mx-auto mb-4" /><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Select a file to analyze</p></div></div></div>
+  );
+
+  const SettingsView = () => (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+      <div className="flex items-center gap-3 mb-8"><Settings className="text-orange-500" size={20} /><h2 className="text-sm font-black uppercase tracking-[0.2em]">Settings</h2></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="p-6 rounded-2xl bg-black/40 border border-white/5 space-y-6">
+          <div><h3 className="text-xs font-black uppercase mb-2">Neural Provider</h3><p className="text-[10px] text-slate-500 mb-4">{t('settings.ai.desc')}</p><select className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs outline-none"><option value="google">Google Gemini</option><option value="openai">OpenAI</option></select></div>
+          <button className="w-full py-3 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl">Save Configuration</button>
+        </div>
+        <div className="p-6 rounded-2xl bg-black/40 border border-white/5 space-y-6">
+          <div><h3 className="text-xs font-black uppercase mb-2">System Mode</h3><div className="space-y-3 mt-4">{['auto', 'skill', 'manual'].map(m => <div key={m} className="flex items-center justify-between p-3 rounded-xl bg-white/5"><span className="text-[10px] font-black uppercase">{m}</span><div className={cn("w-4 h-4 rounded-full border-2", globalConfig.mode === m ? "border-orange-500 bg-orange-500" : "border-white/20")} /></div>)}</div></div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const AdminView = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><User className="text-orange-500" size={20} /><h2 className="text-sm font-black uppercase tracking-[0.2em]">Administration</h2></div></div><div className="p-12 bg-black/40 border border-white/5 rounded-2xl text-center"><Lock size={48} className="text-slate-800 mx-auto mb-4" /><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Admin modules initialized. Access granted.</p></div></div>
   );
 
   if (onboarding === null) return <div className="min-h-screen bg-black flex items-center justify-center"><motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} className="w-12 h-12 rounded-full border-2 border-orange-500/20 border-t-orange-500" /></div>;
-  if (onboarding) return <div className="min-h-screen bg-black text-white flex items-center justify-center p-8\"><OnboardingWizard onComplete={() => setOnboarding(false)} t={t} /></div>;
+  if (onboarding) return <div className="min-h-screen bg-black text-white flex items-center justify-center p-8"><OnboardingWizard onComplete={() => setOnboarding(false)} t={t} /></div>;
   if (!user) return <LoginView onLogin={handleLogin} t={t} />;
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center"><motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} className="w-16 h-16 rounded-full border-4 border-orange-500 border-t-transparent" /></div>;
 
   return (
     <div className="min-h-screen bg-black text-white flex overflow-hidden">
       <AnimatePresence>{mobileMenuOpen && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileMenuOpen(false)} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] lg:hidden" />}</AnimatePresence>
-      <aside className={cn(\"fixed inset-y-0 left-0 z-[70] bg-black border-r border-white/5 transition-all duration-300 flex flex-col\", mobileMenuOpen ? \"translate-x-0 w-64\" : \"-translate-x-full lg:translate-x-0\", sidebarCollapsed ? \"lg:w-20\" : \"lg:w-64\")}>
-        <div className=\"p-6 flex items-center justify-between\">{(!sidebarCollapsed || mobileMenuOpen) && <div className=\"flex items-center gap-3\"><div className=\"w-8 h-8 rounded-full border border-orange-500 flex items-center justify-center\"><div className=\"w-4 h-0.5 bg-orange-500 rounded-full\" /></div><span className=\"font-black text-sm tracking-widest\">SATURN</span></div>}<button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className=\"hidden lg:block text-slate-500 hover:text-white\"><ChevronLeft className={cn(\"transition-transform\", sidebarCollapsed && \"rotate-180\")} size={18} /></button></div>
-        <nav className=\"flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar\">
-          <SidebarItem id=\"dashboard\" label={t('nav.dashboard')} icon={LayoutDashboard} />
-          <SidebarItem id=\"servers\" label={t('nav.servers')} icon={Server} />
-          <SidebarItem id=\"skills\" label=\"Skills\" icon={Brain} />
-          <SidebarItem id=\"proactive\" label=\"Proactive\" icon={Zap} />
-          <SidebarItem id=\"credentials\" label=\"Credentials\" icon={Key} />
-          <SidebarItem id=\"contextp\" label=\"ContextP\" icon={Database} />
-          <SidebarItem id=\"settings\" label=\"Settings\" icon={Settings} />
-          <SidebarItem id=\"admin\" label=\"Admin\" icon={User} />
+      <aside className={cn("fixed inset-y-0 left-0 z-[70] bg-black border-r border-white/5 transition-all duration-300 flex flex-col", mobileMenuOpen ? "translate-x-0 w-64" : "-translate-x-full lg:translate-x-0", sidebarCollapsed ? "lg:w-20" : "lg:w-64")}>
+        <div className="p-6 flex items-center justify-between">{(!sidebarCollapsed || mobileMenuOpen) && <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full border border-orange-500 flex items-center justify-center"><div className="w-4 h-0.5 bg-orange-500 rounded-full" /></div><span className="font-black text-sm tracking-widest">SATURN</span></div>}<button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="hidden lg:block text-slate-500 hover:text-white"><ChevronLeft className={cn("transition-transform", sidebarCollapsed && "rotate-180")} size={18} /></button></div>
+        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
+          <SidebarItem id="dashboard" label={t('nav.dashboard')} icon={LayoutDashboard} />
+          <SidebarItem id="servers" label={t('nav.servers')} icon={Server} />
+          <SidebarItem id="skills" label="Skills" icon={Brain} />
+          <SidebarItem id="proactive" label="Proactive" icon={Zap} />
+          <SidebarItem id="credentials" label="Credentials" icon={Key} />
+          <SidebarItem id="contextp" label="ContextP" icon={Database} />
+          <SidebarItem id="settings" label={t('nav.settings')} icon={Settings} />
+          <SidebarItem id="admin" label="Admin" icon={User} />
         </nav>
-        <div className=\"p-4 border-t border-white/5 space-y-4\"><div className=\"flex items-center gap-3 px-3\"><div className=\"w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-black font-black text-[10px]\">{user.username.charAt(0).toUpperCase()}</div>{(!sidebarCollapsed || mobileMenuOpen) && <div className=\"flex-1 min-w-0\"><p className=\"text-[10px] font-black uppercase text-white truncate\">{user.username}</p><p className=\"text-[8px] font-medium text-slate-500 truncate\">{user.role}</p></div>}</div><button onClick={handleLogout} className=\"flex items-center gap-3 w-full p-3 text-rose-500 hover:bg-rose-500/5 rounded-xl transition-all\"><Unplug size={18} />{(!sidebarCollapsed || mobileMenuOpen) && <span className=\"text-[10px] font-black uppercase tracking-widest\">Logout</span>}</button></div>
+        <div className="p-4 border-t border-white/5 space-y-4"><div className="flex items-center gap-3 px-3"><div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-black font-black text-[10px]">{user.username.charAt(0).toUpperCase()}</div>{(!sidebarCollapsed || mobileMenuOpen) && <div className="flex-1 min-w-0"><p className="text-[10px] font-black uppercase text-white truncate">{user.username}</p><p className="text-[8px] font-medium text-slate-500 truncate">{user.role}</p></div>}</div><button onClick={handleLogout} className="flex items-center gap-3 w-full p-3 text-rose-500 hover:bg-rose-500/5 rounded-xl transition-all"><Unplug size={18} />{(!sidebarCollapsed || mobileMenuOpen) && <span className="text-[10px] font-black uppercase tracking-widest">Logout</span>}</button></div>
       </aside>
-      <main className={cn(\"flex-1 flex flex-col min-w-0 transition-all duration-300\", sidebarCollapsed ? \"lg:ml-20\" : \"lg:ml-64\")}>
-        <header className=\"h-16 border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50\"><div className=\"flex items-center gap-4\"><button onClick={() => setMobileMenuOpen(true)} className=\"lg:hidden text-slate-500 hover:text-white\"><Menu size={20} /></button><h1 className=\"text-xs font-black uppercase tracking-[0.2em] text-slate-400\">{activeTab} <span className=\"text-white/20 mx-2\">/</span> <span className=\"text-white\">{selectedServer ? selectedServer.name : 'Overview'}</span></h1></div><div className=\"flex items-center gap-6\"><div className=\"hidden sm:flex bg-black/40 border border-white/10 p-1 rounded-xl\">{['auto', 'skill', 'manual'].map(m => <button key={m} onClick={() => handleUpdateRemediationMode(null, m)} className={cn(\"px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all\", globalConfig.mode === m ? \"bg-orange-500/10 text-orange-400\" : \"text-slate-600 hover:text-slate-400\")}>{m}</button>)}</div><div className=\"flex items-center gap-3\"><div className=\"flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg\"><div className=\"w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse\" /><span className=\"text-[10px] font-black text-orange-500 uppercase tracking-widest\">Neural Live</span></div></div></div></header>
-        <div className=\"flex-1 overflow-y-auto custom-scrollbar p-6\">
+      <main className={cn("flex-1 flex flex-col min-w-0 transition-all duration-300", sidebarCollapsed ? "lg:ml-20" : "lg:ml-64")}>
+        <header className="h-16 border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50"><div className="flex items-center gap-4"><button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-slate-500 hover:text-white"><Menu size={20} /></button><h1 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{activeTab} <span className="text-white/20 mx-2">/</span> <span className="text-white">{selectedServer ? selectedServer.name : 'Overview'}</span></h1></div><div className="flex items-center gap-6"><div className="hidden sm:flex bg-black/40 border border-white/10 p-1 rounded-xl">{['auto', 'skill', 'manual'].map(m => <button key={m} onClick={() => handleUpdateRemediationMode(null, m)} className={cn("px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all", globalConfig.mode === m ? "bg-orange-500/10 text-orange-400" : "text-slate-600 hover:text-slate-400")}>{m}</button>)}</div><div className="flex items-center gap-3"><div className="flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg"><div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" /><span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Neural Live</span></div></div></div></header>
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
           {activeTab === 'dashboard' && <DashboardView />}
           {activeTab === 'servers' && !selectedServer && <ServersListView />}
           {activeTab === 'servers' && selectedServer && <ServerDetailView />}
@@ -263,6 +291,8 @@ export default function App() {
           {activeTab === 'proactive' && <ProactiveView />}
           {activeTab === 'credentials' && <CredentialsView />}
           {activeTab === 'contextp' && <ContextPView />}
+          {activeTab === 'settings' && <SettingsView />}
+          {activeTab === 'admin' && <AdminView />}
         </div>
       </main>
     </div>

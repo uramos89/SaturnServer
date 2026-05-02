@@ -23,8 +23,19 @@ async function deploy() {
     console.log('Stopping existing server on port 3000...');
     await ssh.execCommand('fuser -k 3000/tcp || true');
     
-    await run('rm -rf saturn');
-    await run('git clone https://github.com/uramos89/SaturnServer saturn');
+    console.log('Deleting old database to force seeding...');
+    await ssh.execCommand('rm -f saturn.db', { cwd: 'saturn' });
+
+    console.log('Synchronizing local files to remote...');
+    await ssh.putDirectory('c:/Users/uramo/Documents/I+D/saturn', 'saturn', {
+      recursive: true,
+      concurrency: 10,
+      validate: (itemPath) => {
+        const base = itemPath.split(/[\\\/]/).pop();
+        return base !== 'node_modules' && base !== 'dist' && base !== '.git' && base !== '.gemini' && !itemPath.includes('node_modules');
+      }
+    });
+
     await run('npm install', 'saturn');
     await run('npm run build', 'saturn');
     

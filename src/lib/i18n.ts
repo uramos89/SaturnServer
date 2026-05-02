@@ -11,11 +11,18 @@ const translations: Record<Language, Record<string, string>> = {
     // Navigation
     'nav.dashboard': 'Dashboard',
     'nav.servers': 'Managed Nodes',
-    'nav.knowledge': 'Knowledge Base',
-    'nav.audit': 'Audit Trail',
-    'nav.settings': 'Settings',
-    'nav.infrastructure': 'Infrastructure',
-    'nav.neural': 'Neural ContextP',
+    'nav.skills': 'Expert Skills',
+    'nav.proactive': 'Proactive Engine',
+    'nav.credentials': 'Identity Vault',
+    'nav.contextp': 'ContextP Memory',
+    'nav.settings': 'System Settings',
+    'nav.admin': 'Administration',
+    
+    // Stats
+    'stats.total': 'Total Servers',
+    'stats.online': 'Nodes Online',
+    'stats.incidents': 'Active Issues',
+    'stats.ssh': 'SSH Sessions',
     
     // Status
     'status.system': 'System Status',
@@ -196,11 +203,18 @@ const translations: Record<Language, Record<string, string>> = {
     // Navigation
     'nav.dashboard': 'Panel Principal',
     'nav.servers': 'Nodos Gestionados',
-    'nav.knowledge': 'Base de Conocimiento',
-    'nav.audit': 'Traza de Auditoría',
+    'nav.skills': 'Habilidades Expertas',
+    'nav.proactive': 'Motor Proactivo',
+    'nav.credentials': 'Bóveda de Identidad',
+    'nav.contextp': 'Memoria ContextP',
     'nav.settings': 'Configuración',
-    'nav.infrastructure': 'Infraestructura',
-    'nav.neural': 'ContextP Neural',
+    'nav.admin': 'Administración',
+    
+    // Stats
+    'stats.total': 'Servidores Totales',
+    'stats.online': 'Nodos en Línea',
+    'stats.incidents': 'Problemas Activos',
+    'stats.ssh': 'Sesiones SSH',
     
     // Status
     'status.system': 'Estado del Sistema',

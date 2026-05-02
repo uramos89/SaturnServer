@@ -65,6 +65,8 @@ export interface AIConfig {
   apiKey: string;
   endpoint?: string;
   model?: string;
+  temperature?: number;
+  contextWindow?: number;
   deepVerify: boolean;
   autoRemediate: boolean;
 }

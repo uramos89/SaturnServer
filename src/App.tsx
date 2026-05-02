@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Server, Activity, Database, Brain, ShieldCheck, AlertTriangle, Terminal, 
   ChevronRight, ChevronLeft, Cpu, HardDrive, RefreshCw, Search, Bell, Settings, 
   LayoutDashboard, Logs, CheckCircle2, XCircle, Mail, Zap, Plug, Unplug, 
   TerminalSquare, History, Globe, Key, Wifi, User, Lock, Eye, EyeOff, Send, 
-  LogOut, Menu, Trash2, Folder, FileText, Play, Plus, Trash
+  LogOut, Menu, Trash2, Folder, FileText, Play, Plus, Trash, Upload, X, Users, Package, HeartPulse
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -991,7 +991,7 @@ const ServerRow = ({ server, onClick, t }: { server: ManagedServer, onClick: () 
 );
 
 // ── IncidentCard ───────────────────────────────────────────────────────
-const IncidentCard = ({ incident, onAnalyze, onResolve, t }: { incident: Incident, onAnalyze: () => void, onResolve: (id: string) => void, t: (k: string) => string }) => (
+const IncidentCard = ({ incident, analyzing, onAnalyze, onResolve, t }: { incident: Incident, analyzing?: boolean, onAnalyze: () => void, onResolve: (id: string) => void, t: (k: string) => string }) => (
   <motion.div 
     initial={{ opacity: 0, x: -20 }}
     animate={{ opacity: 1, x: 0 }}
@@ -1030,9 +1030,10 @@ const IncidentCard = ({ incident, onAnalyze, onResolve, t }: { incident: Inciden
           <>
             <button
               onClick={onAnalyze}
-              className="text-[10px] font-black uppercase tracking-widest bg-orange-500/20 text-orange-400 px-3 py-1.5 rounded-lg hover:bg-orange-500/30 transition-all"
+              disabled={analyzing}
+              className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-orange-500/20 text-orange-400 px-3 py-1.5 rounded-lg hover:bg-orange-500/30 transition-all disabled:opacity-50"
             >
-              Analyze
+              {analyzing ? 'Analyzing...' : 'Analyze'}
             </button>
             <button
               onClick={() => onResolve(incident.id)}
@@ -1120,6 +1121,446 @@ const ServerCard = ({ server, onClick }: { server: ManagedServer, onClick: () =>
   </motion.div>
 );
 
+const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) => {
+  const [newServerIp, setNewServerIp] = useState('');
+  const [newServerUser, setNewServerUser] = useState('ubuntu');
+  const [newServerKey, setNewServerKey] = useState('');
+  const [newServerPassword, setNewServerPassword] = useState('');
+  const [addingServer, setAddingServer] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleAddServer = async () => {
+    setErrorMsg(null);
+    if (!newServerIp || !newServerUser || (!newServerKey && !newServerPassword && !confirm('No key or password provided. Attempt using default?'))) return;
+    setAddingServer(true);
+    try {
+      const res = await fetch('/api/ssh/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host: newServerIp, username: newServerUser, privateKey: newServerKey, password: newServerPassword })
+      });
+      if (res.ok) {
+        onSuccess();
+        onClose();
+      } else {
+        const error = await res.json();
+        setErrorMsg(`Connection Failed: ${error.error}`);
+      }
+    } catch (e: any) {
+      setErrorMsg(`Network Error: ${e.message}`);
+    }
+    setAddingServer(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 shadow-2xl">
+        <button onClick={onClose} className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors">
+          <X size={20} />
+        </button>
+        <h3 className="text-sm font-black uppercase tracking-widest mb-6 text-white flex items-center gap-2"><Server className="text-orange-500" size={18}/> Adopt New Node</h3>
+        
+        {errorMsg && (
+          <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-bold font-mono">
+            {errorMsg}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">IP Address or Hostname</label>
+            <input type="text" value={newServerIp} onChange={e => setNewServerIp(e.target.value)} placeholder="e.g. 192.168.1.100" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+          </div>
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">SSH Username</label>
+            <input type="text" value={newServerUser} onChange={e => setNewServerUser(e.target.value)} placeholder="ubuntu" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+          </div>
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">SSH Private Key (PEM/RSA/ED25519)</label>
+            <div className="relative">
+              <textarea value={newServerKey} onChange={e => setNewServerKey(e.target.value)} placeholder="-----BEGIN PRIVATE KEY-----..." rows={5} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-xs font-mono text-slate-400 focus:border-orange-500 outline-none custom-scrollbar" />
+              <label className="absolute bottom-4 right-4 px-3 py-1.5 bg-orange-500/10 text-orange-500 border border-orange-500/20 hover:bg-orange-500/20 rounded-lg text-[9px] font-black uppercase tracking-widest cursor-pointer transition-colors flex items-center gap-2">
+                <Upload size={12} /> Upload .pem
+                <input type="file" className="hidden" accept=".pem,.key,application/x-pem-file" onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => setNewServerKey(e.target?.result as string);
+                    reader.readAsText(file);
+                  }
+                }} />
+              </label>
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Or SSH Password (if no key)</label>
+            <input type="password" value={newServerPassword} onChange={e => setNewServerPassword(e.target.value)} placeholder="••••••••" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+          </div>
+          <div className="flex gap-4 mt-8">
+            <button onClick={onClose} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">Cancel</button>
+            <button onClick={handleAddServer} disabled={addingServer || !newServerIp} className="flex-1 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2">
+              {addingServer ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><Zap size={14}/> Connect</>}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const ImportSkillModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) => {
+  const [prompt, setPrompt] = useState('');
+  const [os, setOs] = useState('linux');
+  const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [generatedSkill, setGeneratedSkill] = useState<any>(null);
+
+  const handleGenerate = async () => {
+    if (!prompt) return;
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/neural/generate-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, os, context: {} })
+      });
+      const data = await res.json();
+      setGeneratedSkill({
+        name: `AI_${os}_${Date.now().toString().slice(-4)}`,
+        language: os === 'windows' ? 'powershell' : 'bash',
+        version: '1.0',
+        description: data.description,
+        script: data.script,
+      });
+    } catch (e) {
+      console.error(e);
+      alert('Failed to generate script');
+    }
+    setGenerating(false);
+  };
+
+  const handleSave = async () => {
+    if (!generatedSkill) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/skills/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(generatedSkill)
+      });
+      if (res.ok) {
+        onSuccess();
+        onClose();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-2xl bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col max-h-[90vh]">
+        <button onClick={onClose} className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors"><X size={20} /></button>
+        <h3 className="text-sm font-black uppercase tracking-widest mb-6 text-white flex items-center gap-2"><Brain className="text-orange-500" size={18}/> Neural Skill Generator</h3>
+        
+        <div className="space-y-4 overflow-y-auto custom-scrollbar flex-1 pr-2">
+          {!generatedSkill ? (
+            <>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Target Environment</label>
+                <select value={os} onChange={e => setOs(e.target.value)} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none">
+                  <option value="linux">Linux (Bash)</option>
+                  <option value="windows">Windows (PowerShell)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Skill Description / Goal</label>
+                <textarea 
+                  value={prompt} 
+                  onChange={e => setPrompt(e.target.value)} 
+                  placeholder="e.g. Automatically detect and restart the Nginx service if it consumes more than 1GB of RAM..." 
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none h-32 resize-none custom-scrollbar" 
+                />
+              </div>
+              <button 
+                onClick={handleGenerate} 
+                disabled={generating || !prompt} 
+                className="w-full py-3 mt-4 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                {generating ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><Brain size={14}/> Generate via AI</>}
+              </button>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-2">Generated Description</h4>
+                <p className="text-xs text-slate-300 leading-relaxed">{generatedSkill.description}</p>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Generated Script ({generatedSkill.language})</label>
+                <div className="bg-black border border-white/10 rounded-xl p-4 overflow-x-auto">
+                  <pre className="text-[10px] text-slate-300 font-mono whitespace-pre-wrap">{generatedSkill.script}</pre>
+                </div>
+              </div>
+              <div className="flex gap-4 mt-8">
+                <button onClick={() => setGeneratedSkill(null)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">Discard & Retry</button>
+                <button onClick={handleSave} disabled={saving} className="flex-1 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2">
+                  {saving ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><Plus size={14}/> Add to Library</>}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const SkillSourceModal = ({ skill, onClose }: { skill: any, onClose: () => void }) => {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-3xl bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col max-h-[80vh]">
+        <button onClick={onClose} className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors"><X size={20} /></button>
+        <h3 className="text-sm font-black uppercase tracking-widest mb-6 text-white flex items-center gap-2"><FileText className="text-orange-500" size={18}/> {skill.name} Source</h3>
+        <div className="flex-1 overflow-auto bg-black border border-white/5 rounded-xl p-4">
+          <pre className="text-[10px] text-slate-300 font-mono whitespace-pre-wrap">{skill.script || 'No source available. Fetch from backend not implemented.'}</pre>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const SkillsView = ({ skills, setSkills }: { skills: any[], setSkills: any }) => {
+  const [syncingSkills, setSyncingSkills] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<any | null>(null);
+
+  const handleSyncSkills = async () => {
+    setSyncingSkills(true);
+    try {
+      const res = await fetch('/api/skills');
+      setSkills(await res.json());
+    } catch {} finally {
+      setSyncingSkills(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Brain className="text-orange-500" size={20} />
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-[0.2em]">Expert Skills Library</h2>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1">Autonomous Agent Capabilities</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={handleSyncSkills} disabled={syncingSkills} className="px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-white/10 flex items-center gap-2 disabled:opacity-50">
+            <RefreshCw size={14} className={syncingSkills ? "animate-spin" : ""} /> Sync Repo
+          </button>
+          <button onClick={() => setShowImport(true)} className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 flex items-center gap-2">
+            <Plus size={14} /> Import Skill
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {skills.map(s => (
+          <div key={s.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 hover:border-orange-500/30 transition-all group flex flex-col">
+            <div className="flex items-start justify-between mb-4">
+              <h3 className="text-xs font-black uppercase text-white leading-relaxed">{s.name}</h3>
+              <span className="px-2 py-1 bg-white/5 rounded text-[8px] font-black uppercase text-slate-400 border border-white/10">v{s.version || '1.0.0'}</span>
+            </div>
+            <p className="text-[10px] text-slate-500 mb-6 flex-1">{s.description}</p>
+            <div className="flex items-center justify-between pt-4 border-t border-white/5">
+              <span className={cn(
+                "text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg",
+                s.language === 'python' ? "bg-sky-500/10 text-sky-400" :
+                s.language === 'bash' ? "bg-emerald-500/10 text-emerald-400" :
+                "bg-amber-500/10 text-amber-400"
+              )}>
+                {s.language}
+              </span>
+              <div className="flex gap-2">
+                <button onClick={() => setSelectedSource(s)} className="p-1.5 text-slate-500 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors" title="View Source"><FileText size={14} /></button>
+                <button onClick={() => alert('Assign to Node API not fully implemented')} className="p-1.5 text-slate-500 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors" title="Assign to Node"><Plug size={14} /></button>
+                <button onClick={() => alert('Run Skill API not fully implemented')} className="p-1.5 text-orange-500 hover:text-white bg-orange-500/10 hover:bg-orange-500/30 rounded-lg transition-colors font-black text-[9px] uppercase px-3">Run</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <AnimatePresence>
+        {showImport && <ImportSkillModal onClose={() => setShowImport(false)} onSuccess={() => { setShowImport(false); handleSyncSkills(); }} />}
+        {selectedSource && <SkillSourceModal skill={selectedSource} onClose={() => setSelectedSource(null)} />}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const TreeNode = ({ node, level = 0, onSelectFile, selectedFile }: any) => {
+  const [expanded, setExpanded] = useState(false);
+  const isDir = node.type === 'dir';
+  return (
+    <div className="w-full">
+      <button 
+        onClick={() => isDir ? setExpanded(!expanded) : onSelectFile(node)}
+        className={cn(
+          "w-full text-left py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+          !isDir && selectedFile?.name === node.name ? "bg-orange-500/10 text-orange-500" : "text-slate-400 hover:bg-white/5",
+          level > 0 && "ml-4"
+        )}
+      >
+        {isDir ? (
+          expanded ? <Folder size={14} className="text-orange-500" /> : <Folder size={14} className="text-slate-600" />
+        ) : (
+          <FileText size={14} className={selectedFile?.name === node.name ? "text-orange-500" : "text-slate-600"} />
+        )}
+        {node.name}
+      </button>
+      {isDir && expanded && node.children && (
+        <div className="border-l border-white/5 ml-4 mt-1">
+          {node.children.map((child: any, i: number) => (
+            <TreeNode key={i} node={child} level={level + 1} onSelectFile={onSelectFile} selectedFile={selectedFile} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ContextPView = () => {
+  const [tree, setTree] = useState<any[]>([]);
+  const [selectedFile, setSelectedFile] = useState<any>(null);
+  const [fileContent, setFileContent] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/contextp/files').then(res => res.json()).then(setTree).catch(console.error);
+  }, []);
+
+  const loadFile = async (f: any) => {
+    if (f.type === 'dir') return;
+    setSelectedFile(f);
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/contextp/read?path=${encodeURIComponent(f.path)}`);
+      const data = await res.json();
+      setFileContent(data.content || 'File not found or empty.');
+    } catch (e) {
+      setFileContent('Error loading file.');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Database className="text-orange-500" size={20} />
+          <h2 className="text-sm font-black uppercase tracking-[0.2em]">ContextP Memory</h2>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div className="lg:col-span-1 bg-black/40 border border-white/5 rounded-2xl p-4 overflow-y-auto max-h-[600px] custom-scrollbar">
+          {tree.map((node, i) => (
+            <TreeNode key={i} node={node} onSelectFile={loadFile} selectedFile={selectedFile} />
+          ))}
+        </div>
+        <div className="lg:col-span-3 bg-black/60 border border-white/5 rounded-2xl overflow-hidden flex flex-col h-[600px]">
+          {!selectedFile ? (
+            <div className="flex flex-col items-center justify-center flex-1 text-center p-8">
+              <Brain size={48} className="text-slate-800 mx-auto mb-4" />
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Select a ContextP file to analyze</p>
+            </div>
+          ) : loading ? (
+            <div className="flex flex-col items-center justify-center flex-1 text-center p-8">
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full mx-auto mb-4" />
+              <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Reading Cognitive Memory...</p>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+              <pre className="text-xs font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">{fileContent}</pre>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AuditView = () => {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/audit')
+      .then(res => res.json())
+      .then(data => {
+        setLogs(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
+        setLoading(false);
+      });
+  }, []);
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+      <div className="flex items-center gap-3 mb-8">
+        <FileText className="text-orange-500" size={24} />
+        <div>
+          <h2 className="text-sm font-black uppercase tracking-[0.2em]">Global Audit Logs</h2>
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">System-wide Immutable Event Trail</p>
+        </div>
+      </div>
+      
+      <div className="bg-black/60 border border-white/5 rounded-2xl overflow-hidden flex flex-col min-h-[600px] max-h-[800px]">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center flex-1 text-center p-8">
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full mx-auto mb-4" />
+            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Loading Audit Trail...</p>
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center flex-1 text-center p-8">
+            <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">No audit logs found.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-max">
+              <thead>
+                <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+                  <th className="p-4 w-48">Timestamp</th>
+                  <th className="p-4 w-32">Action</th>
+                  <th className="p-4 w-32">Server ID</th>
+                  <th className="p-4 w-32">User</th>
+                  <th className="p-4">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {logs.map((log, i) => (
+                  <tr key={i} className="hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
+                    <td className="p-4 text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
+                    <td className="p-4"><span className="px-2 py-1 bg-white/5 rounded-lg text-orange-500 uppercase">{log.action}</span></td>
+                    <td className="p-4">{log.serverId || 'GLOBAL'}</td>
+                    <td className="p-4">{log.username || 'System'}</td>
+                    <td className="p-4 truncate max-w-[300px]" title={log.details}>{log.details}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const { lang, setLang, t } = useLang();
   const [onboarding, setOnboarding] = useState<boolean | null>(null);
@@ -1141,6 +1582,11 @@ export default function App() {
   const [remediationConfigs, setRemediationConfigs] = useState<any[]>([]);
   const [globalConfig, setGlobalConfig] = useState<any>({ mode: 'auto', threshold: 0.7 });
   const [loading, setLoading] = useState(true);
+  const [analyzingIncident, setAnalyzingIncident] = useState<string | null>(null);
+  
+  // Add Server State
+  const [showAddServer, setShowAddServer] = useState(false);
+
   const [user, setUser] = useState<UserData | null>(() => {
     const saved = localStorage.getItem('saturn-user');
     return saved ? JSON.parse(saved) : null;
@@ -1202,8 +1648,39 @@ export default function App() {
     } catch {}
   };
 
+  const handleAnalyzeIncident = async (incidentId: string) => {
+    setAnalyzingIncident(incidentId);
+    try {
+      const res = await fetch('/api/neural/analyze', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ incidentId })
+      });
+      if (res.ok) {
+        // Refetch incidents
+        const iRes = await fetch('/api/incidents');
+        setIncidents(await iRes.json());
+      }
+    } catch (e) {
+      console.error("Failed to analyze incident", e);
+    } finally {
+      setAnalyzingIncident(null);
+    }
+  };
+
+  const handleResolveIncident = async (incidentId: string) => {
+    try {
+      const res = await fetch(`/api/incidents/${incidentId}/resolve`, { method: 'POST' });
+      if (res.ok) {
+        const iRes = await fetch('/api/incidents');
+        setIncidents(await iRes.json());
+      }
+    } catch (e) {
+      console.error("Failed to resolve incident", e);
+    }
+  };
+
   const SidebarItem = ({ id, label, icon: Icon }: any) => (
-    <button onClick={() => { setActiveTab(id); setMobileMenuOpen(false); }}
+    <button onClick={() => { setActiveTab(id); setMobileMenuOpen(false); setSelectedServer(null); }}
       className={cn("flex items-center gap-3 w-full p-3 rounded-xl transition-all group", activeTab === id ? "bg-orange-500/10 text-orange-400" : "text-slate-500 hover:text-white hover:bg-white/5")}>
       <Icon size={20} className={cn("transition-transform group-hover:scale-110", activeTab === id ? "text-orange-500" : "text-slate-500")} />
       {(!sidebarCollapsed || mobileMenuOpen) && <span className="text-xs font-black uppercase tracking-widest">{label}</span>}
@@ -1216,7 +1693,7 @@ export default function App() {
         <StatCard title={t('stats.total')} value={servers.length} icon={Server} color="text-blue-500" />
         <StatCard title={t('stats.online')} value={servers.filter(s => s.status === 'online').length} icon={CheckCircle2} color="text-emerald-500" />
         <StatCard title={t('stats.incidents')} value={incidents.filter(i => i.status === 'open').length} icon={AlertTriangle} color="text-rose-500" />
-        <StatCard title="SSH Connected" value={sshConnections.filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
+        <StatCard title={t('stats.ssh')} value={sshConnections.filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
@@ -1235,7 +1712,7 @@ export default function App() {
             <h2 className="text-xs font-black uppercase tracking-widest text-slate-500">Open Incidents</h2>
             <div className="space-y-3">
               {incidents.filter(i => i.status === 'open').length > 0 ? (
-                incidents.filter(i => i.status === 'open').slice(0, 5).map(inc => <IncidentCard key={inc.id} incident={inc} onAnalyze={() => {}} onResolve={() => {}} t={t} />)
+                incidents.filter(i => i.status === 'open').slice(0, 5).map(inc => <IncidentCard key={inc.id} incident={inc} analyzing={analyzingIncident === inc.id} onAnalyze={() => handleAnalyzeIncident(inc.id)} onResolve={() => handleResolveIncident(inc.id)} t={t} />)
               ) : <div className="p-8 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 text-center"><p className="text-[10px] font-black uppercase text-emerald-500">All clear</p></div>}
             </div>
           </section>
@@ -1246,43 +1723,749 @@ export default function App() {
 
   const ServersListView = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} /><input type="text" placeholder="Filter..." className="bg-black/40 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs focus:ring-1 focus:ring-orange-500 outline-none w-64" /></div><button className="px-4 py-2 bg-orange-500 text-black text-xs font-black uppercase tracking-widest rounded-xl">Add Server</button></div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">{servers.map(s => <ServerCard key={s.id} server={s} onClick={() => { setSelectedServer(s); setServerDetailTab('summary'); }} />)}</div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <Server className="text-orange-500" size={20} />
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-[0.2em]">{t('nav.servers')}</h2>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Infrastructure Fleet</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} /><input type="text" placeholder="Filter..." className="bg-black/40 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-[10px] font-black uppercase tracking-widest focus:ring-1 focus:ring-orange-500 outline-none w-64" /></div>
+          <button onClick={() => setShowAddServer(true)} className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-colors flex items-center gap-2">
+            <Plus size={14} /> Add Node
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {servers.map(s => <ServerCard key={s.id} server={s} onClick={() => { setSelectedServer(s); setServerDetailTab('summary'); }} />)}
+        {servers.length === 0 && (
+          <div className="col-span-full p-12 border border-dashed border-white/10 rounded-2xl text-center">
+            <Server size={32} className="text-slate-600 mx-auto mb-4" />
+            <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No nodes registered</p>
+          </div>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {showAddServer && <AddNodeModal onClose={() => setShowAddServer(false)} onSuccess={() => {
+          fetch('/api/servers').then(r => r.json()).then(setServers);
+        }} />}
+      </AnimatePresence>
     </div>
   );
 
+
   const ServerDetailView = () => {
-    const tabs = [{ id: 'summary', label: 'Summary', icon: LayoutDashboard }, { id: 'system', label: 'System', icon: Cpu }, { id: 'network', label: 'Network', icon: Globe }, { id: 'security', label: 'Security', icon: ShieldCheck }, { id: 'backups', label: 'Backups', icon: Database }, { id: 'tasks', label: 'Tasks', icon: Logs }, { id: 'terminal', label: 'Terminal', icon: Terminal }];
+    const [tabData, setTabData] = useState<any>(null);
+    const [loadingTab, setLoadingTab] = useState(false);
+    const [syncingServer, setSyncingServer] = useState(false);
+
+    const handleRefreshServer = async (silent = false) => {
+      if (!selectedServer) return;
+      setSyncingServer(true);
+      try {
+        const res = await fetch(`/api/servers/${selectedServer.id}/refresh`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to refresh server');
+        setSelectedServer({ ...selectedServer, ...data.metrics });
+      } catch (e: any) {
+        console.error("Error refreshing server", e);
+        if (!silent) alert(`Sync Failed: ${e.message}`);
+      } finally {
+        setSyncingServer(false);
+      }
+    };
+
+    useEffect(() => {
+      if (!selectedServer || serverDetailTab !== 'summary') return;
+      const intervalId = setInterval(() => {
+        handleRefreshServer(true);
+      }, 60000);
+      return () => clearInterval(intervalId);
+    }, [selectedServer?.id, serverDetailTab]);
+
+    useEffect(() => {
+      if (!selectedServer || serverDetailTab === 'summary' || serverDetailTab === 'terminal') return;
+      const fetchTab = async () => {
+        setLoadingTab(true);
+        try {
+          const res = await fetch(`/api/servers/${selectedServer.id}/${serverDetailTab}`);
+          const data = await res.json();
+          setTabData(data);
+        } catch (e) {
+          console.error(e);
+        }
+        setLoadingTab(false);
+      };
+      fetchTab();
+    }, [serverDetailTab, selectedServer]);
+
+    const tabs = [
+      { id: 'summary', label: 'Summary', icon: LayoutDashboard }, 
+      { id: 'processes', label: 'Processes', icon: Cpu }, 
+      { id: 'network', label: 'Network', icon: Globe }, 
+      { id: 'firewall', label: 'Firewall', icon: ShieldCheck }, 
+      { id: 'backups', label: 'Backups', icon: Database }, 
+      { id: 'tasks', label: 'Tasks', icon: Logs }, 
+      { id: 'users', label: 'Users', icon: Users },
+      { id: 'packages', label: 'Packages', icon: Package },
+      { id: 'webserver', label: 'Web', icon: Globe },
+      { id: 'health', label: 'Health', icon: HeartPulse },
+      { id: 'ssl', label: 'SSL', icon: Lock },
+      { id: 'audit', label: 'Audit', icon: FileText },
+      { id: 'terminal', label: 'Terminal', icon: Terminal }
+    ];
+    
+    const renderTabData = () => {
+      if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching {serverDetailTab} telemetry...</div>;
+      if (!tabData) return null;
+      
+      const dataArray = Array.isArray(tabData.data) ? tabData.data : (Array.isArray(tabData) ? tabData : [tabData]);
+      
+      if (dataArray.length === 0) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest">No data available for {serverDetailTab}</div>;
+
+      const keys = Object.keys(dataArray[0] || {}).slice(0, 6);
+
+      return (
+        <div className="bg-black/40 border border-white/5 rounded-2xl overflow-hidden overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-max">
+            <thead>
+              <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
+                {keys.map(k => <th key={k} className="p-4">{k}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {dataArray.map((row: any, i: number) => (
+                <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
+                  {keys.map(k => <td key={k} className="p-4 truncate max-w-[200px]">{typeof row[k] === 'object' ? JSON.stringify(row[k]) : String(row[k])}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    };
+
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl"><div className="flex items-center gap-4"><button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl"><ChevronLeft className="" size={18} /></button><div><div className="flex items-center gap-2 mb-1"><h2 className="text-sm font-black uppercase tracking-widest">{selectedServer?.name}</h2><div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer?.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} /></div><p className="text-[10px] font-medium text-slate-500 uppercase">{selectedServer?.ip} • {selectedServer?.os}</p></div></div><div className="flex items-center gap-3"><button className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl"><RefreshCw size={14} /> Sync</button><select value={remediationConfigs.find(c => c.serverId === selectedServer?.id)?.mode || 'global'} onChange={(e) => handleUpdateRemediationMode(selectedServer!.id, e.target.value)} className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none"><option value="global">Mode: Global</option><option value="auto">Mode: Auto</option><option value="skill">Mode: Skill</option><option value="manual">Mode: Manual</option></select></div></div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl"><div className="flex items-center gap-4"><button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl"><ChevronLeft className="" size={18} /></button><div><div className="flex items-center gap-2 mb-1"><h2 className="text-sm font-black uppercase tracking-widest">{selectedServer?.name}</h2><div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer?.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} /></div><p className="text-[10px] font-medium text-slate-500 uppercase">{selectedServer?.ip} • {selectedServer?.os}</p></div></div><div className="flex items-center gap-3"><button onClick={handleRefreshServer} disabled={syncingServer} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-white/10 transition-colors disabled:opacity-50"><RefreshCw size={14} className={syncingServer ? "animate-spin" : ""} /> Sync</button><select value={remediationConfigs.find(c => c.serverId === selectedServer?.id)?.mode || 'global'} onChange={(e) => handleUpdateRemediationMode(selectedServer!.id, e.target.value)} className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none cursor-pointer"><option value="global">Mode: Global</option><option value="auto">Mode: Auto</option><option value="skill">Mode: Skill</option><option value="manual">Mode: Manual</option></select></div></div>
         <div className="flex items-center gap-1 overflow-x-auto pb-2 custom-scrollbar">{tabs.map(t => <button key={t.id} onClick={() => setServerDetailTab(t.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", serverDetailTab === t.id ? "bg-orange-500 text-black" : "text-slate-500 hover:text-white hover:bg-white/5")}><t.icon size={14} /> {t.label}</button>)}</div>
-        <div className="min-h-[500px]">{serverDetailTab === 'summary' && <ServerSummaryTab />} {serverDetailTab !== 'summary' && <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest">{serverDetailTab} loading...</div>}</div>
+        <div className="min-h-[500px]">
+          {serverDetailTab === 'summary' && <ServerSummaryTab />}
+          {serverDetailTab === 'terminal' && <TerminalTab />}
+          {serverDetailTab !== 'summary' && serverDetailTab !== 'terminal' && renderTabData()}
+        </div>
       </div>
     );
   };
 
-  const ServerSummaryTab = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-2 space-y-8"><div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{[{ label: 'CPU', value: selectedServer?.cpu + '%', icon: Cpu }, { label: 'RAM', value: selectedServer?.memory + '%', icon: Database }, { label: 'Disk', value: '45%', icon: HardDrive }, { label: 'Uptime', value: '12d', icon: Activity }].map(m => <div key={m.label} className="p-4 rounded-2xl bg-black/40 border border-white/5"><div className="flex items-center gap-2 mb-2 text-slate-500"><m.icon size={12} /><span className="text-[9px] font-black uppercase">{m.label}</span></div><p className="text-xl font-black">{m.value}</p></div>)}</div><div className="p-6 rounded-2xl bg-orange-500/5 border border-orange-500/10"><div className="flex items-center gap-2 mb-4"><Brain size={16} className="text-orange-500" /><h3 className="text-[10px] font-black uppercase text-orange-500">Neural Remediation</h3></div><div className="flex gap-2"><input type="text" placeholder="Prompt..." className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs outline-none" /><button className="px-6 py-3 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl">Run</button></div></div></div>
-      <div className="space-y-6"><div className="p-6 rounded-2xl bg-black/40 border border-white/5"><div className="flex items-center gap-2 mb-4"><History size={14} className="text-slate-500" /><h3 className="text-[10px] font-black uppercase text-slate-500">ContextP Insights</h3></div><div className="space-y-4">{[{ t: 'FIX', d: '2h', i: 'SSH' }, { t: 'AUD', d: '5h', i: 'Root' }].map((i, x) => <div key={x} className="flex gap-3 text-[10px]"><div className="w-1 h-1 rounded-full bg-orange-500 mt-1" /><div><p className="font-black text-slate-300 uppercase">{i.i}</p><p className="text-[8px] text-slate-600 uppercase">{i.t} • {i.d}</p></div></div>)}</div><button onClick={() => setActiveTab('contextp')} className="w-full mt-6 py-2 border border-white/5 rounded-xl text-[9px] font-black uppercase text-slate-500">Explore Memory</button></div></div>
+  const ServerSummaryTab = () => {
+    const [prompt, setPrompt] = useState('');
+    const [running, setRunning] = useState(false);
+    const [result, setResult] = useState('');
+
+    const handleRunNeural = async () => {
+      if (!prompt || !selectedServer) return;
+      setRunning(true);
+      setResult('');
+      try {
+        const res = await fetch(`/api/servers/${selectedServer.id}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'neural_remediation', prompt })
+        });
+        const data = await res.json();
+        setResult(data.message || data.output || JSON.stringify(data));
+      } catch (e) {
+        setResult('Error executing neural remediation.');
+      }
+      setRunning(false);
+    };
+
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-8">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[
+              { label: 'CPU', value: selectedServer?.cpu ? Number(selectedServer.cpu).toFixed(1) + '%' : '0%', icon: Cpu }, 
+              { label: 'RAM', value: selectedServer?.memory ? Number(selectedServer.memory).toFixed(1) + '%' : '0%', icon: Database }, 
+              { label: 'Disk', value: selectedServer?.disk ? Math.round(selectedServer.disk) + '%' : '0%', icon: HardDrive }, 
+              { label: 'Uptime', value: selectedServer?.uptime ? Math.floor(selectedServer.uptime / 86400) + 'd' : 'N/A', icon: Activity }
+            ].map(m => (
+              <div key={m.label} className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                <div className="flex items-center gap-2 mb-2 text-slate-500"><m.icon size={12} /><span className="text-[9px] font-black uppercase">{m.label}</span></div>
+                <p className="text-xl font-black text-white">{m.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="p-6 rounded-2xl bg-orange-500/5 border border-orange-500/10 transition-all">
+            <div className="flex items-center gap-2 mb-4">
+              <Brain size={16} className="text-orange-500" />
+              <h3 className="text-[10px] font-black uppercase text-orange-500">Neural Remediation</h3>
+            </div>
+            <div className="flex gap-2">
+              <input type="text" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Analyze logs and clear cache..." className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs outline-none focus:border-orange-500 text-white" />
+              <button onClick={handleRunNeural} disabled={running || !prompt} className="px-6 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase rounded-xl transition-colors flex items-center justify-center min-w-[80px]">
+                {running ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : 'Run'}
+              </button>
+            </div>
+            {result && (
+              <div className="mt-4 p-4 bg-black/40 rounded-xl border border-white/5">
+                <p className="text-[10px] font-mono text-slate-300 break-words">{result}</p>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-black/40 border border-white/5">
+            <div className="flex items-center gap-2 mb-4">
+              <History size={14} className="text-slate-500" />
+              <h3 className="text-[10px] font-black uppercase text-slate-500">ContextP Insights</h3>
+            </div>
+            <div className="space-y-4">
+              {[{ t: 'FIX', d: '2h', i: 'SSH' }, { t: 'AUD', d: '5h', i: 'Root' }].map((i, x) => (
+                <div key={x} className="flex gap-3 text-[10px]">
+                  <div className="w-1 h-1 rounded-full bg-orange-500 mt-1" />
+                  <div>
+                    <p className="font-black text-slate-300 uppercase">{i.i}</p>
+                    <p className="text-[8px] text-slate-600 uppercase">{i.t} • {i.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setActiveTab('contextp')} className="w-full mt-6 py-2 border border-white/5 hover:border-white/20 rounded-xl text-[9px] font-black uppercase text-slate-500 transition-colors">Explore Memory</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const TerminalTab = () => {
+    const [command, setCommand] = useState('');
+    const [history, setHistory] = useState<{cmd: string, out: string, err: boolean}[]>([]);
+    const [executing, setExecuting] = useState(false);
+    const endRef = useRef<HTMLDivElement>(null);
+
+    const handleExec = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!command.trim() || !selectedServer) return;
+      
+      const currentCmd = command;
+      setCommand('');
+      setExecuting(true);
+      
+      try {
+        const res = await fetch(`/api/servers/${selectedServer.id}/exec`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: currentCmd })
+        });
+        const data = await res.json();
+        setHistory(prev => [...prev, { cmd: currentCmd, out: data.output || data.error, err: !!data.error }]);
+      } catch (err: any) {
+        setHistory(prev => [...prev, { cmd: currentCmd, out: err.message, err: true }]);
+      }
+      setExecuting(false);
+    };
+
+    useEffect(() => {
+      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [history]);
+
+    return (
+      <div className="flex flex-col h-[500px] bg-black/80 border border-white/5 rounded-2xl overflow-hidden font-mono text-xs">
+        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+          <div className="text-emerald-500/50 mb-4">
+            Connected to {selectedServer?.name} ({selectedServer?.ip})<br/>
+            Saturn Web Terminal v1.0.0
+          </div>
+          {history.map((h, i) => (
+            <div key={i} className="space-y-1">
+              <div className="flex items-center gap-2 text-slate-400">
+                <span className="text-orange-500">saturn@{selectedServer?.name}:~$</span>
+                <span>{h.cmd}</span>
+              </div>
+              <pre className={cn("whitespace-pre-wrap break-words leading-relaxed", h.err ? "text-rose-400" : "text-slate-300")}>{h.out}</pre>
+            </div>
+          ))}
+          {executing && (
+            <div className="flex items-center gap-2 text-slate-400">
+              <span className="text-orange-500">saturn@{selectedServer?.name}:~$</span>
+              <span className="animate-pulse">_</span>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+        <form onSubmit={handleExec} className="p-4 bg-white/5 border-t border-white/5 flex gap-3">
+          <span className="text-orange-500 pt-3">saturn@{selectedServer?.name}:~$</span>
+          <input 
+            type="text" 
+            value={command}
+            onChange={e => setCommand(e.target.value)}
+            disabled={executing}
+            placeholder="Enter command..."
+            className="flex-1 bg-transparent outline-none text-slate-300 pt-3 pb-3"
+            autoFocus
+          />
+        </form>
+      </div>
+    );
+  };
+
+  const ProactiveView = () => {
+    const [showNewTaskModal, setShowNewTaskModal] = useState(false);
+    const [newTaskForm, setNewTaskForm] = useState({ name: '', skillId: '', condition: 'cpu > 90', schedule: '5m', targetType: 'all', targets: [] as string[], enabled: true });
+    const [savingTask, setSavingTask] = useState(false);
+    const [loadingTasks, setLoadingTasks] = useState(false);
+
+    useEffect(() => {
+      fetchTasks();
+    }, []);
+
+    const fetchTasks = async () => {
+      setLoadingTasks(true);
+      try {
+        const res = await fetch('/api/proactive');
+        const data = await res.json();
+        setProactiveActivities(data);
+      } catch (e) {
+        console.error(e);
+      }
+      setLoadingTasks(false);
+    };
+
+    const handleSaveTask = async () => {
+      if (!newTaskForm.name || !newTaskForm.skillId) return;
+      setSavingTask(true);
+      try {
+        await fetch('/api/proactive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newTaskForm)
+        });
+        await fetchTasks();
+        setShowNewTaskModal(false);
+        setNewTaskForm({ name: '', skillId: '', condition: 'cpu > 90', schedule: '5m', targetType: 'all', targets: [], enabled: true });
+      } catch (e) {
+        console.error(e);
+      }
+      setSavingTask(false);
+    };
+
+    const handleToggleTask = async (task: any) => {
+      try {
+        await fetch('/api/proactive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...task, enabled: !task.enabled })
+        });
+        fetchTasks();
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    const handleDeleteTask = async (id: string) => {
+      if (!confirm('Delete this proactive task?')) return;
+      try {
+        await fetch(`/api/proactive/${id}`, { method: 'DELETE' });
+        fetchTasks();
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Zap className="text-orange-500" size={20} />
+            <h2 className="text-sm font-black uppercase tracking-[0.2em]">Autonomous Proactive Engine</h2>
+          </div>
+          <button onClick={() => setShowNewTaskModal(true)} className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all flex items-center gap-2">
+            <Plus size={14} /> New Task
+          </button>
+        </div>
+        <div className="grid grid-cols-1 gap-4">
+          {loadingTasks && proactiveActivities.length === 0 ? (
+            <div className="p-12 text-center"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full mx-auto" /></div>
+          ) : proactiveActivities.length === 0 ? (
+            <div className="p-12 border border-dashed border-white/10 rounded-2xl text-center">
+              <Activity size={32} className="text-slate-600 mx-auto mb-4" />
+              <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No proactive tasks defined</p>
+            </div>
+          ) : (
+            proactiveActivities.map(a => (
+              <div key={a.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:border-orange-500/30 transition-all group">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
+                    <Activity size={20} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black uppercase text-white mb-1">{a.name}</p>
+                    <div className="flex items-center gap-3 text-[9px] font-medium text-slate-500 uppercase tracking-widest">
+                      <span className="flex items-center gap-1"><TerminalSquare size={10} className="text-sky-500" /> IF {a.condition}</span>
+                      <span className="flex items-center gap-1"><History size={10} className="text-amber-500" /> SCHEDULE: {a.schedule}</span>
+                      <span className="flex items-center gap-1"><Server size={10} className="text-emerald-500" /> TARGET: {a.targetType.toUpperCase()}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className="hidden md:block text-right">
+                    <p className="text-[9px] font-black uppercase text-slate-600 mb-1">Assigned Skill</p>
+                    <p className="text-[10px] font-mono text-slate-400">{skills.find(s => s.id === a.skillId)?.name || a.skillId}</p>
+                  </div>
+                  <div className="h-8 w-px bg-white/10 mx-2 hidden md:block" />
+                  <button onClick={() => handleToggleTask(a)} className={cn(
+                    "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all w-full md:w-auto",
+                    a.enabled ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20" : "bg-white/5 text-slate-600 border border-white/10 hover:bg-white/10"
+                  )}>
+                    {a.enabled ? 'Enabled' : 'Paused'}
+                  </button>
+                  <button onClick={() => handleDeleteTask(a.id)} className="p-2 text-slate-600 hover:text-rose-500 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <AnimatePresence>
+          {showNewTaskModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowNewTaskModal(false)} />
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 shadow-2xl">
+                <h3 className="text-sm font-black uppercase tracking-widest mb-6 text-white flex items-center gap-2"><Zap className="text-orange-500" size={18}/> New Proactive Task</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Task Name</label>
+                    <input type="text" value={newTaskForm.name} onChange={e => setNewTaskForm({...newTaskForm, name: e.target.value})} placeholder="e.g. Cache Auto-Clear" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Assigned Skill</label>
+                    <select value={newTaskForm.skillId} onChange={e => setNewTaskForm({...newTaskForm, skillId: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none">
+                      <option value="">-- Select Skill --</option>
+                      {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Condition</label>
+                      <input type="text" value={newTaskForm.condition} onChange={e => setNewTaskForm({...newTaskForm, condition: e.target.value})} placeholder="e.g. cpu > 90" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Schedule</label>
+                      <input type="text" value={newTaskForm.schedule} onChange={e => setNewTaskForm({...newTaskForm, schedule: e.target.value})} placeholder="e.g. 5m" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+                    </div>
+                  </div>
+                  <div className="flex gap-4 mt-8">
+                    <button onClick={() => setShowNewTaskModal(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">Cancel</button>
+                    <button onClick={handleSaveTask} disabled={savingTask || !newTaskForm.name || !newTaskForm.skillId} className="flex-1 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2">
+                      {savingTask ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><Plus size={14}/> Create</>}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
+
+  const CredentialsView = () => {
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importForm, setImportForm] = useState({ name: '', provider: 'aws', type: 'access_key', accessKey: '', secretKey: '' });
+    const [savingCred, setSavingCred] = useState(false);
+    const [loadingCreds, setLoadingCreds] = useState(false);
+
+    useEffect(() => {
+      fetchCreds();
+    }, []);
+
+    const fetchCreds = async () => {
+      setLoadingCreds(true);
+      try {
+        const res = await fetch('/api/credentials');
+        const data = await res.json();
+        setCloudCreds(data);
+      } catch (e) {
+        console.error(e);
+      }
+      setLoadingCreds(false);
+    };
+
+    const handleImportCred = async () => {
+      if (!importForm.name || !importForm.accessKey || !importForm.secretKey) return;
+      setSavingCred(true);
+      try {
+        await fetch('/api/credentials/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: importForm.name,
+            provider: importForm.provider,
+            type: importForm.type,
+            credentials: { accessKey: importForm.accessKey, secretKey: importForm.secretKey }
+          })
+        });
+        await fetchCreds();
+        setShowImportModal(false);
+        setImportForm({ name: '', provider: 'aws', type: 'access_key', accessKey: '', secretKey: '' });
+      } catch (e) {
+        console.error(e);
+      }
+      setSavingCred(false);
+    };
+
+    const handleDeleteCred = async (id: string) => {
+      if (!confirm('Delete this credential?')) return;
+      try {
+        await fetch(`/api/credentials/${id}`, { method: 'DELETE' });
+        fetchCreds();
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Key className="text-orange-500" size={20} />
+            <h2 className="text-sm font-black uppercase tracking-[0.2em]">Identity Vault</h2>
+          </div>
+          <button onClick={() => setShowImportModal(true)} className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-orange-400 transition-colors flex items-center gap-2">
+            <Plus size={14} /> Import
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {loadingCreds && cloudCreds.length === 0 ? (
+            <div className="p-12 text-center col-span-full"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full mx-auto" /></div>
+          ) : cloudCreds.length === 0 ? (
+            <div className="p-12 border border-dashed border-white/10 rounded-2xl text-center col-span-full">
+              <Key size={32} className="text-slate-600 mx-auto mb-4" />
+              <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No credentials stored</p>
+            </div>
+          ) : (
+            cloudCreds.map(c => (
+              <div key={c.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 flex justify-between items-center group hover:border-orange-500/30 transition-all">
+                <div className="flex gap-4 items-center">
+                  <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[12px] font-black uppercase text-slate-300 mb-1">{c.name}</p>
+                    <p className="text-[9px] font-medium text-slate-500 uppercase tracking-widest">{c.provider} • {c.type}</p>
+                  </div>
+                </div>
+                <button onClick={() => handleDeleteCred(c.id)} className="p-2 text-slate-600 hover:text-rose-500 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <AnimatePresence>
+          {showImportModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowImportModal(false)} />
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 shadow-2xl">
+                <h3 className="text-sm font-black uppercase tracking-widest mb-6 text-white flex items-center gap-2"><Key className="text-orange-500" size={18}/> Import Cloud Credentials</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Name (Alias)</label>
+                    <input type="text" value={importForm.name} onChange={e => setImportForm({...importForm, name: e.target.value})} placeholder="e.g. AWS Production" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Provider</label>
+                      <select value={importForm.provider} onChange={e => setImportForm({...importForm, provider: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none">
+                        <option value="aws">AWS</option>
+                        <option value="gcp">GCP</option>
+                        <option value="azure">Azure</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Type</label>
+                      <select value={importForm.type} onChange={e => setImportForm({...importForm, type: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none">
+                        <option value="access_key">Access Key</option>
+                        <option value="service_account">Service Account</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Access Key / Client ID</label>
+                    <input type="text" value={importForm.accessKey} onChange={e => setImportForm({...importForm, accessKey: e.target.value})} placeholder="AKIA..." className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Secret Key (Will be encrypted AES-256-GCM)</label>
+                    <input type="password" value={importForm.secretKey} onChange={e => setImportForm({...importForm, secretKey: e.target.value})} placeholder="••••••••" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+                  </div>
+                  <div className="flex gap-4 mt-8">
+                    <button onClick={() => setShowImportModal(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">Cancel</button>
+                    <button onClick={handleImportCred} disabled={savingCred || !importForm.name || !importForm.accessKey || !importForm.secretKey} className="flex-1 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2">
+                      {savingCred ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><ShieldCheck size={14}/> Encrypt & Save</>}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
+
+  const SettingsView = () => {
+    const [localAiConfig, setLocalAiConfig] = useState<AIConfig | null>(aiConfig);
+    const [savingAi, setSavingAi] = useState(false);
+
+    useEffect(() => {
+      setLocalAiConfig(aiConfig);
+    }, [aiConfig]);
+
+    const handleSaveAi = async () => {
+      if (!localAiConfig) return;
+      setSavingAi(true);
+      try {
+        const res = await fetch('/api/ai/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(localAiConfig)
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          setAiConfig(updated);
+          alert('AI Configuration saved successfully');
+        } else {
+          alert('Failed to save AI configuration');
+        }
+      } catch (e) {
+        alert('Error saving AI configuration');
+      }
+      setSavingAi(false);
+    };
+
+    return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 max-w-5xl">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <Settings className="text-orange-500" size={24} />
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-[0.2em]">{t('settings.title')}</h2>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Core Platform Directives & Security Parameters</p>
+          </div>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Neural Engine Config */}
+        <div className="p-8 rounded-3xl bg-black/40 border border-white/5 space-y-8">
+          <div className="flex items-center gap-3 border-b border-white/5 pb-4">
+            <Brain size={18} className="text-orange-500" />
+            <h3 className="text-xs font-black uppercase tracking-widest">Ares Neural Engine</h3>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Primary Provider (LLM)</label>
+              <select value={localAiConfig?.provider || 'none'} onChange={(e) => setLocalAiConfig({...localAiConfig, provider: e.target.value as any})} className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-orange-500 transition-colors">
+                <optgroup label="Frontier Models">
+                  <option value="gemini">Google Gemini 1.5 Pro</option>
+                  <option value="openai">OpenAI GPT-4o</option>
+                  <option value="anthropic">Anthropic Claude 3.5 Sonnet</option>
+                </optgroup>
+                <optgroup label="Local / Self-Hosted">
+                  <option value="ollama">Ollama (Local Network)</option>
+                  <option value="vllm">vLLM Inference</option>
+                </optgroup>
+                <option value="none">Disabled</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">API Connection String / Key</label>
+              <div className="relative">
+                <Key size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" />
+                <input type="password" value={localAiConfig?.apiKey || ''} onChange={(e) => setLocalAiConfig({...localAiConfig, apiKey: e.target.value})} placeholder="Enter API Key or Connection String" className="w-full bg-black/60 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white outline-none focus:border-orange-500" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-2">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 flex justify-between">Temperature <span>{localAiConfig?.temperature || 0.2}</span></label>
+                <input type="range" min="0" max="1" step="0.1" value={localAiConfig?.temperature || 0.2} onChange={(e) => setLocalAiConfig({...localAiConfig, temperature: parseFloat(e.target.value)})} className="w-full accent-orange-500" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 flex justify-between">Context Window <span>{localAiConfig?.contextWindow || 128}k</span></label>
+                <input type="range" min="8" max="256" step="8" value={localAiConfig?.contextWindow || 128} onChange={(e) => setLocalAiConfig({...localAiConfig, contextWindow: parseInt(e.target.value)})} className="w-full accent-orange-500" />
+              </div>
+            </div>
+          </div>
+          
+          <button onClick={handleSaveAi} disabled={savingAi} className="w-full py-4 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors flex justify-center">
+            {savingAi ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : t('settings.ai.save')}
+          </button>
+        </div>
+
+        {/* Remediation & Autonomy */}
+        <div className="space-y-8">
+          <div className="p-8 rounded-3xl bg-black/40 border border-white/5 space-y-6">
+            <div className="flex items-center gap-3 border-b border-white/5 pb-4">
+              <ShieldCheck size={18} className="text-orange-500" />
+              <h3 className="text-xs font-black uppercase tracking-widest">Autonomy Directives</h3>
+            </div>
+            
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              Define how the platform reacts to incidents. <span className="text-orange-500 font-black">AUTO</span> mode allows the neural engine to execute generated scripts without approval if confidence exceeds the threshold.
+            </p>
+            
+            <div className="space-y-3">
+              {[
+                { id: 'auto', label: 'Autonomous Remediation', desc: 'Ares executes solutions automatically' },
+                { id: 'skill', label: 'Skill-Restricted', desc: 'Only runs predefined verified skills' },
+                { id: 'manual', label: 'Manual Approval', desc: 'Requires admin approval for execution' }
+              ].map(m => (
+                <button key={m.id} onClick={() => handleUpdateRemediationMode(null, m.id)} className={cn(
+                  "flex items-center justify-between w-full p-4 rounded-xl border transition-all text-left",
+                  globalConfig.mode === m.id ? "bg-orange-500/10 border-orange-500" : "bg-white/5 border-white/10 hover:border-white/20"
+                )}>
+                  <div>
+                    <p className={cn("text-[10px] font-black uppercase tracking-widest", globalConfig.mode === m.id ? "text-orange-500" : "text-white")}>{m.label}</p>
+                    <p className="text-[9px] text-slate-500 mt-1 uppercase">{m.desc}</p>
+                  </div>
+                  <div className={cn("w-4 h-4 rounded-full border-2", globalConfig.mode === m.id ? "border-orange-500 bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]" : "border-slate-700")} />
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-4 border-t border-white/5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 flex justify-between">Auto-Execution Confidence Threshold <span>{(globalConfig.threshold || 0.8) * 100}%</span></label>
+              <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden mt-3">
+                <div className="h-full bg-orange-500" style={{ width: `${(globalConfig.threshold || 0.8) * 100}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
+  };
 
-  const ProactiveView = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Zap className="text-orange-500" size={20} /><h2 className="text-sm font-black uppercase tracking-[0.2em]">Proactive</h2></div><button className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl">New</button></div><div className="grid grid-cols-1 gap-4">{proactiveActivities.map(a => <div key={a.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 flex justify-between items-center"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500"><Activity size={18} /></div><div><p className="text-[10px] font-black uppercase text-white">{a.name}</p><p className="text-[8px] font-medium text-slate-500 uppercase">{a.condition} • {a.schedule}</p></div></div><div className={cn("px-3 py-1 rounded-lg text-[8px] font-black uppercase", a.enabled ? "bg-emerald-500/10 text-emerald-500" : "bg-white/5 text-slate-600")}>{a.enabled ? 'Active' : 'Paused'}</div></div>)}</div></div>
-  );
-
-  const SkillsView = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Brain className="text-orange-500" size={20} /><h2 className="text-sm font-black uppercase tracking-[0.2em]">Skills</h2></div><button className="px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl">Add</button></div><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">{skills.map(s => <div key={s.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 hover:border-orange-500/30 group"><h3 className="text-xs font-black uppercase mb-1">{s.name}</h3><p className="text-[10px] text-slate-500 mb-6">{s.description}</p><div className="flex justify-between pt-4 border-t border-white/5 text-[8px] font-black uppercase text-slate-600"><span>{s.language}</span><button className="text-orange-500">Manage</button></div></div>)}</div></div>
-  );
-
-  const CredentialsView = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Key className="text-orange-500" size={20} /><h2 className="text-sm font-black uppercase tracking-[0.2em]">Vault</h2></div><button className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl">Import</button></div><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">{cloudCreds.map(c => <div key={c.id} className="p-4 rounded-2xl bg-black/40 border border-white/5 flex gap-3 items-center"><div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500"><ShieldCheck size={18} /></div><div><p className="text-[10px] font-black uppercase text-slate-300">{c.name}</p><p className="text-[8px] font-medium text-slate-500 uppercase">{c.provider} • {c.type}</p></div></div>)}</div></div>
-  );
-
-  const ContextPView = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Database className="text-orange-500" size={20} /><h2 className="text-sm font-black uppercase tracking-[0.2em]">Memory</h2></div></div><div className="grid grid-cols-1 lg:grid-cols-4 gap-8"><div className="lg:col-span-1 bg-black/40 border border-white/5 rounded-2xl p-4 overflow-y-auto max-h-[600px] custom-scrollbar">{contextPFiles.map((n, i) => <div key={i} className="p-2 hover:bg-white/5 rounded-lg text-slate-400 flex items-center gap-2"><Database size={14} className="text-orange-500/50" /><span className="text-[10px] font-black uppercase">{n.name}</span></div>)}</div><div className="lg:col-span-3 bg-black/60 border border-white/5 rounded-2xl p-8 text-center"><Brain size={48} className="text-slate-800 mx-auto mb-4" /><p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Select a file to analyze</p></div></div></div>
+  const AdminView = () => (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+      <div className="flex items-center gap-3 mb-8"><User className="text-orange-500" size={20} /><h2 className="text-sm font-black uppercase tracking-[0.2em]">Platform Administration</h2></div>
+      <UserManager t={t} />
+    </div>
   );
 
   if (onboarding === null) return <div className="min-h-screen bg-black flex items-center justify-center"><motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} className="w-12 h-12 rounded-full border-2 border-orange-500/20 border-t-orange-500" /></div>;
@@ -1298,25 +2481,29 @@ export default function App() {
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto custom-scrollbar">
           <SidebarItem id="dashboard" label={t('nav.dashboard')} icon={LayoutDashboard} />
           <SidebarItem id="servers" label={t('nav.servers')} icon={Server} />
-          <SidebarItem id="skills" label="Skills" icon={Brain} />
-          <SidebarItem id="proactive" label="Proactive" icon={Zap} />
-          <SidebarItem id="credentials" label="Credentials" icon={Key} />
-          <SidebarItem id="contextp" label="ContextP" icon={Database} />
-          <SidebarItem id="settings" label="Settings" icon={Settings} />
-          <SidebarItem id="admin" label="Admin" icon={User} />
+          <SidebarItem id="skills" label={t('nav.skills')} icon={Brain} />
+          <SidebarItem id="proactive" label={t('nav.proactive')} icon={Zap} />
+          <SidebarItem id="credentials" label={t('nav.credentials')} icon={Key} />
+          <SidebarItem id="contextp" label={t('nav.contextp')} icon={Database} />
+          <SidebarItem id="audit" label="Audit Logs" icon={History} />
+          <SidebarItem id="settings" label={t('nav.settings')} icon={Settings} />
+          <SidebarItem id="admin" label={t('nav.admin')} icon={User} />
         </nav>
         <div className="p-4 border-t border-white/5 space-y-4"><div className="flex items-center gap-3 px-3"><div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-black font-black text-[10px]">{user.username.charAt(0).toUpperCase()}</div>{(!sidebarCollapsed || mobileMenuOpen) && <div className="flex-1 min-w-0"><p className="text-[10px] font-black uppercase text-white truncate">{user.username}</p><p className="text-[8px] font-medium text-slate-500 truncate">{user.role}</p></div>}</div><button onClick={handleLogout} className="flex items-center gap-3 w-full p-3 text-rose-500 hover:bg-rose-500/5 rounded-xl transition-all"><Unplug size={18} />{(!sidebarCollapsed || mobileMenuOpen) && <span className="text-[10px] font-black uppercase tracking-widest">Logout</span>}</button></div>
       </aside>
       <main className={cn("flex-1 flex flex-col min-w-0 transition-all duration-300", sidebarCollapsed ? "lg:ml-20" : "lg:ml-64")}>
         <header className="h-16 border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50"><div className="flex items-center gap-4"><button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-slate-500 hover:text-white"><Menu size={20} /></button><h1 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{activeTab} <span className="text-white/20 mx-2">/</span> <span className="text-white">{selectedServer ? selectedServer.name : 'Overview'}</span></h1></div><div className="flex items-center gap-6"><div className="hidden sm:flex bg-black/40 border border-white/10 p-1 rounded-xl">{['auto', 'skill', 'manual'].map(m => <button key={m} onClick={() => handleUpdateRemediationMode(null, m)} className={cn("px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all", globalConfig.mode === m ? "bg-orange-500/10 text-orange-400" : "text-slate-600 hover:text-slate-400")}>{m}</button>)}</div><div className="flex items-center gap-3"><div className="flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg"><div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" /><span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Neural Live</span></div></div></div></header>
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-          {activeTab === 'dashboard' && <DashboardView />}
-          {activeTab === 'servers' && !selectedServer && <ServersListView />}
+          {activeTab === 'dashboard' && DashboardView()}
+          {activeTab === 'servers' && !selectedServer && ServersListView()}
           {activeTab === 'servers' && selectedServer && <ServerDetailView />}
-          {activeTab === 'skills' && <SkillsView />}
+          {activeTab === 'skills' && <SkillsView skills={skills} setSkills={setSkills} />}
           {activeTab === 'proactive' && <ProactiveView />}
           {activeTab === 'credentials' && <CredentialsView />}
           {activeTab === 'contextp' && <ContextPView />}
+          {activeTab === 'audit' && <AuditView />}
+          {activeTab === 'settings' && <SettingsView />}
+          {activeTab === 'admin' && <AdminView />}
         </div>
       </main>
     </div>

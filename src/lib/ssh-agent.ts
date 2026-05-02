@@ -97,66 +97,34 @@ export class SSHAgent {
       }
 
       if (actualOs === "windows") {
-        // CPU
-        const cpuRes = await conn.execCommand('powershell -Command "Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average | Select-Object -ExpandProperty Average"', {});
-        const cpu = parseFloat(cpuRes.stdout) || 0;
+        const psScript = `$c=Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"|Select-Object -ExpandProperty PercentProcessorTime; $o=Get-CimInstance Win32_OperatingSystem; $tr=$o.TotalVisibleMemorySize; $fr=$o.FreePhysicalMemory; $rp=(($tr-$fr)/$tr)*100; $d=Get-PSDrive C; $dp=(($d.Used)/($d.Used+$d.Free))*100; $ut=(Get-Date)-$o.LastBootUpTime; Write-Host "$c;$rp;$dp;$($ut.TotalSeconds)"`;
+        const res = await conn.execCommand(`powershell -Command "${psScript}"`, {});
+        const parts = res.stdout.trim().split(';');
+        const cpu = parseFloat(parts[0]) || 0;
+        const memory = parseFloat(parts[1]) || 0;
+        const disk = parseFloat(parts[2]) || 0;
+        const uptime = parseInt(parts[3]) || 0;
 
-        // Memory
-        const memRes = await conn.execCommand('powershell -Command "$os = Get-CimInstance Win32_OperatingSystem; [math]::Round(($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / $os.TotalVisibleMemorySize * 100, 1)"', {});
-        const memory = parseFloat(memRes.stdout) || 0;
-
-        // Disk (C:)
-        const diskRes = await conn.execCommand('powershell -Command "$d = Get-PSDrive C; [math]::Round(($d.Used / $d.Used + $d.Free) * 100, 1)"', {});
-        const disk = parseFloat(diskRes.stdout) || 0;
-
-        // Uptime
-        const uptimeRes = await conn.execCommand('powershell -Command "[int](New-TimeSpan -Start (Get-CimInstance Win32_OperatingSystem).LastBootUpTime -End (Get-Date)).TotalSeconds"', {});
-        const uptime = parseInt(uptimeRes.stdout) || 0;
-
-        // Details
         const osRes = await conn.execCommand('powershell -Command "(Get-CimInstance Win32_OperatingSystem).Caption"', {});
         const os = osRes.stdout.trim() || "Windows";
-        
         const hostRes = await conn.execCommand("hostname", {});
         const hostname = hostRes.stdout.trim();
-
         const kernelRes = await conn.execCommand('powershell -Command "(Get-CimInstance Win32_OperatingSystem).Version"', {});
         const kernel = kernelRes.stdout.trim();
-
         const procsRes = await conn.execCommand('powershell -Command "(Get-Process).Count"', {});
         const processes = parseInt(procsRes.stdout) || 0;
 
         return { cpu, memory, disk, uptime, os, hostname, kernel, processes, loadAvg: [0, 0, 0] };
       }
 
-      // Linux (existing logic)
-      // CPU - using /proc/stat for accuracy
-      const cpuResult = await conn.execCommand(
-        `awk '{u=$2+$4; t=$2+$4+$5; if (NR==1) {u1=u; t1=t} else {printf "%.1f", (($2+$4)-u1)*100/(t-t1)}}' <(grep 'cpu ' /proc/stat) <(sleep 1; grep 'cpu ' /proc/stat)`,
-        {}
-      );
-      const cpu = cpuResult.stdout ? parseFloat(cpuResult.stdout.trim()) || 0 : 0;
-
-      // Memory
-      const memResult = await conn.execCommand(
-        `free | grep Mem | awk '{printf "%.1f", $3/$2 * 100}'`,
-        {}
-      );
-      const memory = parseFloat(memResult.stdout) || 0;
-
-      // Disk
-      const diskResult = await conn.execCommand(
-        `df / | tail -1 | awk '{print $5}' | sed 's/%//'`,
-        {}
-      );
-      const disk = parseFloat(diskResult.stdout) || 0;
-
-      // Uptime (seconds)
-      const uptimeResult = await conn.execCommand(
-        `cat /proc/uptime | awk '{print int($1)}'`,
-        {}
-      );
-      const uptime = parseInt(uptimeResult.stdout) || 0;
+      // Linux
+      const bashScript = `c=$(top -bn1 | grep '%Cpu' | awk '{print 100 - $8}'); mt=$(grep MemTotal /proc/meminfo | awk '{print $2}'); ma=$(grep MemAvailable /proc/meminfo | awk '{print $2}'); rp=$(awk "BEGIN {print ($mt - $ma) / $mt * 100}"); dp=$(df -h / | awk 'NR==2 {print $5}' | tr -d '%'); us=$(awk '{print int($1)}' /proc/uptime); echo "$c;$rp;$dp;$us"`;
+      const result = await conn.execCommand(bashScript, {});
+      const parts = result.stdout.trim().split(';');
+      const cpu = parseFloat(parts[0]) || 0;
+      const memory = parseFloat(parts[1]) || 0;
+      const disk = parseFloat(parts[2]) || 0;
+      const uptime = parseInt(parts[3]) || 0;
 
       // OS
       const osResult = await conn.execCommand(
