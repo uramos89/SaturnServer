@@ -31,12 +31,14 @@ echo "Node: $NODE_VER OK"
 
 # 2. Clonar o actualizar el repositorio
 echo "[2/6] Sincronizando código..."
-if [ -d "$APP_DIR" ]; then
+if [ -d "$APP_DIR/.git" ]; then
   cd "$APP_DIR"
   git fetch origin
   git reset --hard origin/main
   echo "Repositorio actualizado."
 else
+  echo "Repositorio no encontrado o inválido. Clonando de nuevo..."
+  rm -rf "$APP_DIR"
   git clone "$REPO_URL" "$APP_DIR"
   cd "$APP_DIR"
   echo "Repositorio clonado."
