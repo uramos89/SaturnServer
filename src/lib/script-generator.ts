@@ -53,9 +53,9 @@ export class ScriptGenerator {
 
   private static genericCommand(os: OSType, command: string): ScriptResponse {
     const script = os === "windows"
-      ? `${this.shebang(os)}${this.errorHandler(os)}\n${command}\n`
-      : `${this.shebang(os)}${this.errorHandler(os)}\n${command}\n`;
-    return this.buildResponse(script, `Execute: ${command}`, ["Generic command - review before execution"], "1m");
+      ? `${ScriptGenerator.shebang(os)}${ScriptGenerator.errorHandler(os)}\n${command}\n`
+      : `${ScriptGenerator.shebang(os)}${ScriptGenerator.errorHandler(os)}\n${command}\n`;
+    return ScriptGenerator.buildResponse(script, `Execute: ${command}`, ["Generic command - review before execution"], "1m");
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -64,17 +64,17 @@ export class ScriptGenerator {
 
   static users_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
-      const script = `${this.shebang(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.errorHandler(os)}
 echo "=== Users ==="
 powershell -Command "Get-LocalUser | Select-Object Name,Enabled,LastLogon,PasswordLastSet | Format-Table -AutoSize"
 echo "=== Groups ==="
 powershell -Command "Get-LocalGroup | Select-Object Name,Description | Format-Table -AutoSize"
 `;
-      return this.buildResponse(script, "List all local users and groups", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "List all local users and groups", ["Read-only operation"], "30s");
     }
-    const script = `${this.shebang(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.errorHandler(os)}
 echo "=== Users ==="
 cat /etc/passwd | awk -F: '{printf "%-20s UID=%-5s GID=%-5s Home=%-20s Shell=%s\\n", $1, $3, $4, $6, $7}'
 echo ""
@@ -87,19 +87,19 @@ echo ""
 echo "=== Last Logins ==="
 last -n 20 2>/dev/null || echo "(no login history)"
 `;
-    return this.buildResponse(script, "List all system users, groups, sudoers and last logins", ["Read-only operation"], "30s");
+    return ScriptGenerator.buildResponse(script, "List all system users, groups, sudoers and last logins", ["Read-only operation"], "30s");
   }
 
   static users_create(os: OSType, params: Record<string, any>): ScriptResponse {
     const { username, password, groups, shell, homeDir } = params;
-    if (!username) return this.buildResponse("", "ERROR: username required", [], "0s");
+    if (!username) return ScriptGenerator.buildResponse("", "ERROR: username required", [], "0s");
 
     if (os === "windows") {
       const pwCmd = password ? `$secPw = ConvertTo-SecureString "${password}" -AsPlainText -Force` : "";
       const groupCmd = groups ? groups.map((g: string) => `Add-LocalGroupMember -Group "${g}" -Member "${username}"`).join("\n") : "";
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 echo "Creating user ${username}..."
 ${pwCmd}
 if (-not (Get-LocalUser -Name "${username}" -ErrorAction SilentlyContinue)) {
@@ -111,8 +111,8 @@ if (-not (Get-LocalUser -Name "${username}" -ErrorAction SilentlyContinue)) {
 ${groupCmd}
 echo "Done"
 `;
-      return this.buildResponse(script, `Create user ${username} on Windows`, ["Creates local user account"], "1m",
-        `${this.shebang(os)}\nRemove-LocalUser -Name "${username}"\necho "User ${username} removed"\n`);
+      return ScriptGenerator.buildResponse(script, `Create user ${username} on Windows`, ["Creates local user account"], "1m",
+        `${ScriptGenerator.shebang(os)}\nRemove-LocalUser -Name "${username}"\necho "User ${username} removed"\n`);
     }
 
     // Linux
@@ -120,9 +120,9 @@ echo "Done"
     const shellFlag = shell ? `-s ${shell}` : "-s /bin/bash";
     const groupFlag = groups ? `-G ${groups.join(",")}` : "";
     const pwCmd = password ? `echo '${username}:${password}' | chpasswd` : "passwd -l ${username}";
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 if id "${username}" &>/dev/null; then
   echo "User ${username} already exists - skipping"
 else
@@ -132,18 +132,18 @@ else
   echo "Password set for ${username}"
 fi
 `;
-    return this.buildResponse(script, `Create user ${username} on Linux`, ["Creates system user account"], "1m",
-      `${this.shebang(os)}\n${this.requireRoot(os)}\nuserdel -r "${username}"\necho "User ${username} removed"\n`);
+    return ScriptGenerator.buildResponse(script, `Create user ${username} on Linux`, ["Creates system user account"], "1m",
+      `${ScriptGenerator.shebang(os)}\n${ScriptGenerator.requireRoot(os)}\nuserdel -r "${username}"\necho "User ${username} removed"\n`);
   }
 
   static users_delete(os: OSType, params: Record<string, any>): ScriptResponse {
     const { username } = params;
-    if (!username) return this.buildResponse("", "ERROR: username required", [], "0s");
+    if (!username) return ScriptGenerator.buildResponse("", "ERROR: username required", [], "0s");
 
     if (os === "windows") {
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 if (Get-LocalUser -Name "${username}" -ErrorAction SilentlyContinue) {
   Remove-LocalUser -Name "${username}"
   echo "User ${username} deleted"
@@ -151,11 +151,11 @@ if (Get-LocalUser -Name "${username}" -ErrorAction SilentlyContinue) {
   echo "User ${username} not found"
 }
 `;
-      return this.buildResponse(script, `Delete user ${username}`, ["Irreversible - removes user account"], "30s");
+      return ScriptGenerator.buildResponse(script, `Delete user ${username}`, ["Irreversible - removes user account"], "30s");
     }
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 if id "${username}" &>/dev/null; then
   userdel -r "${username}" 2>/dev/null || userdel "${username}"
   echo "User ${username} deleted"
@@ -163,28 +163,28 @@ else
   echo "User ${username} not found"
 fi
 `;
-    return this.buildResponse(script, `Delete user ${username}`, ["Irreversible - removes user and home directory"], "30s");
+    return ScriptGenerator.buildResponse(script, `Delete user ${username}`, ["Irreversible - removes user and home directory"], "30s");
   }
 
   static users_lock(os: OSType, params: Record<string, any>): ScriptResponse {
     const { username, locked } = params;
-    if (!username) return this.buildResponse("", "ERROR: username required", [], "0s");
+    if (!username) return ScriptGenerator.buildResponse("", "ERROR: username required", [], "0s");
 
     if (os === "windows") {
       const action = locked ? "Disable" : "Enable";
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 Set-LocalUser -Name "${username}" -${action === "Disable" ? "Enabled:$false" : "Enabled:$true"}
 echo "User ${username} ${action.toLowerCase()}d"
 `;
-      return this.buildResponse(script, `${locked ? "Lock" : "Unlock"} user ${username}`, ["Affects user login ability"], "10s");
+      return ScriptGenerator.buildResponse(script, `${locked ? "Lock" : "Unlock"} user ${username}`, ["Affects user login ability"], "10s");
     }
     const cmd = locked ? `passwd -l "${username}"` : `passwd -u "${username}"`;
     const action = locked ? "locked" : "unlocked";
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 if id "${username}" &>/dev/null; then
   ${cmd}
   echo "User ${username} ${action}"
@@ -192,31 +192,31 @@ else
   echo "User ${username} not found"
 fi
 `;
-    return this.buildResponse(script, `${locked ? "Lock" : "Unlock"} user ${username}`, ["Affects user login ability"], "10s");
+    return ScriptGenerator.buildResponse(script, `${locked ? "Lock" : "Unlock"} user ${username}`, ["Affects user login ability"], "10s");
   }
 
   static users_groups(os: OSType, params: Record<string, any>): ScriptResponse {
     const { username, groups, groupAction } = params;
-    if (!username || !groups) return this.buildResponse("", "ERROR: username and groups required", [], "0s");
+    if (!username || !groups) return ScriptGenerator.buildResponse("", "ERROR: username and groups required", [], "0s");
 
     if (os === "windows") {
       const cmd = groupAction === "add"
         ? groups.map((g: string) => `Add-LocalGroupMember -Group "${g}" -Member "${username}"`).join("\n")
         : groups.map((g: string) => `Remove-LocalGroupMember -Group "${g}" -Member "${username}"`).join("\n");
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 ${cmd}
 echo "Done"
 `;
-      return this.buildResponse(script, `${groupAction} groups for ${username}`, ["Modifies group membership"], "30s");
+      return ScriptGenerator.buildResponse(script, `${groupAction} groups for ${username}`, ["Modifies group membership"], "30s");
     }
     const cmd = groupAction === "add"
       ? groups.map((g: string) => `usermod -aG "${g}" "${username}"`).join("\n")
       : groups.map((g: string) => `gpasswd -d "${username}" "${g}"`).join("\n");
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 if id "${username}" &>/dev/null; then
   ${cmd}
   echo "Groups modified for ${username}"
@@ -224,7 +224,7 @@ else
   echo "User ${username} not found"
 fi
 `;
-    return this.buildResponse(script, `${groupAction} groups for ${username}`, ["Modifies group membership"], "30s");
+    return ScriptGenerator.buildResponse(script, `${groupAction} groups for ${username}`, ["Modifies group membership"], "30s");
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -233,116 +233,116 @@ fi
 
   static tasks_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
-      const script = `${this.shebang(os)}
+      const script = `${ScriptGenerator.shebang(os)}
 powershell -Command "Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object {$_.TaskPath -notlike '\\Microsoft\\*'} | Select-Object @{Name='id';Expression={$_.TaskName}}, @{Name='name';Expression={$_.TaskName}}, @{Name='state';Expression={[string]$_.State}}, @{Name='schedule';Expression={'N/A'}}, @{Name='command';Expression={if($_.Actions.Execute){$_.Actions.Execute}else{'N/A'}}}, @{Name='script';Expression=@{shebang=''}} | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List scheduled tasks as JSON", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "List scheduled tasks as JSON", ["Read-only operation"], "30s");
     }
-    const script = `${this.shebang(os)}
+    const script = `${ScriptGenerator.shebang(os)}
 crontab -l 2>/dev/null | grep -v '^#' | grep -v '^$' | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"id\\":\\"%s\\",\\"name\\":\\"cron job\\",\\"state\\":\\"Active\\",\\"schedule\\":\\"%s %s %s %s %s\\",\\"command\\":\\"%s\\",\\"script\\":{\\"shebang\\":\\"\\"}}", NR, $1, $2, $3, $4, $5, $6} END{print "]"}'
 `;
-    return this.buildResponse(script, "List cron jobs as JSON", ["Read-only operation"], "30s");
+    return ScriptGenerator.buildResponse(script, "List cron jobs as JSON", ["Read-only operation"], "30s");
   }
 
   static tasks_create(os: OSType, params: Record<string, any>): ScriptResponse {
     const { schedule, command, name } = params;
-    if (!schedule || !command) return this.buildResponse("", "ERROR: schedule and command required", [], "0s");
+    if (!schedule || !command) return ScriptGenerator.buildResponse("", "ERROR: schedule and command required", [], "0s");
 
     if (os === "windows") {
       const taskName = name || `SaturnTask_${Date.now()}`;
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 schtasks /Create /TN "${taskName}" /TR "${command}" /SC ${schedule} /F
 echo "Task ${taskName} created"
 `;
-      return this.buildResponse(script, `Create scheduled task ${taskName}`, ["Creates Windows scheduled task"], "1m",
-        `${this.shebang(os)}\nschtasks /Delete /TN "${taskName}" /F\necho "Task ${taskName} deleted"\n`);
+      return ScriptGenerator.buildResponse(script, `Create scheduled task ${taskName}`, ["Creates Windows scheduled task"], "1m",
+        `${ScriptGenerator.shebang(os)}\nschtasks /Delete /TN "${taskName}" /F\necho "Task ${taskName} deleted"\n`);
     }
     const cronLine = `${schedule} ${command}`;
     const taskName = name || `saturn-${Date.now()}`;
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 (crontab -l 2>/dev/null; echo "# ${taskName} - ${new Date().toISOString()}")
 (crontab -l 2>/dev/null; echo "${cronLine}") | crontab -
 echo "Cron job added: ${cronLine}"
 `;
-    return this.buildResponse(script, `Create cron job: ${cronLine}`, ["Adds entry to crontab"], "1m",
-      `${this.shebang(os)}\n${this.requireRoot(os)}\ncrontab -l 2>/dev/null | grep -v "# ${taskName}" | grep -v "${cronLine}" | crontab -\necho "Cron job removed"\n`);
+    return ScriptGenerator.buildResponse(script, `Create cron job: ${cronLine}`, ["Adds entry to crontab"], "1m",
+      `${ScriptGenerator.shebang(os)}\n${ScriptGenerator.requireRoot(os)}\ncrontab -l 2>/dev/null | grep -v "# ${taskName}" | grep -v "${cronLine}" | crontab -\necho "Cron job removed"\n`);
   }
 
   static tasks_delete(os: OSType, params: Record<string, any>): ScriptResponse {
     const { taskId } = params;
-    if (!taskId) return this.buildResponse("", "ERROR: taskId required", [], "0s");
+    if (!taskId) return ScriptGenerator.buildResponse("", "ERROR: taskId required", [], "0s");
 
     if (os === "windows") {
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 schtasks /Delete /TN "${taskId}" /F
 echo "Task ${taskId} deleted"
 `;
-      return this.buildResponse(script, `Delete task ${taskId}`, ["Irreversible"], "30s");
+      return ScriptGenerator.buildResponse(script, `Delete task ${taskId}`, ["Irreversible"], "30s");
     }
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 crontab -l 2>/dev/null | grep -v "${taskId}" | crontab -
 echo "Task ${taskId} removed from crontab"
 `;
-    return this.buildResponse(script, `Delete task ${taskId}`, ["Removes from crontab"], "30s");
+    return ScriptGenerator.buildResponse(script, `Delete task ${taskId}`, ["Removes from crontab"], "30s");
   }
 
   static processes_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
-      const script = `${this.shebang(os)}
+      const script = `${ScriptGenerator.shebang(os)}
 powershell -Command "Get-Process | Sort-Object CPU -Descending | Select-Object -First 20 | Select-Object @{Name='pid';Expression={$_.Id}}, @{Name='user';Expression={'N/A'}}, @{Name='name';Expression={$_.ProcessName}}, @{Name='cpu';Expression={[math]::Round($_.CPU, 2)}}, @{Name='mem';Expression={[math]::Round($_.WorkingSet64 / 1MB, 2)}}, @{Name='state';Expression={if($_.Responding){'Running'}else{'Not Responding'}}} | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List top 20 processes as JSON", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "List top 20 processes as JSON", ["Read-only operation"], "30s");
     }
-    const script = `${this.shebang(os)}
+    const script = `${ScriptGenerator.shebang(os)}
 ps -eo pcpu,pmem,pid,user,stat,comm --sort=-pcpu 2>/dev/null | head -21 | tail -20 | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"cpu\\":\\"%s%%\\",\\"mem\\":\\"%s%%\\",\\"pid\\":\\"%s\\",\\"user\\":\\"%s\\",\\"state\\":\\"%s\\",\\"name\\":\\"%s\\"}", $1, $2, $3, $4, $5, $6} END{print "]"}'
 `;
-    return this.buildResponse(script, "List top 20 processes as JSON", ["Read-only operation"], "30s");
+    return ScriptGenerator.buildResponse(script, "List top 20 processes as JSON", ["Read-only operation"], "30s");
   }
 
   static processes_kill(os: OSType, params: Record<string, any>): ScriptResponse {
     const { pid, signal } = params;
-    if (!pid) return this.buildResponse("", "ERROR: pid required", [], "0s");
+    if (!pid) return ScriptGenerator.buildResponse("", "ERROR: pid required", [], "0s");
 
     if (os === "windows") {
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 Stop-Process -Id ${pid} -Force
 echo "Process ${pid} terminated"
 `;
-      return this.buildResponse(script, `Kill process ${pid}`, ["Forcefully terminates process"], "10s");
+      return ScriptGenerator.buildResponse(script, `Kill process ${pid}`, ["Forcefully terminates process"], "10s");
     }
     const sig = signal || "SIGTERM";
-    const script = `${this.shebang(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.errorHandler(os)}
 if kill -${sig} ${pid} 2>/dev/null; then
   echo "Process ${pid} killed with ${sig}"
 else
   echo "Failed to kill process ${pid} - check permissions or if process exists"
 fi
 `;
-    return this.buildResponse(script, `Kill process ${pid} with ${sig}`, ["Terminates a running process"], "10s");
+    return ScriptGenerator.buildResponse(script, `Kill process ${pid} with ${sig}`, ["Terminates a running process"], "10s");
   }
 
   static processes_renice(os: OSType, params: Record<string, any>): ScriptResponse {
     const { pid, priority } = params;
-    if (!pid || priority === undefined) return this.buildResponse("", "ERROR: pid and priority required", [], "0s");
+    if (!pid || priority === undefined) return ScriptGenerator.buildResponse("", "ERROR: pid and priority required", [], "0s");
 
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 renice ${priority} -p ${pid}
 echo "Process ${pid} reniced to ${priority}"
 `;
-    return this.buildResponse(script, `Renice process ${pid} to ${priority}`, ["Changes process priority (-20 to 19)"], "10s");
+    return ScriptGenerator.buildResponse(script, `Renice process ${pid} to ${priority}`, ["Changes process priority (-20 to 19)"], "10s");
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -351,7 +351,7 @@ echo "Process ${pid} reniced to ${priority}"
 
   static monitoring_snapshot(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
-      const script = `${this.shebang(os)}
+      const script = `${ScriptGenerator.shebang(os)}
 echo "=== CPU ==="
 powershell -Command "$cpu = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average; Write-Host \"CPU: $($cpu.Average)%\""
 echo "=== Memory ==="
@@ -361,9 +361,9 @@ powershell -Command "Get-Volume | Where-Object DriveType -eq 'Fixed' | Select-Ob
 echo "=== Network ==="
 powershell -Command "Get-NetAdapterStatistics | Select-Object Name,ReceivedBytes,SentBytes | Format-Table -AutoSize"
 `;
-      return this.buildResponse(script, "System resource snapshot (CPU, RAM, Disk, Network)", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "System resource snapshot (CPU, RAM, Disk, Network)", ["Read-only operation"], "30s");
     }
-    const script = `${this.shebang(os)}
+    const script = `${ScriptGenerator.shebang(os)}
 echo "=== CPU ==="
 top -bn1 | grep "Cpu(s)" | awk '{print "CPU: " $2 "% user, " $4 "% system, " $8 "% idle"}'
 echo ""
@@ -382,7 +382,7 @@ echo ""
 echo "=== Uptime ==="
 uptime
 `;
-    return this.buildResponse(script, "System resource snapshot (CPU, RAM, Disk, Network)", ["Read-only operation"], "30s");
+    return ScriptGenerator.buildResponse(script, "System resource snapshot (CPU, RAM, Disk, Network)", ["Read-only operation"], "30s");
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -395,47 +395,47 @@ uptime
 
     if (os === "windows") {
       const filter = service ? `| Where-Object ProviderName -eq '${service}'` : "";
-      const script = `${this.shebang(os)}
+      const script = `${ScriptGenerator.shebang(os)}
 echo "=== System Logs (last ${n} entries) ==="
 powershell -Command "Get-WinEvent -LogName System -MaxEvents ${n} ${filter} | Select-Object TimeCreated,Id,LevelDisplayName,Message | Format-Table -AutoSize -Wrap"
 `;
-      return this.buildResponse(script, `Get last ${n} system log entries`, ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, `Get last ${n} system log entries`, ["Read-only operation"], "30s");
     }
     const journalCmd = service
       ? `journalctl -u ${service} -n ${n} --no-pager`
       : `journalctl -n ${n} --no-pager`;
-    const script = `${this.shebang(os)}
+    const script = `${ScriptGenerator.shebang(os)}
 echo "=== System Logs (last ${n} entries) ==="
 ${journalCmd} 2>/dev/null || tail -${n} /var/log/syslog 2>/dev/null || tail -${n} /var/log/messages 2>/dev/null || echo "(no logs available)"
 `;
-    return this.buildResponse(script, `Get last ${n} log entries${service ? ` for ${service}` : ""}`, ["Read-only operation"], "30s");
+    return ScriptGenerator.buildResponse(script, `Get last ${n} log entries${service ? ` for ${service}` : ""}`, ["Read-only operation"], "30s");
   }
 
   static logs_rotate(os: OSType, params: Record<string, any>): ScriptResponse {
     const { service } = params;
 
     if (os === "windows") {
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 echo "Rotating Windows Event Logs..."
 wevtutil cl System
 wevtutil cl Application
 wevtutil cl Security
 echo "Event logs cleared"
 `;
-      return this.buildResponse(script, "Clear Windows event logs", ["Clears all event logs - irreversible"], "1m");
+      return ScriptGenerator.buildResponse(script, "Clear Windows event logs", ["Clears all event logs - irreversible"], "1m");
     }
     const logCmd = service
       ? `logrotate -f /etc/logrotate.d/${service} 2>/dev/null || echo "No logrotate config for ${service}"`
       : "logrotate -f /etc/logrotate.conf 2>/dev/null || echo 'logrotate not configured'";
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 ${logCmd}
 echo "Log rotation completed"
 `;
-    return this.buildResponse(script, `Rotate logs${service ? ` for ${service}` : ""}`, ["Forces log rotation"], "1m");
+    return ScriptGenerator.buildResponse(script, `Rotate logs${service ? ` for ${service}` : ""}`, ["Forces log rotation"], "1m");
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -444,7 +444,7 @@ echo "Log rotation completed"
 
   static network_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
-      const script = `${this.shebang(os)}
+      const script = `${ScriptGenerator.shebang(os)}
     if(NR>1)printf ",";
     iface=$1; status=$2; split($3,a,"/"); ip=a[1]; mask=a[2];
     "ip route show dev " iface " | grep default | awk \"{print \\$3}\"" | getline gateway;
@@ -456,34 +456,34 @@ echo "Log rotation completed"
     printf "{\\"iface\\":\\"%s\\",\\"status\\":\\"%s\\",\\"ip\\":\\"%s\\",\\"mask\\":\\"%s\\",\\"mac\\":\\"%s\\",\\"gateway\\":\\"%s\\",\\"dns\\":\\"%s\\"}", iface, status, ip, mask, mac, gateway, dns;
 } END{print "]"}'
 `;
-    return this.buildResponse(script, "List network interfaces with advanced properties as JSON", ["Read-only operation"], "30s");
+    return ScriptGenerator.buildResponse(script, "List network interfaces with advanced properties as JSON", ["Read-only operation"], "30s");
   }
 
   static network_configure(os: OSType, params: Record<string, any>): ScriptResponse {
     const { iface, dhcp, ip, netmask, gateway, dns } = params;
-    if (!iface) return this.buildResponse("", "ERROR: interface name required", [], "0s");
+    if (!iface) return ScriptGenerator.buildResponse("", "ERROR: interface name required", [], "0s");
 
     if (os === "windows") {
       const dhcpCmd = dhcp
         ? `Set-NetIPInterface -InterfaceAlias "${iface}" -Dhcp Enabled`
         : `New-NetIPAddress -InterfaceAlias "${iface}" -IPAddress ${ip} -PrefixLength ${netmask || "24"} ${gateway ? `-DefaultGateway ${gateway}` : ""}`;
       const dnsCmd = dns ? `Set-DnsClientServerAddress -InterfaceAlias "${iface}" -ServerAddresses (${dns.map((d: string) => `"${d}"`).join(",")})` : "";
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 echo "Configuring ${iface}..."
 ${dhcpCmd}
 ${dnsCmd}
 echo "Interface ${iface} configured"
 echo "WARNING: Network changes may disconnect SSH session"
 `;
-      return this.buildResponse(script, `Configure interface ${iface}`, ["May disconnect SSH - use with caution"], "2m",
-        `${this.shebang(os)}\n${this.requireRoot(os)}\nSet-NetIPInterface -InterfaceAlias "${iface}" -Dhcp Enabled\necho "Reverted to DHCP"\n`);
+      return ScriptGenerator.buildResponse(script, `Configure interface ${iface}`, ["May disconnect SSH - use with caution"], "2m",
+        `${ScriptGenerator.shebang(os)}\n${ScriptGenerator.requireRoot(os)}\nSet-NetIPInterface -InterfaceAlias "${iface}" -Dhcp Enabled\necho "Reverted to DHCP"\n`);
     }
     const dnsLine = dns ? dns.map((d: string) => `echo "nameserver ${d}" >> /etc/resolv.conf`).join("\n") : "";
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 echo "Configuring ${iface}..."
 if [ "${dhcp}" = "true" ]; then
   echo "Setting DHCP for ${iface}..."
@@ -505,8 +505,8 @@ ${dnsLine}
 echo "Interface ${iface} configured"
 echo "WARNING: Network changes may disconnect SSH session"
 `;
-    return this.buildResponse(script, `Configure interface ${iface}`, ["May disconnect SSH - use with caution"], "2m",
-      `${this.shebang(os)}\n${this.requireRoot(os)}\ndhclient ${iface}\necho "Reverted to DHCP"\n`);
+    return ScriptGenerator.buildResponse(script, `Configure interface ${iface}`, ["May disconnect SSH - use with caution"], "2m",
+      `${ScriptGenerator.shebang(os)}\n${ScriptGenerator.requireRoot(os)}\ndhclient ${iface}\necho "Reverted to DHCP"\n`);
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -515,38 +515,38 @@ echo "WARNING: Network changes may disconnect SSH session"
 
   static firewall_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
-      const script = `${this.shebang(os)}
+      const script = `${ScriptGenerator.shebang(os)}
 powershell -Command "Get-NetFirewallRule -Enabled True -ErrorAction SilentlyContinue | Select-Object -First 50 | Select-Object @{Name='id';Expression={$_.InstanceID}}, @{Name='name';Expression={$_.DisplayName}}, @{Name='direction';Expression={[string]$_.Direction}}, @{Name='action';Expression={[string]$_.Action}} | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List firewall rules as JSON", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "List firewall rules as JSON", ["Read-only operation"], "30s");
     }
-    const script = `${this.shebang(os)}
+    const script = `${ScriptGenerator.shebang(os)}
 iptables -S 2>/dev/null | grep '^-A' | head -n 50 | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"id\\":\\"%s\\",\\"name\\":\\"%s\\",\\"direction\\":\\"%s\\",\\"action\\":\\"%s\\"}", NR, $2, $2, $4} END{print "]"}'
 `;
-    return this.buildResponse(script, "List firewall rules as JSON", ["Read-only operation"], "30s");
+    return ScriptGenerator.buildResponse(script, "List firewall rules as JSON", ["Read-only operation"], "30s");
   }
 
   static firewall_add(os: OSType, params: Record<string, any>): ScriptResponse {
     const { port, protocol, action } = params;
-    if (!port) return this.buildResponse("", "ERROR: port required", [], "0s");
+    if (!port) return ScriptGenerator.buildResponse("", "ERROR: port required", [], "0s");
     const proto = protocol || "tcp";
     const act = action || "ACCEPT";
 
     if (os === "windows") {
       const ruleName = `Saturn_Port_${port}_${proto}`;
       const dir = act === "DROP" ? "Outbound" : "Inbound";
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 New-NetFirewallRule -DisplayName "${ruleName}" -Direction ${dir} -Protocol ${proto} -LocalPort ${port} -Action ${act}
 echo "Firewall rule added: ${ruleName}"
 `;
-      return this.buildResponse(script, `Add firewall rule for port ${port}/${proto}`, ["Opens/closes firewall port"], "1m",
-        `${this.shebang(os)}\n${this.requireRoot(os)}\nRemove-NetFirewallRule -DisplayName "${ruleName}"\necho "Rule removed"\n`);
+      return ScriptGenerator.buildResponse(script, `Add firewall rule for port ${port}/${proto}`, ["Opens/closes firewall port"], "1m",
+        `${ScriptGenerator.shebang(os)}\n${ScriptGenerator.requireRoot(os)}\nRemove-NetFirewallRule -DisplayName "${ruleName}"\necho "Rule removed"\n`);
     }
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 if command -v ufw &>/dev/null; then
   ufw ${act === "ACCEPT" ? "allow" : "deny"} ${port}/${proto}
   echo "ufw rule added: ${port}/${proto}"
@@ -559,29 +559,29 @@ else
   echo "iptables rule added: ${port}/${proto}"
 fi
 `;
-    return this.buildResponse(script, `Add firewall rule for port ${port}/${proto}`, ["Modifies firewall rules"], "1m",
-      `${this.shebang(os)}\n${this.requireRoot(os)}\niptables -D INPUT -p ${proto} --dport ${port} -j ${act}\necho "Rule removed"\n`);
+    return ScriptGenerator.buildResponse(script, `Add firewall rule for port ${port}/${proto}`, ["Modifies firewall rules"], "1m",
+      `${ScriptGenerator.shebang(os)}\n${ScriptGenerator.requireRoot(os)}\niptables -D INPUT -p ${proto} --dport ${port} -j ${act}\necho "Rule removed"\n`);
   }
 
   static firewall_delete(os: OSType, params: Record<string, any>): ScriptResponse {
     const { ruleId } = params;
-    if (!ruleId) return this.buildResponse("", "ERROR: ruleId required", [], "0s");
+    if (!ruleId) return ScriptGenerator.buildResponse("", "ERROR: ruleId required", [], "0s");
 
     if (os === "windows") {
-      const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+      const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 Remove-NetFirewallRule -DisplayName "${ruleId}"
 echo "Rule ${ruleId} deleted"
 `;
-      return this.buildResponse(script, `Delete firewall rule ${ruleId}`, ["Removes firewall rule"], "30s");
+      return ScriptGenerator.buildResponse(script, `Delete firewall rule ${ruleId}`, ["Removes firewall rule"], "30s");
     }
-    const script = `${this.shebang(os)}
-${this.requireRoot(os)}
-${this.errorHandler(os)}
+    const script = `${ScriptGenerator.shebang(os)}
+${ScriptGenerator.requireRoot(os)}
+${ScriptGenerator.errorHandler(os)}
 iptables -D INPUT ${ruleId} 2>/dev/null && echo "Rule ${ruleId} deleted" || echo "Rule ${ruleId} not found"
 `;
-    return this.buildResponse(script, `Delete firewall rule ${ruleId}`, ["Removes iptables rule"], "30s");
+    return ScriptGenerator.buildResponse(script, `Delete firewall rule ${ruleId}`, ["Removes iptables rule"], "30s");
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -590,14 +590,14 @@ iptables -D INPUT ${ruleId} 2>/dev/null && echo "Rule ${ruleId} deleted" || echo
 
   static packages_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
-      const script = `${this.shebang(os)}
+      const script = `${ScriptGenerator.shebang(os)}
 echo "=== Installed Programs ==="
 powershell -Command "Get-WmiObject -Class Win32_Product | Select-Object Name,Version,Vendor | Format-Table -AutoSize"
 echo ""
 echo "=== Winget Available ==="
 where winget 2>nul && winget list --accept-source-agreements 2>nul || echo "winget not installed"
 `;
-      return this.buildResponse(script, "List installed packages", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "List installed packages", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
 echo "=== Package Manager ==="
