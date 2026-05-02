@@ -307,20 +307,31 @@ function ProcessesTab({ data, onAction }: { data: any; onAction: (action: string
 }
 
 function MonitoringTab({ data }: { data: any }) {
-  const snap = data?.snapshot || {};
+  if (!data || !data.snapshot) {
+    return (
+      <div className="text-center py-12 text-slate-500 bg-white/5 border border-white/10 rounded-xl">
+        <p>No snapshot data available. Is the node online?</p>
+      </div>
+    );
+  }
+
+  const snap = data.snapshot;
+  const format = (v: any) => (v === null || v === undefined || isNaN(v) ? "0" : v);
+
   const metrics = [
-    { label: "CPU", value: snap.cpu || snap.CPU, color: "text-blue-400" },
-    { label: "Memory", value: snap.memory || snap.Memory, color: "text-green-400" },
-    { label: "Disk", value: snap.disk || snap.Disk, color: "text-yellow-400" },
-    { label: "Load Avg", value: snap.loadAvg || snap["Load Average"], color: "text-purple-400" },
-    { label: "Uptime", value: snap.uptime || snap.Uptime, color: "text-cyan-400" },
+    { label: "CPU", value: format(snap.cpu || snap.CPU) + "%", color: "text-blue-400" },
+    { label: "Memory", value: format(snap.memory || snap.Memory) + "%", color: "text-green-400" },
+    { label: "Disk", value: format(snap.disk || snap.Disk) + "%", color: "text-yellow-400" },
+    { label: "Load Avg", value: Array.isArray(snap.loadAvg) ? snap.loadAvg.join(", ") : format(snap.loadAvg || snap["Load Average"]), color: "text-purple-400" },
+    { label: "Uptime", value: format(snap.uptime || snap.Uptime) + "s", color: "text-cyan-400" },
   ];
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
       {metrics.map((m, i) => (
         <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-4">
           <p className="text-slate-400 text-xs">{m.label}</p>
-          <p className={`text-lg font-bold mt-1 ${m.color}`}>{m.value || "-"}</p>
+          <p className={`text-lg font-bold mt-1 ${m.color}`}>{m.value}</p>
         </div>
       ))}
     </div>

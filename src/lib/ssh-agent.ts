@@ -31,6 +31,19 @@ export interface ExecResult {
   code: number | null;
 }
 
+// ── Safe Parsing Functions ───────────────────────────────────────────────────
+function safeParseFloat(val: any): number {
+  if (val === null || val === undefined || val === '') return 0;
+  const parsed = parseFloat(val.toString());
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+function safeParseInt(val: any): number {
+  if (val === null || val === undefined || val === '') return 0;
+  const parsed = parseInt(val.toString());
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 export class SSHAgent {
   private connections: Map<string, NodeSSH> = new Map();
 
@@ -100,10 +113,10 @@ export class SSHAgent {
         const psScript = `$c=Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"|Select-Object -ExpandProperty PercentProcessorTime; $o=Get-CimInstance Win32_OperatingSystem; $tr=$o.TotalVisibleMemorySize; $fr=$o.FreePhysicalMemory; $rp=(($tr-$fr)/$tr)*100; $d=Get-PSDrive C; $dp=(($d.Used)/($d.Used+$d.Free))*100; $ut=(Get-Date)-$o.LastBootUpTime; Write-Host "$c;$rp;$dp;$($ut.TotalSeconds)"`;
         const res = await conn.execCommand(`powershell -Command "${psScript}"`, {});
         const parts = res.stdout.trim().split(';');
-        const cpu = parseFloat(parts[0]) || 0;
-        const memory = parseFloat(parts[1]) || 0;
-        const disk = parseFloat(parts[2]) || 0;
-        const uptime = parseInt(parts[3]) || 0;
+        const cpu = safeParseFloat(parts[0]);
+        const memory = safeParseFloat(parts[1]);
+        const disk = safeParseFloat(parts[2]);
+        const uptime = safeParseInt(parts[3]);
 
         const osRes = await conn.execCommand('powershell -Command "(Get-CimInstance Win32_OperatingSystem).Caption"', {});
         const os = osRes.stdout.trim() || "Windows";
@@ -112,7 +125,7 @@ export class SSHAgent {
         const kernelRes = await conn.execCommand('powershell -Command "(Get-CimInstance Win32_OperatingSystem).Version"', {});
         const kernel = kernelRes.stdout.trim();
         const procsRes = await conn.execCommand('powershell -Command "(Get-Process).Count"', {});
-        const processes = parseInt(procsRes.stdout) || 0;
+        const processes = safeParseInt(procsRes.stdout);
 
         return { cpu, memory, disk, uptime, os, hostname, kernel, processes, loadAvg: [0, 0, 0] };
       }
@@ -121,10 +134,10 @@ export class SSHAgent {
       const bashScript = `c=$(top -bn1 | grep '%Cpu' | awk '{print 100 - $8}'); mt=$(grep MemTotal /proc/meminfo | awk '{print $2}'); ma=$(grep MemAvailable /proc/meminfo | awk '{print $2}'); rp=$(awk "BEGIN {print ($mt - $ma) / $mt * 100}"); dp=$(df -h / | awk 'NR==2 {print $5}' | tr -d '%'); us=$(awk '{print int($1)}' /proc/uptime); echo "$c;$rp;$dp;$us"`;
       const result = await conn.execCommand(bashScript, {});
       const parts = result.stdout.trim().split(';');
-      const cpu = parseFloat(parts[0]) || 0;
-      const memory = parseFloat(parts[1]) || 0;
-      const disk = parseFloat(parts[2]) || 0;
-      const uptime = parseInt(parts[3]) || 0;
+      const cpu = safeParseFloat(parts[0]);
+      const memory = safeParseFloat(parts[1]);
+      const disk = safeParseFloat(parts[2]);
+      const uptime = safeParseInt(parts[3]);
 
       // OS
       const osResult = await conn.execCommand(
@@ -143,7 +156,7 @@ export class SSHAgent {
 
       // Processes
       const procsResult = await conn.execCommand(`ps aux 2>/dev/null | wc -l || echo 0`, {});
-      const processes = parseInt(procsResult.stdout) || 0;
+      const processes = safeParseInt(procsResult.stdout);
 
       // Load averages
       const loadResult = await conn.execCommand(
@@ -153,7 +166,7 @@ export class SSHAgent {
       const loadAvg = loadResult.stdout
         .trim()
         .split(" ")
-        .map((v: string) => parseFloat(v) || 0);
+        .map((v: string) => safeParseFloat(v));
 
       return { cpu, memory, disk, uptime, os, hostname, kernel, processes, loadAvg };
     } catch (error: any) {

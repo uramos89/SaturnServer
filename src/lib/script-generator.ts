@@ -445,12 +445,19 @@ echo "Log rotation completed"
   static network_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${ScriptGenerator.shebang(os)}
-powershell -Command "$res = Get-NetIPConfiguration | ForEach-Object { [PSCustomObject]@{ iface = $_.InterfaceAlias; status = ($_.NetAdapter.Status -if $null -eq $_.NetAdapter.Status -then 'Unknown' -else $_.NetAdapter.Status); ip = ($_.IPv4Address.IPAddress -if $null -eq $_.IPv4Address.IPAddress -then 'N/A' -else $_.IPv4Address.IPAddress); mask = ($_.IPv4DefaultGateway.PrefixLength -if $null -eq $_.IPv4DefaultGateway.PrefixLength -then '0' -else $_.IPv4DefaultGateway.PrefixLength); mac = ($_.NetAdapter.LinkLayerAddress -if $null -eq $_.NetAdapter.LinkLayerAddress -then 'N/A' -else $_.NetAdapter.LinkLayerAddress); gateway = ($_.IPv4DefaultGateway.NextHop -if $null -eq $_.IPv4DefaultGateway.NextHop -then 'None' -else $_.IPv4DefaultGateway.NextHop); dns = ($_.DNSServer.ServerAddresses -join ',') } }; if($res -is [Array]){ $res | ConvertTo-Json -Compress } else { @($res) | ConvertTo-Json -Compress }"
+powershell -Command "$res = @(Get-NetIPConfiguration | ForEach-Object { [PSCustomObject]@{ iface = $_.InterfaceAlias; status = ($_.NetAdapter.Status -if $null -eq $_.NetAdapter.Status -then 'Unknown' -else $_.NetAdapter.Status); ip = ($_.IPv4Address.IPAddress -if $null -eq $_.IPv4Address.IPAddress -then 'N/A' -else $_.IPv4Address.IPAddress); mask = ($_.IPv4DefaultGateway.PrefixLength -if $null -eq $_.IPv4DefaultGateway.PrefixLength -then '0' -else $_.IPv4DefaultGateway.PrefixLength); mac = ($_.NetAdapter.LinkLayerAddress -if $null -eq $_.NetAdapter.LinkLayerAddress -then 'N/A' -else $_.NetAdapter.LinkLayerAddress); gateway = ($_.IPv4DefaultGateway.NextHop -if $null -eq $_.IPv4DefaultGateway.NextHop -then 'None' -else $_.IPv4DefaultGateway.NextHop); dns = ($_.DNSServer.ServerAddresses -join ',') } }); if($res.Count -gt 0){ $res | ConvertTo-Json -Compress } else { echo '[]' }"
 `;
       return ScriptGenerator.buildResponse(script, "List network interfaces as JSON", ["Read-only operation"], "30s");
     }
     const script = `${ScriptGenerator.shebang(os)}
-ip -o addr show | awk 'BEGIN{printf "["} {if(NR>1)printf ","; split($4,a,"/"); printf "{\\"iface\\":\\"%s\\",\\"status\\":\\"UP\\",\\"ip\\":\\"%s\\",\\"mask\\":\\"%s\\",\\"mac\\":\\"N/A\\",\\"gateway\\":\\"N/A\\",\\"dns\\":\\"N/A\\"}", $2, a[1], a[2]} END{print "]"}'
+# Linux: Prefer ip command, fallback to ifconfig
+if command -v ip &>/dev/null; then
+  ip -o addr show 2>/dev/null | awk 'BEGIN{printf "["} {if(NR>1)printf ","; split($4,a,"/"); printf "{\\"iface\\":\\"%s\\",\\"status\\":\\"UP\\",\\"ip\\":\\"%s\\",\\"mask\\":\\"%s\\",\\"mac\\":\\"N/A\\",\\"gateway\\":\\"N/A\\",\\"dns\\":\\"N/A\\"}", $2, a[1], a[2]} END{print "]"}'
+elif command -v ifconfig &>/dev/null; then
+  ifconfig 2>/dev/null | awk 'BEGIN{printf "["} /^[a-z]/ {if(p)printf ","; split($1,i,":"); printf "{\\"iface\\":\\"%s\\",\\"status\\":\\"UP\\",\\"ip\\":\\"N/A\\",\\"mask\\":\\"N/A\\",\\"mac\\":\\"N/A\\",\\"gateway\\":\\"N/A\\",\\"dns\\":\\"N/A\\"}", i[1]; p=1} END{print "]"}'
+else
+  echo "[]"
+fi
 `;
     return ScriptGenerator.buildResponse(script, "List network interfaces as JSON", ["Read-only operation"], "30s");
   }
@@ -512,12 +519,17 @@ echo "WARNING: Network changes may disconnect SSH session"
   static firewall_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${ScriptGenerator.shebang(os)}
-powershell -Command "Get-NetFirewallRule -Enabled True -ErrorAction SilentlyContinue | Select-Object -First 50 | Select-Object @{Name='id';Expression={$_.InstanceID}}, @{Name='name';Expression={$_.DisplayName}}, @{Name='direction';Expression={[string]$_.Direction}}, @{Name='action';Expression={[string]$_.Action}} | ConvertTo-Json -Compress"
+powershell -Command "$rules = @(Get-NetFirewallRule -Enabled True -ErrorAction SilentlyContinue | Select-Object -First 50 | Select-Object @{Name='id';Expression={$_.InstanceID}}, @{Name='name';Expression={$_.DisplayName}}, @{Name='direction';Expression={[string]$_.Direction}}, @{Name='action';Expression={[string]$_.Action}}); if($rules.Count -gt 0){ $rules | ConvertTo-Json -Compress } else { echo '[]' }"
 `;
-      return ScriptGenerator.buildResponse(script, "List firewall rules as JSON", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "List active firewall rules as JSON", ["Read-only operation"], "30s");
     }
     const script = `${ScriptGenerator.shebang(os)}
-iptables -S 2>/dev/null | grep '^-A' | head -n 50 | awk 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"id\\":\\"%s\\",\\"name\\":\\"%s\\",\\"direction\\":\\"%s\\",\\"action\\":\\"%s\\"}", NR, $2, $2, $4} END{print "]"}'
+# Linux: List iptables rules if available
+if command -v iptables &>/dev/null; then
+  iptables -L -n 2>/dev/null | awk 'BEGIN{printf "["} /Chain/ {next} /target/ {next} /^$/ {next} {if(NR>1 && p)printf ","; printf "{\\"name\\":\\"%s\\",\\"direction\\":\\"%s\\",\\"action\\":\\"%s\\",\\"id\\":\\"%s\\"}", $1, "IN/OUT", $3, $1; p=1} END{print "]"}'
+else
+  echo "[]"
+fi
 `;
     return ScriptGenerator.buildResponse(script, "List firewall rules as JSON", ["Read-only operation"], "30s");
   }
