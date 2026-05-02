@@ -1,4 +1,6 @@
-import { Snippet, Select, Input, Confirm, Toggle } from 'enquirer';
+import pkg from 'enquirer';
+const { Select, Input, Confirm, Toggle } = pkg;
+
 import pc from 'picocolors';
 import fs from 'fs';
 import path from 'path';
