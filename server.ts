@@ -2,6 +2,7 @@ import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { createServer } from "http";
 import helmet from "helmet";
+import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
 import path from "path";
@@ -475,10 +476,10 @@ function authenticateJWT(req: Request, res: Response, next: NextFunction) {
 async function startServer() {
   const app = express();
   
+  app.use(cors());
+  
   // ── SATURN-X Security Headers ─────────────────────────────────────────────
-  // TEMPORARILY DISABLED: Helmet headers are blocking Vite module script execution
-  // and CSS loading on the client side in production. Need to isolate the issue.
-  /*
+  // Refined CSP to allow Vite modules, Google Fonts, and avoid blocking assets.
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -491,8 +492,9 @@ async function startServer() {
         workerSrc: ["'self'", "blob:"],
       },
     },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false
   }));
-  */
   
   // ── SATURN-X Rate Limiting ────────────────────────────────────────────────
   const globalLimiter = rateLimit({
