@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronLeft, Cpu, HardDrive, RefreshCw, Search, Bell, Settings, 
   LayoutDashboard, Logs, CheckCircle2, XCircle, Mail, Zap, Plug, Unplug, 
   TerminalSquare, History, Globe, Key, Wifi, User, Lock, Eye, EyeOff, Send, 
-  LogOut, Menu, Trash2, Folder, FileText, Play, Plus, Trash, Upload, X, Users, Package, HeartPulse
+  LogOut, Menu, Trash2, Folder, FileText, Play, Plus, Trash, Upload, X, Users, Package, HeartPulse, Sliders
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -36,6 +36,37 @@ interface UserData {
   id: string;
   username: string;
   role: string;
+}
+
+// ── Error Boundary ────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 rounded-[2rem] bg-rose-500/5 border border-rose-500/20 text-rose-500">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-rose-500/20 rounded-xl"><AlertTriangle size={20} /></div>
+            <h3 className="text-sm font-black uppercase tracking-widest">Interface Component Error</h3>
+          </div>
+          <pre className="text-[10px] font-mono bg-black/40 p-4 rounded-xl border border-white/5 mb-4 overflow-x-auto">
+            {this.state.error?.stack || this.state.error?.message || 'Unknown runtime exception'}
+          </pre>
+          <button 
+            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }} 
+            className="px-6 py-2 bg-rose-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-400 transition-all"
+          >
+            Restart Interface
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 // ── Login View ────────────────────────────────────────────────────────
@@ -520,18 +551,21 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
           { label: 'AI Provider', icon: Brain },
           { label: 'SMTP', icon: Mail },
           { label: 'Admin', icon: User }
-        ].map((s, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <div className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-500",
-              step >= i ? "bg-orange-500/20 text-orange-400" : "bg-white/5 text-slate-600"
-            )}>
-              <s.icon size={12} />
-              <span className="text-[10px] font-bold uppercase tracking-wider">{s.label}</span>
+        ].map((s, i) => {
+          const Icon = s.icon;
+          return (
+            <div key={i} className="flex items-center gap-2">
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-500",
+                step >= i ? "bg-orange-500/20 text-orange-400" : "bg-white/5 text-slate-600"
+              )}>
+                <Icon size={12} />
+                <span className="text-[10px] font-bold uppercase tracking-wider">{s.label}</span>
+              </div>
+              {i < 2 && <div className={cn("h-px w-8", step > i ? "bg-orange-500" : "bg-white/10")} />}
             </div>
-            {i < 2 && <div className={cn("h-px w-8", step > i ? "bg-orange-500" : "bg-white/10")} />}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Step 0: AI Provider Selection */}
@@ -1902,7 +1936,23 @@ export default function App() {
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl"><div className="flex items-center gap-4"><button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl"><ChevronLeft className="" size={18} /></button><div><div className="flex items-center gap-2 mb-1"><h2 className="text-sm font-black uppercase tracking-widest">{selectedServer?.name}</h2><div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer?.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} /></div><p className="text-[10px] font-medium text-slate-500 uppercase">{selectedServer?.ip} • {selectedServer?.os}</p></div></div><div className="flex items-center gap-3"><button onClick={() => handleRefreshServer(false)} disabled={syncingServer} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-white/10 transition-colors disabled:opacity-50"><RefreshCw size={14} className={syncingServer ? "animate-spin" : ""} /> Sync</button><select value={remediationConfigs.find(c => c.serverId === selectedServer?.id)?.mode || 'global'} onChange={(e) => handleUpdateRemediationMode(selectedServer!.id, e.target.value)} className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none cursor-pointer"><option value="global">Mode: Global</option><option value="auto">Mode: Auto</option><option value="skill">Mode: Skill</option><option value="manual">Mode: Manual</option></select></div></div>
-        <div className="flex items-center gap-1 overflow-x-auto pb-2 custom-scrollbar">{tabs.map(t => <button key={t.id} onClick={() => setServerDetailTab(t.id)} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", serverDetailTab === t.id ? "bg-orange-500 text-black" : "text-slate-500 hover:text-white hover:bg-white/5")}><t.icon size={14} /> {t.label}</button>)}</div>
+        <div className="flex items-center gap-1 overflow-x-auto pb-2 custom-scrollbar">
+          {tabs.map(t => {
+            const Icon = t.icon;
+            return (
+              <button 
+                key={t.id} 
+                onClick={() => setServerDetailTab(t.id)} 
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", 
+                  serverDetailTab === t.id ? "bg-orange-500 text-black" : "text-slate-500 hover:text-white hover:bg-white/5"
+                )}
+              >
+                <Icon size={14} /> {t.label}
+              </button>
+            );
+          })}
+        </div>
         <div className="min-h-[500px]">
           {serverDetailTab === 'summary' && <ServerSummaryTab />}
           {serverDetailTab === 'terminal' && <TerminalTab />}
@@ -1940,10 +1990,10 @@ export default function App() {
 
     const handleSave = async (metric: string, value: number, severity: string) => {
       try {
-        await fetch('/api/thresholds', {
+        await fetch(`/api/servers/${selectedServer?.id}/thresholds`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ serverId: selectedServer?.id, metric, value, severity })
+          body: JSON.stringify({ thresholds: [{ metric, warning: value, critical: value + 10 }] }) // Adjusting to backend format
         });
         fetchConfigs();
       } catch (e) { alert('Failed to save threshold'); }
@@ -2010,10 +2060,10 @@ export default function App() {
       setRunning(true);
       setResult('');
       try {
-        const res = await fetch(`/api/servers/${selectedServer.id}/action`, {
+        const res = await fetch(`/api/admin/servers/${selectedServer.id}/script/execute`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'neural_remediation', prompt })
+          body: JSON.stringify({ category: 'neural', action: 'remediate', params: { prompt } })
         });
         const data = await res.json();
         setResult(data.message || data.output || JSON.stringify(data));
@@ -2032,12 +2082,18 @@ export default function App() {
               { label: 'RAM', value: selectedServer?.memory ? Number(selectedServer.memory).toFixed(1) + '%' : '0%', icon: Database }, 
               { label: 'Disk', value: selectedServer?.disk ? Math.round(selectedServer.disk) + '%' : '0%', icon: HardDrive }, 
               { label: 'Uptime', value: selectedServer?.uptime ? Math.floor(selectedServer.uptime / 86400) + 'd' : 'N/A', icon: Activity }
-            ].map(m => (
-              <div key={m.label} className="p-4 rounded-2xl bg-black/40 border border-white/5">
-                <div className="flex items-center gap-2 mb-2 text-slate-500"><m.icon size={12} /><span className="text-[9px] font-black uppercase">{m.label}</span></div>
-                <p className="text-xl font-black text-white">{m.value}</p>
-              </div>
-            ))}
+            ].map(m => {
+              const Icon = m.icon;
+              return (
+                <div key={m.label} className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                  <div className="flex items-center gap-2 mb-2 text-slate-500">
+                    <Icon size={12} />
+                    <span className="text-[9px] font-black uppercase">{m.label}</span>
+                  </div>
+                  <p className="text-xl font-black text-white">{m.value}</p>
+                </div>
+              );
+            })}
           </div>
           <div className="p-6 rounded-2xl bg-orange-500/5 border border-orange-500/10 transition-all">
             <div className="flex items-center gap-2 mb-4">
@@ -3150,16 +3206,18 @@ export default function App() {
       <main className={cn("flex-1 flex flex-col min-w-0 transition-all duration-300", sidebarCollapsed ? "lg:ml-20" : "lg:ml-64")}>
         <header className="h-16 border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50"><div className="flex items-center gap-4"><button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-slate-500 hover:text-white"><Menu size={20} /></button><h1 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{activeTab} <span className="text-white/20 mx-2">/</span> <span className="text-white">{selectedServer ? selectedServer.name : 'Overview'}</span></h1></div><div className="flex items-center gap-6"><div className="hidden sm:flex bg-black/40 border border-white/10 p-1 rounded-xl">{['auto', 'skill', 'manual'].map(m => <button key={m} onClick={() => handleUpdateRemediationMode(null, m)} className={cn("px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all", globalConfig.mode === m ? "bg-orange-500/10 text-orange-400" : "text-slate-600 hover:text-slate-400")}>{m}</button>)}</div><div className="flex items-center gap-3"><div className="flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg"><div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" /><span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Neural Live</span></div></div></div></header>
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-          {activeTab === 'dashboard' && DashboardView()}
-          {activeTab === 'servers' && !selectedServer && ServersListView()}
-          {activeTab === 'servers' && selectedServer && <ServerDetailView />}
-          {activeTab === 'skills' && <SkillsView skills={skills} setSkills={setSkills} />}
-          {activeTab === 'proactive' && <ProactiveView />}
-          {activeTab === 'credentials' && <CredentialsView />}
-          {activeTab === 'contextp' && <ContextPView />}
-          {activeTab === 'audit' && <AuditView />}
-          {activeTab === 'settings' && <SettingsView />}
-          {activeTab === 'admin' && <AdminView />}
+          <ErrorBoundary>
+            {activeTab === 'dashboard' && DashboardView()}
+            {activeTab === 'servers' && !selectedServer && ServersListView()}
+            {activeTab === 'servers' && selectedServer && <ServerDetailView />}
+            {activeTab === 'skills' && <SkillsView skills={skills} setSkills={setSkills} />}
+            {activeTab === 'proactive' && <ProactiveView />}
+            {activeTab === 'credentials' && <CredentialsView />}
+            {activeTab === 'contextp' && <ContextPView />}
+            {activeTab === 'audit' && <AuditView />}
+            {activeTab === 'settings' && <SettingsView />}
+            {activeTab === 'admin' && <AdminView />}
+          </ErrorBoundary>
         </div>
       </main>
     </div>

@@ -840,6 +840,10 @@ async function startServer() {
     res.json(incidents);
   });
 
+  app.get("/api/notifications", (req, res) => {
+    res.json([]); // Return empty list for now
+  });
+
   app.post("/api/incidents/:id/resolve", (req, res) => {
     const { id } = req.params;
     db.prepare("UPDATE incidents SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);

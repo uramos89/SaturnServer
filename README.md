@@ -43,3 +43,18 @@ Saturn logs every administrative action with:
 - **Event ID & Type**: (USER, SYSTEM, NEURAL, COMPLIANCE)
 - **Metadata**: Compliance tags, command snippets, and session context.
 - **Timestamp**: High-precision UTC recording for audit trails.
+
+## 🚀 Quick Deployment (Linux)
+To install or update Saturn on a remote Linux server, run the following command:
+
+```bash
+curl -s https://raw.githubusercontent.com/uramos89/SaturnServer/main/install.sh | bash
+```
+
+### Manual Installation
+1. **Clone**: `git clone https://github.com/uramos89/SaturnServer.git`
+2. **Install**: `npm install`
+3. **Build**: `npm run build`
+4. **Environment**: Configure `.env` (PEPPER, JWT, PORT)
+5. **Start**: `npm run dev` (development) or `pm2 start tsx --name saturn -- server.ts` (production)
+
