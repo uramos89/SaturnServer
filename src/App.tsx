@@ -2095,10 +2095,10 @@ export default function App() {
             <tr className="bg-white/5 border-b border-white/10 text-[9px] font-black uppercase text-slate-500 tracking-widest">
               <th className="p-4">Interface</th>
               <th className="p-4">Status</th>
-              <th className="p-4">IP Address</th>
-              <th className="p-4">Subnet Mask</th>
-              <th className="p-4">RX Bytes</th>
-              <th className="p-4">TX Bytes</th>
+              <th className="p-4">IP / Mask</th>
+              <th className="p-4">MAC Address</th>
+              <th className="p-4">Gateway</th>
+              <th className="p-4">DNS</th>
               <th className="p-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -2111,10 +2111,13 @@ export default function App() {
                     {row.status}
                   </span>
                 </td>
-                <td className="p-4">{row.ip || 'N/A'}</td>
-                <td className="p-4">{row.mask || 'N/A'}</td>
-                <td className="p-4">{row.rx || 'N/A'}</td>
-                <td className="p-4">{row.tx || 'N/A'}</td>
+                <td className="p-4 text-white">
+                  {row.ip || 'N/A'}<br/>
+                  <span className="text-slate-500 text-[8px]">CIDR: {row.mask || '0'}</span>
+                </td>
+                <td className="p-4 text-slate-400">{row.mac || 'N/A'}</td>
+                <td className="p-4 text-slate-400">{row.gateway || 'N/A'}</td>
+                <td className="p-4 text-slate-400 truncate max-w-[120px]" title={row.dns}>{row.dns || 'N/A'}</td>
                 <td className="p-4 text-right space-x-2">
                   <button onClick={() => {
                     const newIp = prompt("Enter new IP address:");

@@ -449,14 +449,24 @@ echo "Log rotation completed"
   static network_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${this.shebang(os)}
-powershell -Command "$res = @(); foreach($a in Get-NetAdapter -ErrorAction SilentlyContinue){ $ip = Get-NetIPAddress -InterfaceAlias $a.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1; $stats = Get-NetAdapterStatistics -Name $a.Name -ErrorAction SilentlyContinue; $res += @{ iface=$a.Name; status=$a.Status; ip=if($ip){$ip.IPAddress}else{'None'}; mask=if($ip){$ip.PrefixLength}else{0}; rx=$stats.ReceivedBytes; tx=$stats.SentBytes } }; $res | ConvertTo-Json -Compress"
+powershell -Command "$res = @(); foreach($a in Get-NetAdapter -ErrorAction SilentlyContinue){ $ip = Get-NetIPAddress -InterfaceIndex $a.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1; $route = Get-NetRoute -InterfaceIndex $a.InterfaceIndex -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1; $dns = Get-DnsClientServerAddress -InterfaceIndex $a.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue; $stats = Get-NetAdapterStatistics -Name $a.Name -ErrorAction SilentlyContinue; $res += @{ iface=$a.Name; status=$a.Status; ip=if($ip){$ip.IPAddress}else{'None'}; mask=if($ip){$ip.PrefixLength}else{0}; mac=$a.MacAddress; gateway=if($route){$route.NextHop}else{'None'}; dns=if($dns){$dns.ServerAddresses -join ', '}else{'None'}; rx=$stats.ReceivedBytes; tx=$stats.SentBytes } }; $res | ConvertTo-Json -Compress"
 `;
-      return this.buildResponse(script, "List network interfaces as JSON", ["Read-only operation"], "30s");
+      return this.buildResponse(script, "List network interfaces with advanced properties as JSON", ["Read-only operation"], "30s");
     }
     const script = `${this.shebang(os)}
-ip -br addr 2>/dev/null | awk 'BEGIN{printf "["} {if(NR>1)printf ","; split($3,a,"/"); printf "{\\"iface\\":\\"%s\\",\\"status\\":\\"%s\\",\\"ip\\":\\"%s\\",\\"mask\\":\\"%s\\"}", $1, $2, a[1], a[2]} END{print "]"}'
+ip -br addr 2>/dev/null | awk 'BEGIN{printf "["} {
+    if(NR>1)printf ",";
+    iface=$1; status=$2; split($3,a,"/"); ip=a[1]; mask=a[2];
+    "ip route show dev " iface " | grep default | awk \"{print \\$3}\"" | getline gateway;
+    if(!gateway) gateway="None";
+    "ip link show " iface " | grep -oP \"(?<=link/ether\\s)[0-9a-fA-F:]{17}\"" | getline mac;
+    if(!mac) mac="None";
+    "grep nameserver /etc/resolv.conf | awk \"{print \\$2}\" | tr \"\\n\" \",\" | sed \"s/,$//\"" | getline dns;
+    if(!dns) dns="None";
+    printf "{\\"iface\\":\\"%s\\",\\"status\\":\\"%s\\",\\"ip\\":\\"%s\\",\\"mask\\":\\"%s\\",\\"mac\\":\\"%s\\",\\"gateway\\":\\"%s\\",\\"dns\\":\\"%s\\"}", iface, status, ip, mask, mac, gateway, dns;
+} END{print "]"}'
 `;
-    return this.buildResponse(script, "List network interfaces as JSON", ["Read-only operation"], "30s");
+    return this.buildResponse(script, "List network interfaces with advanced properties as JSON", ["Read-only operation"], "30s");
   }
 
   static network_configure(os: OSType, params: Record<string, any>): ScriptResponse {
