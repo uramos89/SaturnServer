@@ -5,96 +5,125 @@
 
 set -e
 
+# Colors
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
 REPO_URL="https://github.com/uramos89/SaturnServer.git"
 APP_DIR="$HOME/saturn"
 
-echo "========================================="
-echo "  SATURN-X INSTALLER v1.1"
-echo "========================================="
+clear
+
+echo -e "${CYAN}"
+echo "  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄"
+echo "  ██░▄▄▄░██░▄▄░██░▄▄▄██░▀██░██░▄▄▀██░████░▄▄▀██░███░██"
+echo "  ██░███░██░▀▀░██░▄▄▄██░█░█░██░█████░████░▀▀░██░█░█░██"
+echo "  ██░▀▀▀░██░█████░▀▀▀██░██▄░██░▀▀▄██░▀▀░█░██░██▄▀▄▀▄██"
+echo "  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+echo -e "                    ${BOLD}🪐 SATURN SERVER 🪐${NC}"
+echo ""
+echo -e "${BOLD}┌  Saturn setup${NC}"
+echo -e "│"
+echo -e "◇  ${YELLOW}Security disclaimer${NC} ─────────────────────────────────────────────────────────────╮"
+echo -e "│                                                                            │"
+echo -e "│  Saturn is an autonomous infrastructure platform and still in beta.        │"
+echo -e "│  This system uses AI to generate and execute administrative scripts.       │"
+echo -e "│  By default, it uses port 3000 and requires a secure environment.          │"
+echo -e "│                                                                            │"
+echo -e "│  ${BOLD}Core Principles:${NC}                                                          │"
+echo -e "│  - Automated telemetry via SSH Agent.                                      │"
+echo -e "│  - Encrypted identity vault for credentials.                              │"
+echo -e "│  - Compliance-ready audit logging.                                         │"
+echo -e "│                                                                            │"
+echo -e "│  Visit: https://github.com/uramos89/SaturnServer for documentation.        │"
+echo -e "│                                                                            │"
+echo -e "├────────────────────────────────────────────────────────────────────────────╯"
+echo -e "│"
 
 # 1. System Check
-echo "[1/4] Checking dependencies..."
+echo -e "├─ ${BOLD}[1/4] Checking dependencies...${NC}"
 if ! command -v node &> /dev/null; then
-  echo "Installing Node.js 20..."
-  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-  sudo apt-get install -y nodejs
+  echo -e "│  Installing Node.js 20..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - >/dev/null 2>&1
+  sudo apt-get install -y nodejs >/dev/null 2>&1
 fi
 
 if ! command -v git &> /dev/null; then
-  echo "Installing git..."
-  sudo apt-get install -y git
+  echo -e "│  Installing git..."
+  sudo apt-get install -y git >/dev/null 2>&1
 fi
 
 if ! command -v pm2 &> /dev/null; then
-  echo "Installing PM2 globally..."
-  sudo npm install -g pm2
+  echo -e "│  Installing PM2 globally..."
+  sudo npm install -g pm2 >/dev/null 2>&1
 fi
 
-# Ensure tsx is available for pm2
 if ! command -v tsx &> /dev/null; then
-  echo "Installing tsx globally..."
-  sudo npm install -g tsx
+  echo -e "│  Installing tsx globally..."
+  sudo npm install -g tsx >/dev/null 2>&1
 fi
+echo -e "│  ${GREEN}Dependencies OK${NC}"
+echo -e "│"
 
 # 2. Clone/Update
-echo "[2/4] Fetching latest code..."
+echo -e "├─ ${BOLD}[2/4] Fetching latest code...${NC}"
 if [ -d "$APP_DIR/.git" ]; then
   cd "$APP_DIR"
-  git fetch origin
-  git reset --hard origin/main
+  echo -e "│  Updating existing repository..."
+  git fetch origin >/dev/null 2>&1
+  git reset --hard origin/main >/dev/null 2>&1
 else
-  rm -rf "$APP_DIR" # Clean up if it's not a git repo
-  git clone "$REPO_URL" "$APP_DIR"
+  rm -rf "$APP_DIR"
+  echo -e "│  Cloning from GitHub..."
+  git clone "$REPO_URL" "$APP_DIR" >/dev/null 2>&1
   cd "$APP_DIR"
 fi
+echo -e "│  ${GREEN}Code update successful${NC}"
+echo -e "│"
 
 # 3. Build
-echo "[3/4] Installing dependencies & building..."
-npm install
-npm run build
+echo -e "├─ ${BOLD}[3/4] Installing dependencies & building...${NC}"
+echo -e "│  Running npm install (this may take a minute)..."
+npm install --silent >/dev/null 2>&1
+echo -e "│  Building frontend assets..."
+npm run build >/dev/null 2>&1
+echo -e "│  ${GREEN}Build completed${NC}"
+echo -e "│"
 
 # 4. Environment & Start
-echo "[4/4] Finalizing configuration..."
+echo -e "├─ ${BOLD}[4/4] Finalizing configuration...${NC}"
 if [ ! -f ".env" ]; then
-  echo "Creating .env from example..."
-  cp .env.example .env 2>/dev/null || cat > .env <<EOF
+  echo -e "│  Generating .env file..."
+  cat > .env <<EOF
 PORT=3000
 NODE_ENV=production
 EOF
   
-  # Generate keys if they don't exist
-  if ! grep -q "SSH_ENCRYPTION_PEPPER" .env; then
-    PEPPER=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-    echo "SSH_ENCRYPTION_PEPPER=$PEPPER" >> .env
-  fi
-  if ! grep -q "JWT_SECRET" .env; then
-    JWT=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-    echo "JWT_SECRET=$JWT" >> .env
-  fi
-  if ! grep -q "SATURN_MASTER_KEY" .env; then
-    KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-    echo "SATURN_MASTER_KEY=$KEY" >> .env
-  fi
+  PEPPER=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+  echo "SSH_ENCRYPTION_PEPPER=$PEPPER" >> .env
+  JWT=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+  echo "JWT_SECRET=$JWT" >> .env
+  KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+  echo "SATURN_MASTER_KEY=$KEY" >> .env
 fi
 
-echo "Starting service..."
+echo -e "│  Restarting PM2 process..."
 pm2 stop saturn 2>/dev/null || true
 pm2 delete saturn 2>/dev/null || true
-# Use absolute path for tsx if needed, but since we installed it globally it should be fine
-NODE_ENV=production pm2 start tsx --name saturn -- server.ts
-pm2 save
+NODE_ENV=production pm2 start tsx --name saturn -- server.ts >/dev/null 2>&1
+pm2 save >/dev/null 2>&1
 
-echo "========================================="
-echo "  🚀 SATURN-X INSTALLED SUCCESSFULLY!"
-echo "========================================="
+echo -e "│"
+echo -e "└─ ${BOLD}${GREEN}Installation Complete!${NC}"
 echo ""
-echo "  Access the platform at:"
-echo "  URL: http://$(hostname -I | awk '{print $1}'):3000"
+echo -e "  ${BOLD}🚀 SATURN SERVER IS RUNNING${NC}"
+echo -e "  ───────────────────────────"
+echo -e "  ${CYAN}URL:${NC} http://$(hostname -I | awk '{print $1}'):${BOLD}3000${NC}"
+echo -e "  ${CYAN}DIR:${NC} $APP_DIR"
+echo -e "  ${CYAN}LOG:${NC} pm2 logs saturn"
 echo ""
-echo "  System Info:"
-echo "  - Dir:  $APP_DIR"
-echo "  - Port: 3000"
-echo "  - Logs: pm2 logs saturn"
-echo ""
-echo "========================================="
-
+echo -e "=============================================================================="
