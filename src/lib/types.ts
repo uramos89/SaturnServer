@@ -46,7 +46,7 @@ export interface OBPA_Cycle {
 
 export interface AuditLog {
   id: string;
-  type: 'SYSTEM' | 'NEURAL' | 'USER';
+  type: 'SYSTEM' | 'NEURAL' | 'USER' | 'TECH' | 'FUNC' | 'STRUCT' | 'AUDIT' | 'INGEST';
   event: string;
   detail: string;
   timestamp: string;
@@ -90,7 +90,55 @@ export interface SshConnection {
 
 // ── Fase 2: Server Administration Types ─────────────────────────────────
 
-export type OSType = 'linux' | 'windows';
+export interface ServerDb {
+  id: string;
+  name: string;
+  ip: string;
+  os: string;
+  status: string;
+  cpu: number;
+  memory: number;
+  disk: number;
+  uptime: number;
+  kernel: string;
+  load_avg: string;
+  lastCheck: string;
+  tags: string;
+}
+
+export interface UserDb {
+  id: string;
+  username: string;
+  password_hash: string;
+  role: "admin" | "viewer";
+  created_at: string;
+}
+
+export interface IncidentDb {
+  id: string;
+  serverId: string;
+  severity: "low" | "medium" | "high" | "critical";
+  title: string;
+  description: string;
+  status: "open" | "analyzing" | "remediating" | "closed";
+  timestamp: string;
+}
+
+export interface SshConnectionDb {
+  id: string;
+  serverId: string;
+  host: string;
+  port: number;
+  username: string;
+  authType: string;
+  encryptedKey: string | null;
+  encryptedPassword: string | null;
+  fingerprint: string | null;
+  lastConnected: string | null;
+  status: string;
+}
+
+export type OSType = "linux" | "windows";
 
 export interface ScriptResult {
   stdout: string;
@@ -248,7 +296,7 @@ export interface ScriptRequest {
   action: string;
   category: string;
   os: OSType;
-  params: Record<string, any>;
+  params: Record<string, unknown>;
   dryRun?: boolean;
 }
 
@@ -256,6 +304,7 @@ export interface ScriptResponse {
   script: string;
   description: string;
   risks: string[];
+  preview?: string;
   rollbackScript?: string;
   estimatedTime: string;
 }

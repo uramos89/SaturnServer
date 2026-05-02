@@ -13,7 +13,8 @@ export class ScriptGenerator {
       return handler.call(ScriptGenerator, os, params);
     }
     // Fallback: generate a generic command
-    return this.genericCommand(os, params.command || `${category} ${action}`);
+    const p = params as any;
+    return this.genericCommand(os, p.command || `${category} ${action}`);
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────

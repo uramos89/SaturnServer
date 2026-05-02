@@ -26,7 +26,7 @@ export interface AuditLogEntry {
   id: string;
   date: string;
   type: "success" | "failure" | "exploration" | "ingest";
-  domain: "TECH" | "FUNC" | "STRUCT" | "AUDIT" | "INGEST";
+  domain: "TECH" | "FUNC" | "STRUCT" | "AUDIT" | "INGEST" | "NEURAL";
   title: string;
   detail: string;
 }

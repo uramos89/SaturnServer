@@ -1,12 +1,16 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
+import { createServer } from "http";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from "fs";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { sshAgent, type SSHConnectionConfig, type SystemMetrics } from "./src/lib/ssh-agent.js";
 import { ScriptGenerator } from "./src/lib/script-generator.js";
 import { ScriptValidator } from "./src/lib/script-validator.js";
@@ -15,6 +19,13 @@ import { getStatus as getContextPStatus, getContractContent, getIndexContent, ge
 import { ARESWorker } from "./src/lib/ares-worker.js";
 import { initLLMService, getLLMResponse } from "./src/services/llm-service.js";
 import { seedDatabase } from "./src/services/database-seed.js";
+import { SSHConnectSchema, CommandExecSchema, UserCreateSchema } from "./src/lib/validators.js";
+import { z } from "zod";
+import { decryptCredential } from "./src/services/credential-service.js";
+import { evaluateThresholds } from "./src/services/threshold-engine.js";
+import { initSocket, emitServerMetrics } from "./src/services/socket-service.js";
+import { connectViaBastion, execViaBastion, disconnectBastion } from "./src/services/bastion-service.js";
+import type { ServerDb, UserDb, SshConnectionDb, IncidentDb, ManagedServer, OSType, ScriptRequest } from "./src/lib/types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,7 +75,16 @@ db.exec(`
     kernel TEXT,
     load_avg TEXT,
     lastCheck TEXT,
-    tags TEXT
+    tags TEXT,
+    cloud_provider TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS threshold_configs (
+    serverId TEXT,
+    metric TEXT,
+    warning REAL,
+    critical REAL,
+    PRIMARY KEY (serverId, metric)
   );
 
   CREATE TABLE IF NOT EXISTS ssh_connections (
@@ -382,6 +402,19 @@ async function updateAllServerMetrics() {
       db.prepare("UPDATE ssh_connections SET lastConnected = ? WHERE id = ?")
         .run(new Date().toISOString(), conn.id);
 
+      // Evaluate Thresholds (Ticket T-01)
+      evaluateThresholds(conn.serverId, metrics, db);
+
+      // Emit Real-time Metrics (Ticket W-01)
+      emitServerMetrics(conn.serverId, {
+        cpu: metrics.cpu,
+        memory: metrics.memory,
+        disk: metrics.disk,
+        uptime: metrics.uptime,
+        status: metrics.cpu > 90 || metrics.memory > 90 ? "degraded" : "online",
+        timestamp: new Date().toISOString()
+      });
+
       // Collect top processes every 5 minutes
       if (Date.now() - lastProcessUpdate > 5 * 60 * 1000) {
         const { script: procScript } = ScriptGenerator.generate({ category: "processes", action: "list", os: osType, params: {} });
@@ -447,6 +480,7 @@ ${history.map(h => `| ${h.name} | ${h.avg_cpu.toFixed(2)}% | ${h.avg_mem.toFixed
 
 // Seed Data (if empty)
 seedDatabase(db);
+initLLMService(db);
 
 
 function logAudit(type: string, event: string, detail: string, metadata: any = {}) {
@@ -455,9 +489,60 @@ function logAudit(type: string, event: string, detail: string, metadata: any = {
     .run(id, type, event, detail, JSON.stringify(metadata), new Date().toISOString());
 }
 
+// SATURN-X Validation Middleware (Ticket 1.3)
+function validate(schema: z.ZodSchema) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const result = schema.safeParse(req.body);
+    if (!result.success) {
+      return res.status(400).json({ 
+        error: "VALIDATION_ERROR", 
+        message: result.error.issues.map(i => i.message).join(", ") 
+      });
+    }
+    req.body = result.data;
+    next();
+  };
+}
+
+// SATURN-X JWT Configuration
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
+
+// SATURN-X Auth Middleware (Ticket 1.1)
+function authenticateJWT(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.split(" ")[1];
+    jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+      if (err) return res.sendStatus(403);
+      (req as any).user = user;
+      next();
+    });
+  } else {
+    res.sendStatus(401);
+  }
+}
+
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: "10mb" }));
+  
+  // ── SATURN-X Security Headers ─────────────────────────────────────────────
+  app.use(helmet());
+  
+  // ── SATURN-X Rate Limiting ────────────────────────────────────────────────
+  const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: { error: "Too many requests from this IP, please try again after 15 minutes" }
+  });
+  app.use("/api/", globalLimiter);
+
+  const loginLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5, // Limit each IP to 5 login attempts per minute
+    message: { error: "Too many login attempts. Please try again in 1 minute." }
+  });
+
+  app.use(express.json({ limit: "1mb" })); // Reduced limit for safety
 
   // ── Setup & Status ────────────────────────────────────────────────────────
   app.get("/api/setup/status", (req, res) => {
@@ -498,8 +583,11 @@ async function startServer() {
   });
 
   // POST /api/ssh/connect - Test connection and register server
-  app.post("/api/ssh/connect", async (req, res) => {
-    const { host, port = 22, username, privateKey, password } = req.body;
+  app.post("/api/ssh/connect", validate(SSHConnectSchema), async (req, res) => {
+    const { 
+      host, port = 22, username, privateKey, password,
+      bastionHost, bastionPort = 22, bastionUser, bastionKey, bastionPassword 
+    } = req.body;
     
     if (!host || !username) {
       return res.status(400).json({ error: "Host and username are required" });
@@ -521,8 +609,32 @@ async function startServer() {
           return res.status(400).json({ error: "No authentication method provided and no default SSH key found" });
         }
       }
-
-      const testResult = await sshAgent.testConnection(config);
+ 
+      let testResult;
+      
+      if (bastionHost) {
+        console.log(`[BASTION] Attempting connection to ${host} via ${bastionHost}`);
+        const tunnelKey = await connectViaBastion({
+            bastionHost, bastionPort, bastionUser, bastionKey, bastionPassword,
+            targetHost: host, targetPort: port, targetUser: username, targetKey: privateKey
+        });
+        
+        const bastionResult = await execViaBastion(tunnelKey, "hostname", {
+            bastionHost, bastionPort, bastionUser, bastionKey, bastionPassword,
+            targetHost: host, targetPort: port, targetUser: username, targetKey: privateKey
+        });
+        
+        testResult = {
+            success: bastionResult.code === 0,
+            message: bastionResult.code === 0 ? "Connected via Bastion" : `Bastion error: ${bastionResult.stderr}`,
+            metrics: {
+                hostname: bastionResult.stdout.trim(),
+                cpu: 0, memory: 0, disk: 0, uptime: 0, os: "linux", kernel: "unknown", loadAvg: [0,0,0]
+            }
+        };
+      } else {
+        testResult = await sshAgent.testConnection(config);
+      }
       
       if (!testResult.success) {
         return res.status(401).json({ error: testResult.message });
@@ -764,6 +876,30 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // ── Threshold Configuration (Ticket T-02) ───────────────────────────
+  app.get("/api/servers/:id/thresholds", (req, res) => {
+    const { id } = req.params;
+    const thresholds = db.prepare("SELECT * FROM threshold_configs WHERE serverId = ?").all(id);
+    res.json(thresholds);
+  });
+
+  app.post("/api/servers/:id/thresholds", (req, res) => {
+    const { id } = req.params;
+    const { thresholds } = req.body;
+    
+    if (!Array.isArray(thresholds)) {
+      return res.status(400).json({ error: "thresholds must be an array" });
+    }
+    
+    db.prepare("DELETE FROM threshold_configs WHERE serverId = ?").run(id);
+    const insert = db.prepare("INSERT INTO threshold_configs (serverId, metric, warning, critical) VALUES (?, ?, ?, ?)");
+    for (const t of thresholds) {
+      insert.run(id, t.metric, t.warning, t.critical);
+    }
+    
+    res.json({ success: true });
+  });
+
   // ── Cloud Credentials ───────────────────────────────────────────────
   app.get("/api/credentials", (req, res) => {
     const creds = db.prepare("SELECT * FROM cloud_credentials ORDER BY created_at DESC").all();
@@ -813,23 +949,115 @@ async function startServer() {
     const cred = db.prepare("SELECT * FROM cloud_credentials WHERE id = ?").get(credId) as any;
     if (!cred) return res.status(404).json({ error: "Credential not found" });
 
-    // Mocking Cloud Scan (In a real implementation, this would use AWS/GCP/Azure SDK)
-    logAudit('SYSTEM', null, 'CLOUD_SCAN', `Scanning ${cred.provider} account using ${cred.name}`);
-    
-    // Simulate discovery
-    const mockServers = [
-      { id: crypto.randomUUID(), name: `ec2-${cred.provider}-01`, ip: '10.0.1.15', os: 'linux', provider: cred.provider },
-      { id: crypto.randomUUID(), name: `ec2-${cred.provider}-02`, ip: '10.0.1.20', os: 'windows', provider: cred.provider }
-    ];
+    let credentials;
+    try {
+      credentials = decryptCredential(cred.encrypted_path);
+    } catch (error: any) {
+      return res.status(500).json({ error: `Vault decryption failed: ${error.message}` });
+    }
 
-    mockServers.forEach(s => {
-      db.prepare(`
-        INSERT OR IGNORE INTO servers (id, name, ip, os, status, cloud_provider)
-        VALUES (?, ?, ?, ?, 'pending', ?)
-      `).run(s.id, s.name, s.ip, s.os, s.provider);
-    });
+    let discovered: any[] = [];
 
-    res.json({ success: true, discovered: mockServers.length });
+    try {
+      switch (cred.provider) {
+        case 'aws': {
+          const { EC2Client, DescribeInstancesCommand } = await import('@aws-sdk/client-ec2');
+          const client = new EC2Client({
+            region: credentials.region || 'us-east-1',
+            credentials: {
+              accessKeyId: credentials.accessKeyId,
+              secretAccessKey: credentials.secretAccessKey,
+            }
+          });
+          
+          const result = await client.send(new DescribeInstancesCommand({}));
+          discovered = result.Reservations!.flatMap(r => 
+            r.Instances!.map(i => ({
+              id: `ec2-${i.InstanceId}`,
+              name: i.Tags?.find(t => t.Key === 'Name')?.Value || i.InstanceId,
+              ip: i.PublicIpAddress || i.PrivateIpAddress || '0.0.0.0',
+              os: i.PlatformDetails?.toLowerCase().includes('windows') ? 'windows' : 'linux',
+              provider: 'aws',
+              region: credentials.region,
+              instanceId: i.InstanceId,
+              instanceType: i.InstanceType,
+              state: i.State?.Name,
+              launchTime: i.LaunchTime?.toISOString()
+            }))
+          );
+          break;
+        }
+        case 'gcp': {
+          const { InstancesClient } = await import('@google-cloud/compute');
+          const client = new InstancesClient({
+            credentials: {
+              client_email: credentials.clientEmail,
+              private_key: credentials.privateKey,
+            },
+            projectId: credentials.projectId,
+          });
+
+          const [instances] = await client.list({ project: credentials.projectId, zone: '-' });
+          discovered = instances.map(i => ({
+            id: `gcp-${i.id}`,
+            name: i.name,
+            ip: i.networkInterfaces?.[0]?.accessConfigs?.[0]?.natIP || 
+                i.networkInterfaces?.[0]?.networkIP || '0.0.0.0',
+            os: i.disks?.[0]?.licenses?.[0]?.includes('windows') ? 'windows' : 'linux',
+            provider: 'gcp',
+            zone: i.zone?.split('/').pop(),
+            machineType: i.machineType?.split('/').pop(),
+            status: i.status?.toLowerCase()
+          }));
+          break;
+        }
+        case 'azure': {
+          const { ComputeManagementClient } = await import('@azure/arm-compute');
+          const { ClientSecretCredential } = await import('@azure/identity');
+          
+          const azureCred = new ClientSecretCredential(
+            credentials.tenantId,
+            credentials.clientId,
+            credentials.clientSecret
+          );
+          
+          const client = new ComputeManagementClient(azureCred, credentials.subscriptionId);
+          const vms = [];
+          for await (const vm of client.virtualMachines.listAll()) {
+            vms.push({
+              id: `azure-${vm.vmId}`,
+              name: vm.name,
+              ip: '0.0.0.0', // Azure requires Instance Metadata Service or Public IP lookup
+              os: vm.storageProfile?.osDisk?.osType?.toLowerCase() || 'linux',
+              provider: 'azure',
+              location: vm.location,
+              vmSize: vm.hardwareProfile?.vmSize,
+              status: vm.instanceView?.statuses?.[1]?.displayStatus
+            });
+          }
+          discovered = vms;
+          break;
+        }
+        default:
+          return res.status(400).json({ error: `Unsupported provider: ${cred.provider}` });
+      }
+
+      // Insert discovered servers
+      const insertServer = db.prepare(`INSERT OR IGNORE INTO servers 
+        (id, name, ip, os, status, tags) VALUES (?, ?, ?, ?, 'pending', ?)`);
+
+      for (const s of discovered) {
+        insertServer.run(s.id, s.name, s.ip, s.os, `${s.provider},${s.region || s.location || s.zone || ''}`);
+      }
+
+      logAudit('SYSTEM', 'CLOUD_SCAN', 
+        `Scanned ${cred.provider} account - discovered ${discovered.length} instances`);
+
+      res.json({ success: true, discovered: discovered.length, instances: discovered });
+    } catch (error: any) {
+      logAudit('SYSTEM', 'CLOUD_SCAN_ERROR', `Error scanning ${cred.provider}: ${error.message}`);
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // ── Skills System ───────────────────────────────────────────────────
@@ -1127,8 +1355,11 @@ async function startServer() {
   // Neural Core: OBPA Cycle with SSH context
   app.post("/api/neural/analyze", async (req, res) => {
     const { incidentId, provider = 'gemini' } = req.body;
-    const incident = db.prepare("SELECT * FROM incidents WHERE id = ?").get(incidentId) as any;
-    const server = db.prepare("SELECT * FROM servers WHERE id = ?").get(incident.serverId) as any;
+    const incident = db.prepare("SELECT * FROM incidents WHERE id = ?").get(incidentId) as IncidentDb | undefined;
+    
+    if (!incident) return res.status(404).json({ error: "Incident not found" });
+    
+    const server = db.prepare("SELECT * FROM servers WHERE id = ?").get(incident.serverId) as ServerDb | undefined;
     
     if (!incident || !server) return res.status(404).json({ error: "Not found" });
 
@@ -1243,10 +1474,10 @@ Real-time SSH Metrics (${sshConn.host}):
     const { id } = req.params;
     const { lines, service } = req.query;
     try {
-      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
+      const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as SshConnectionDb | undefined;
       if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
 
-      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as any;
+      const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as ServerDb | undefined;
       const osType = (server?.os === 'windows' ? 'windows' : 'linux') as OSType;
       
       const key = `${conn.username}@${conn.host}:${conn.port}`;
@@ -1268,30 +1499,6 @@ Real-time SSH Metrics (${sshConn.host}):
 
   // ── Resource Lists & Actions are handled by AdminRouter ─────────────────────
 
-  initLLMService(db);
-  app.post("/api/admin/login", (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ error: "Username and password required" });
-    }
-    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
-    if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-    const [salt, hash] = user.password_hash.split(":");
-    const loginHash = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
-    
-    if (hash === loginHash) {
-      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-        .run(`audit-${Date.now()}`, "USER", "LOGIN_SUCCESS", `User ${username} logged in`, new Date().toISOString());
-      res.json({ success: true, user: { id: user.id, username: user.username, role: user.role } });
-    } else {
-      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-        .run(`audit-${Date.now()}`, "USER", "LOGIN_FAILURE", `Failed login attempt for ${username}`, new Date().toISOString());
-      res.status(401).json({ error: "Invalid credentials" });
-    }
-  });
-
   // ── User Management ────────────────────────────────────────────────────────
   app.get("/api/admin/users", (req, res) => {
     const users = db.prepare("SELECT id, username, role, created_at FROM users").all();
@@ -1310,16 +1517,13 @@ Real-time SSH Metrics (${sshConn.host}):
     res.json({ success: true });
   });
 
-  // ── Reset Users (delete all users so onboarding re-creates them) ───────────
+  // ── Reset Users - BLOCKED as per SATURN-X Protocol (Ticket 1.1) ──────────
   app.post("/api/admin/reset-users", (req, res) => {
-    db.prepare("DELETE FROM users").run();
-    db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-      .run(`audit-${Date.now()}`, "USER", "USERS_RESET", "All users deleted for fresh onboarding", new Date().toISOString());
-    res.json({ success: true, message: "All users deleted. Onboarding will create a new admin." });
+    res.status(403).json({ error: "SECURITY_BLOCK", message: "This operation is restricted to direct console access only." });
   });
 
   // ── Global User Creation ───────────────────────────────────────────────────
-  app.post("/api/admin/create-user", (req, res) => {
+  app.post("/api/admin/create-user", validate(UserCreateSchema), (req, res) => {
     const { username, password, role } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: "Username and password required" });
@@ -1553,6 +1757,32 @@ Real-time SSH Metrics (${sshConn.host}):
     res.json(status.technicalDebt);
   });
 
+  // ── Admin Login (JWT Implementation) ──────────────────────────────────────
+  app.post("/api/admin/login", loginLimiter, (req, res) => {
+    const { username, password } = req.body;
+    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as UserDb | undefined;
+    
+    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    
+    const [salt, hash] = user.password_hash.split(":");
+    const loginHash = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
+    
+    if (loginHash !== hash) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+    
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "8h" });
+    
+    logAudit("USER", "LOGIN_SUCCESS", `User ${username} logged in`);
+    res.json({ success: true, token, user: { id: user.id, username: user.username, role: user.role } });
+  });
+
+  // ── Protected Routes (Ticket 1.1) ──────────────────────────────────────────
+  app.use("/api/admin", authenticateJWT);
+  app.use("/api/contextp", authenticateJWT);
+  app.use("/api/neural", authenticateJWT);
+  app.use("/api/ssh", authenticateJWT);
+
   // ── Fase 2: Admin Router (Server Administration) ──────────────────────────
   const adminRouter = createAdminRouter(db, sshAgent, ScriptGenerator, decrypt);
   app.use(adminRouter);
@@ -1583,10 +1813,14 @@ Real-time SSH Metrics (${sshConn.host}):
   }
 
   const PORT = parseInt(process.env.PORT || (process.env.NODE_ENV === "production" ? "80" : "3000"));
-  app.listen(PORT, "0.0.0.0", () => {
+  const httpServer = createServer(app);
+  initSocket(httpServer);
+
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Saturn Core v0.1.0-FIX running on http://0.0.0.0:${PORT} (NODE_ENV: ${process.env.NODE_ENV})`);
     console.log(`Neural Engine: ARES 1.0.0`);
     console.log(`SSH Agent ready. Connect to servers via POST /api/ssh/connect`);
+    console.log(`WebSocket Server: Active and listening on port ${PORT}`);
   });
 }
 

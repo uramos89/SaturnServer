@@ -1,0 +1,25 @@
+{
+  "version": "0.2",
+  "language": "en,es",
+  "words": [
+    "saturn",
+    "ares",
+    "sqlite",
+    "better-sqlite3",
+    "contextp",
+    "dotenv",
+    "sshagent",
+    "vitest",
+    "helmet",
+    "zod",
+    "unimported",
+    "madge",
+    "cspell"
+  ],
+  "ignorePaths": [
+    "node_modules",
+    "dist",
+    "*.db",
+    "*.log"
+  ]
+}

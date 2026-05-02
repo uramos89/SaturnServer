@@ -1,14 +1,12 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
 import Database from "better-sqlite3";
 
-let db: Database;
-
 /**
- * Initializes the LLM service with the database connection.
+ * Initializes the LLM service.
  */
-export function initLLMService(database: Database): void {
-  db = database;
+export function initLLMService(_database: Database.Database): void {
+  // Database reference kept for future persistent AI config if needed
 }
 
 /**
@@ -26,13 +24,14 @@ export async function getLLMResponse(provider: string, prompt: string): Promise<
     
     if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
     
-    const genAI = new GoogleGenAI(apiKey);
+    const genAI = new GoogleGenerativeAI(apiKey);
     const genModel = genAI.getGenerativeModel({ model });
     const result = await genModel.generateContent(prompt);
-    return result.response.text();
+    const response = await result.response;
+    return response.text();
 
   } else if (provider === "moonshot") {
-    apiKey = process.env.MOONSHOT_API_KEY || "sk-kJbI3dShXfqumW0D6vXrkkU9A9G0HK1q8uO2PE0NUzXu9qbb"; // Using provided diagnostic key
+    apiKey = process.env.MOONSHOT_API_KEY || "sk-kJbI3dShXfqumW0D6vXrkkU9A9G0HK1q8uO2PE0NUzXu9qbb";
     
     const response = await axios.post("https://api.moonshot.cn/v1/chat/completions", {
       model: "moonshot-v1-8k",

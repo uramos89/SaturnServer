@@ -14,6 +14,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
+import { io, Socket } from "socket.io-client";
 
 // ── Provider & Model Types ─────────────────────────────────────────────
 interface AIProvider {
@@ -1049,37 +1050,48 @@ const IncidentCard = ({ incident, analyzing, onAnalyze, onResolve, t }: { incide
 );
 
 // ── CredentialCard ─────────────────────────────────────────────────────
-const CredentialCard = ({ cred, onDelete, onScan }: { cred: any, onDelete: (id: string) => void, onScan: (id: string) => void }) => (
+const CredentialCard = ({ cred, onDelete, onScan, scanning }: { cred: any, onDelete: (id: string) => void, onScan: (id: string) => void, scanning: boolean }) => (
   <motion.div 
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
-    className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 hover:border-orange-500/30 transition-all group"
+    className="p-6 rounded-3xl bg-black/40 border border-white/5 hover:border-orange-500/30 transition-all group relative overflow-hidden"
   >
-    <div className="flex items-start justify-between mb-4">
-      <div className="flex items-center gap-3">
-        <div className={cn(
-          "p-2 rounded-xl",
-          cred.provider === 'aws' ? "bg-orange-500/10 text-orange-500" :
-          cred.provider === 'gcp' ? "bg-sky-500/10 text-sky-500" :
-          "bg-blue-600/10 text-blue-500"
-        )}>
-          <Globe size={18} />
-        </div>
-        <div>
-          <div className="text-sm font-bold text-white uppercase tracking-wider">{cred.name}</div>
-          <div className="text-[10px] text-slate-500 uppercase">{cred.provider} • {cred.type}</div>
-        </div>
-      </div>
-      <button onClick={() => onDelete(cred.id)} className="p-2 text-slate-600 hover:text-rose-500 transition-colors">
+    <div className="absolute top-0 right-0 p-4">
+       <button onClick={() => onDelete(cred.id)} className="p-2 text-slate-600 hover:text-rose-500 transition-colors bg-white/5 rounded-xl">
         <Trash2 size={14} />
       </button>
     </div>
-    <div className="flex gap-2">
+    
+    <div className="flex items-center gap-4 mb-6">
+      <div className={cn(
+        "w-14 h-14 rounded-2xl flex items-center justify-center text-xl shadow-xl transition-transform group-hover:scale-110",
+        cred.provider === 'aws' ? "bg-orange-500/10 text-orange-500" :
+        cred.provider === 'gcp' ? "bg-sky-500/10 text-sky-500" :
+        "bg-blue-600/10 text-blue-500"
+      )}>
+        <Globe size={24} />
+      </div>
+      <div>
+        <div className="text-md font-black text-white uppercase tracking-wider">{cred.name}</div>
+        <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest">{cred.provider} • {cred.type}</div>
+      </div>
+    </div>
+
+    <div className="space-y-4">
+      <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-[10px] font-mono text-slate-400">
+        Vault ID: <span className="text-orange-500">{cred.id.slice(0, 8)}...</span>
+      </div>
+      
       <button 
         onClick={() => onScan(cred.id)}
-        className="flex-1 py-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all flex items-center justify-center gap-2"
+        disabled={scanning}
+        className="w-full py-4 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(249,115,22,0.2)] disabled:opacity-50"
       >
-        <RefreshCw size={12} /> Scan Account
+        {scanning ? (
+          <><RefreshCw size={14} className="animate-spin" /> Scanning account...</>
+        ) : (
+          <><RefreshCw size={14} /> Discover Instances</>
+        )}
       </button>
     </div>
   </motion.div>
@@ -1560,6 +1572,33 @@ const AuditView = () => {
     </div>
   );
 };
+// ── Socket.io Hook (Ticket W-01) ──────────────────────────────────────
+function useSocket(onMetricsUpdate: (data: any) => void, onNewIncident: (incident: any) => void) {
+  const socketRef = useRef<Socket | null>(null);
+
+  useEffect(() => {
+    const socket = io(window.location.origin);
+    socketRef.current = socket;
+
+    socket.on('connect', () => console.log('[WS] Connected to Saturn Core'));
+    socket.on('metrics:update', onMetricsUpdate);
+    socket.on('incident:new', onNewIncident);
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [onMetricsUpdate, onNewIncident]);
+
+  const subscribeToServer = (serverId: string) => {
+    socketRef.current?.emit('subscribe:server', serverId);
+  };
+
+  const unsubscribeFromServer = (serverId: string) => {
+    socketRef.current?.emit('unsubscribe:server', serverId);
+  };
+
+  return { subscribeToServer, unsubscribeFromServer };
+}
 
 export default function App() {
   const { lang, setLang, t } = useLang();
@@ -1583,6 +1622,17 @@ export default function App() {
   const [globalConfig, setGlobalConfig] = useState<any>({ mode: 'auto', threshold: 0.7 });
   const [loading, setLoading] = useState(true);
   const [analyzingIncident, setAnalyzingIncident] = useState<string | null>(null);
+
+  // Real-time Metrics Handler
+  const handleMetricsUpdate = useCallback((data: any) => {
+    setServers(prev => prev.map(s => s.id === data.serverId ? { ...s, ...data } : s));
+  }, []);
+
+  const handleNewIncident = useCallback((incident: any) => {
+    setIncidents(prev => [incident, ...prev]);
+  }, []);
+
+  const { subscribeToServer, unsubscribeFromServer } = useSocket(handleMetricsUpdate, handleNewIncident);
   
   // Add Server State
   const [showAddServer, setShowAddServer] = useState(false);
@@ -1814,6 +1864,7 @@ export default function App() {
       { id: 'webserver', label: 'Web', icon: Globe },
       { id: 'health', label: 'Health', icon: HeartPulse },
       { id: 'ssl', label: 'SSL', icon: Lock },
+      { id: 'thresholds', label: 'Thresholds', icon: Sliders },
       { id: 'audit', label: 'Audit', icon: FileText },
       { id: 'terminal', label: 'Terminal', icon: Terminal }
     ];
@@ -1862,8 +1913,88 @@ export default function App() {
           {serverDetailTab === 'users' && <UsersTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
           {serverDetailTab === 'packages' && <PackagesTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
           {serverDetailTab === 'webserver' && <WebserverTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          {serverDetailTab === 'health' && <HealthTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          {serverDetailTab !== 'summary' && serverDetailTab !== 'terminal' && serverDetailTab !== 'processes' && serverDetailTab !== 'network' && serverDetailTab !== 'firewall' && serverDetailTab !== 'tasks' && serverDetailTab !== 'users' && serverDetailTab !== 'packages' && serverDetailTab !== 'webserver' && serverDetailTab !== 'health' && renderTabData()}
+          { serverDetailTab === 'health' && <HealthTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          { serverDetailTab === 'thresholds' && <ThresholdsTab selectedServer={selectedServer} />}
+          { serverDetailTab !== 'summary' && serverDetailTab !== 'terminal' && serverDetailTab !== 'processes' && serverDetailTab !== 'network' && serverDetailTab !== 'firewall' && serverDetailTab !== 'tasks' && serverDetailTab !== 'users' && serverDetailTab !== 'packages' && serverDetailTab !== 'webserver' && serverDetailTab !== 'health' && serverDetailTab !== 'thresholds' && renderTabData()}
+        </div>
+      </div>
+    );
+  };
+
+  const ThresholdsTab = ({ selectedServer }: { selectedServer: ManagedServer | null }) => {
+    const [configs, setConfigs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+      fetchConfigs();
+    }, [selectedServer?.id]);
+
+    const fetchConfigs = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/thresholds/${selectedServer?.id}`);
+        setConfigs(await res.json());
+      } catch (e) { console.error(e); }
+      setLoading(false);
+    };
+
+    const handleSave = async (metric: string, value: number, severity: string) => {
+      try {
+        await fetch('/api/thresholds', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ serverId: selectedServer?.id, metric, value, severity })
+        });
+        fetchConfigs();
+      } catch (e) { alert('Failed to save threshold'); }
+    };
+
+    const metrics = [
+      { id: 'cpu', label: 'CPU Usage', unit: '%' },
+      { id: 'memory', label: 'Memory Usage', unit: '%' },
+      { id: 'disk', label: 'Disk Usage', unit: '%' }
+    ];
+
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+        <div className="p-6 rounded-2xl bg-orange-500/5 border border-orange-500/10">
+            <h3 className="text-xs font-black uppercase tracking-widest text-orange-500 mb-2">Reactive Guardrails</h3>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest">Define limits that trigger autonomous incidents and remediation skills.</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {metrics.map(m => {
+            const config = configs.find(c => c.metric === m.id) || { value: 80, severity: 'high' };
+            return (
+              <div key={m.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-slate-400">{m.label}</span>
+                  <span className="text-xl font-black text-white">{config.value}{m.unit}</span>
+                </div>
+                <input 
+                    type="range" 
+                    min="10" 
+                    max="95" 
+                    value={config.value} 
+                    onChange={(e) => handleSave(m.id, parseInt(e.target.value), config.severity)}
+                    className="w-full accent-orange-500" 
+                />
+                <div className="flex justify-between items-center pt-2">
+                  <select 
+                    value={config.severity} 
+                    onChange={(e) => handleSave(m.id, config.value, e.target.value)}
+                    className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[8px] font-black uppercase text-slate-400 outline-none"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                  <span className="text-[8px] font-black uppercase text-slate-600 tracking-widest">Auto-Alert Enabled</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -2605,6 +2736,8 @@ export default function App() {
     const [importForm, setImportForm] = useState({ name: '', provider: 'aws', type: 'access_key', accessKey: '', secretKey: '' });
     const [savingCred, setSavingCred] = useState(false);
     const [loadingCreds, setLoadingCreds] = useState(false);
+    const [scanningId, setScanningId] = useState<string | null>(null);
+    const [discoveredInstances, setDiscoveredInstances] = useState<any[]>([]);
 
     useEffect(() => {
       fetchCreds();
@@ -2620,6 +2753,29 @@ export default function App() {
         console.error(e);
       }
       setLoadingCreds(false);
+    };
+
+    const handleScan = async (id: string) => {
+      setScanningId(id);
+      setDiscoveredInstances([]);
+      try {
+        const res = await fetch('/api/cloud/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ credId: id })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setDiscoveredInstances(data.instances || []);
+          fetch('/api/servers').then(r => r.json()).then(setServers).catch(() => {});
+        } else {
+          alert(`Scan failed: ${data.error}`);
+        }
+      } catch (e: any) {
+        alert(`Network Error: ${e.message}`);
+      } finally {
+        setScanningId(null);
+      }
     };
 
     const handleImportCred = async () => {
@@ -2656,85 +2812,163 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+      <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Key className="text-orange-500" size={20} />
-            <h2 className="text-sm font-black uppercase tracking-[0.2em]">Identity Vault</h2>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-500 border border-orange-500/20">
+                <Key size={24} />
+            </div>
+            <div>
+                <h2 className="text-xl font-black text-white uppercase tracking-widest">Identity Vault</h2>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Multi-Cloud Credential Management</p>
+            </div>
           </div>
-          <button onClick={() => setShowImportModal(true)} className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-orange-400 transition-colors flex items-center gap-2">
-            <Plus size={14} /> Import
+          <button onClick={() => setShowImportModal(true)} className="px-6 py-3 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(249,115,22,0.3)]">
+            <Plus size={14} /> Import Credential
           </button>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {loadingCreds && cloudCreds.length === 0 ? (
-            <div className="p-12 text-center col-span-full"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full mx-auto" /></div>
+            <div className="p-12 text-center col-span-full flex flex-col items-center gap-4">
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-10 h-10 border-4 border-slate-700 border-t-orange-500 rounded-full" />
+                <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Decrypting Vault...</p>
+            </div>
           ) : cloudCreds.length === 0 ? (
-            <div className="p-12 border border-dashed border-white/10 rounded-2xl text-center col-span-full">
-              <Key size={32} className="text-slate-600 mx-auto mb-4" />
-              <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No credentials stored</p>
+            <div className="p-16 border-2 border-dashed border-white/5 rounded-[2.5rem] text-center col-span-full flex flex-col items-center gap-4">
+              <Key size={48} className="text-slate-800" />
+              <div>
+                  <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No credentials stored</p>
+                  <p className="text-[9px] text-slate-600 uppercase mt-2">Connect your Cloud Accounts to begin automated discovery</p>
+              </div>
             </div>
           ) : (
             cloudCreds.map(c => (
-              <div key={c.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 flex justify-between items-center group hover:border-orange-500/30 transition-all">
-                <div className="flex gap-4 items-center">
-                  <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
-                    <ShieldCheck size={20} />
-                  </div>
-                  <div>
-                    <p className="text-[12px] font-black uppercase text-slate-300 mb-1">{c.name}</p>
-                    <p className="text-[9px] font-medium text-slate-500 uppercase tracking-widest">{c.provider} • {c.type}</p>
-                  </div>
-                </div>
-                <button onClick={() => handleDeleteCred(c.id)} className="p-2 text-slate-600 hover:text-rose-500 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
-                  <Trash2 size={16} />
-                </button>
-              </div>
+              <CredentialCard 
+                key={c.id} 
+                cred={c} 
+                onDelete={handleDeleteCred} 
+                onScan={handleScan}
+                scanning={scanningId === c.id}
+              />
             ))
           )}
         </div>
 
         <AnimatePresence>
+          {discoveredInstances.length > 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="space-y-6 pt-12 border-t border-white/5"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <Activity className="text-emerald-500" size={20} />
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white">Discovery Results ({discoveredInstances.length} nodes)</h3>
+                </div>
+                <button onClick={() => setDiscoveredInstances([])} className="text-[10px] font-black uppercase text-slate-500 hover:text-white">Clear Results</button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {discoveredInstances.map((inst, i) => (
+                  <motion.div 
+                    key={i} 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="p-4 rounded-2xl bg-white/[0.02] border border-emerald-500/20 flex flex-col gap-3"
+                  >
+                    <div className="flex justify-between items-start">
+                        <div className="text-[10px] font-mono text-emerald-400 font-bold">{inst.id}</div>
+                        <CheckCircle2 size={12} className="text-emerald-500" />
+                    </div>
+                    <div>
+                        <div className="text-xs font-black text-white uppercase truncate">{inst.name}</div>
+                        <div className="text-[9px] text-slate-500 font-mono mt-1">{inst.ip} • {inst.os}</div>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-white/5 flex justify-between items-center">
+                        <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded bg-white/5 text-slate-400">{inst.provider}</span>
+                        <span className="text-[8px] font-mono text-slate-600">{inst.region || inst.location || inst.zone}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+              
+              <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 flex items-center gap-4">
+                <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-500">
+                    <Zap size={16} />
+                </div>
+                <p className="text-[10px] font-bold text-emerald-400/80 uppercase tracking-widest">
+                    Discovered nodes have been added to the registry in 'Pending' status. Deploy Saturn Agent to begin monitoring.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
           {showImportModal && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowImportModal(false)} />
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 shadow-2xl">
-                <h3 className="text-sm font-black uppercase tracking-widest mb-6 text-white flex items-center gap-2"><Key className="text-orange-500" size={18}/> Import Cloud Credentials</h3>
-                <div className="space-y-4">
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-10 shadow-2xl">
+                <div className="flex items-center gap-4 mb-8">
+                    <div className="p-3 bg-orange-500/10 rounded-2xl text-orange-500">
+                        <Key size={20} />
+                    </div>
+                    <h3 className="text-lg font-black uppercase tracking-[0.2em] text-white">Import Credential</h3>
+                </div>
+                
+                <div className="space-y-6">
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Name (Alias)</label>
-                    <input type="text" value={importForm.name} onChange={e => setImportForm({...importForm, name: e.target.value})} placeholder="e.g. AWS Production" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Friendly Name (Alias)</label>
+                    <input type="text" value={importForm.name} onChange={e => setImportForm({...importForm, name: e.target.value})} placeholder="e.g. AWS Production Hub" className="w-full bg-black border border-white/10 rounded-xl px-4 py-4 text-sm text-white focus:border-orange-500 outline-none transition-all" />
                   </div>
+                  
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Provider</label>
-                      <select value={importForm.provider} onChange={e => setImportForm({...importForm, provider: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none">
-                        <option value="aws">AWS</option>
-                        <option value="gcp">GCP</option>
-                        <option value="azure">Azure</option>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Cloud Provider</label>
+                      <select value={importForm.provider} onChange={e => setImportForm({...importForm, provider: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl px-4 py-4 text-sm text-white focus:border-orange-500 outline-none appearance-none cursor-pointer">
+                        <option value="aws">AWS EC2</option>
+                        <option value="gcp">Google Cloud Compute</option>
+                        <option value="azure">Azure Virtual Machines</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Type</label>
-                      <select value={importForm.type} onChange={e => setImportForm({...importForm, type: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none">
-                        <option value="access_key">Access Key</option>
-                        <option value="service_account">Service Account</option>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Auth Type</label>
+                      <select value={importForm.type} onChange={e => setImportForm({...importForm, type: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl px-4 py-4 text-sm text-white focus:border-orange-500 outline-none appearance-none cursor-pointer">
+                        <option value="access_key">Access Keys</option>
+                        <option value="service_account">Service Account JSON</option>
                       </select>
                     </div>
                   </div>
+                  
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Access Key / Client ID</label>
-                    <input type="text" value={importForm.accessKey} onChange={e => setImportForm({...importForm, accessKey: e.target.value})} placeholder="AKIA..." className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+                    <div className="relative">
+                        <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" />
+                        <input type="text" value={importForm.accessKey} onChange={e => setImportForm({...importForm, accessKey: e.target.value})} placeholder="AKIA..." className="w-full bg-black border border-white/10 rounded-xl pl-12 pr-4 py-4 text-sm text-white focus:border-orange-500 outline-none transition-all" />
+                    </div>
                   </div>
+                  
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Secret Key (Will be encrypted AES-256-GCM)</label>
-                    <input type="password" value={importForm.secretKey} onChange={e => setImportForm({...importForm, secretKey: e.target.value})} placeholder="••••••••" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Secret Key / Private Key</label>
+                    <div className="relative">
+                        <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" />
+                        <input type="password" value={importForm.secretKey} onChange={e => setImportForm({...importForm, secretKey: e.target.value})} placeholder="••••••••" className="w-full bg-black border border-white/10 rounded-xl pl-12 pr-4 py-4 text-sm text-white focus:border-orange-500 outline-none transition-all" />
+                    </div>
+                    <p className="text-[8px] text-slate-600 uppercase mt-2 flex items-center gap-1"><ShieldCheck size={10} /> AES-256-GCM Hardware Encrypted in Vault</p>
                   </div>
-                  <div className="flex gap-4 mt-8">
-                    <button onClick={() => setShowImportModal(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">Cancel</button>
-                    <button onClick={handleImportCred} disabled={savingCred || !importForm.name || !importForm.accessKey || !importForm.secretKey} className="flex-1 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2">
-                      {savingCred ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><ShieldCheck size={14}/> Encrypt & Save</>}
+
+                  <div className="flex gap-4 mt-8 pt-4 border-t border-white/5">
+                    <button onClick={() => setShowImportModal(false)} className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all">Cancel</button>
+                    <button 
+                        onClick={handleImportCred} 
+                        disabled={savingCred || !importForm.name || !importForm.accessKey || !importForm.secretKey} 
+                        className="flex-2 py-4 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(249,115,22,0.2)] px-8"
+                    >
+                      {savingCred ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><ShieldCheck size={14}/> Secure Vault Import</>}
                     </button>
                   </div>
                 </div>
