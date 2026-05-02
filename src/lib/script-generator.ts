@@ -8,9 +8,9 @@ export class ScriptGenerator {
   static generate(req: ScriptRequest): ScriptResponse {
     const { category, action, os, params } = req;
     const method = `${category}_${action}`;
-    const handler = (this as any)[method];
+    const handler = (ScriptGenerator as any)[method];
     if (typeof handler === "function") {
-      return handler.call(this, os, params);
+      return handler.call(ScriptGenerator, os, params);
     }
     // Fallback: generate a generic command
     return this.genericCommand(os, params.command || `${category} ${action}`);

@@ -506,10 +506,12 @@ async function startServer() {
   app.get("/api/health", (req, res) => {
     const sshCount = db.prepare("SELECT COUNT(*) as c FROM ssh_connections WHERE status = 'connected'").get() as any;
     const serverCount = db.prepare("SELECT COUNT(*) as c FROM servers").get() as any;
+    console.log("Health check triggered");
     res.json({ 
       status: "ok", 
       timestamp: new Date().toISOString(), 
-      version: "0.1.0",
+      version: "0.1.0-FIX",
+      cwd: process.cwd(),
       engine: "ARES 1.0.0",
       ssh: { connected: sshCount.c, total: db.prepare("SELECT COUNT(*) as c FROM ssh_connections").get() as any },
       servers: serverCount.c
