@@ -70,7 +70,7 @@ powershell -Command "$users = @(Get-LocalUser); if($users.Count -gt 0){ $users |
       return ScriptGenerator.buildResponse(script, "List local users as JSON", ["Read-only operation"], "30s");
     }
     const script = `${ScriptGenerator.shebang(os)}
-awk -F: '$3>=1000 || $3==0 {print $1\\":\\"$3\\":\\"$6\\":\\"$7}' /etc/passwd | awk -F: 'BEGIN{printf \\"[\\"} {if(NR>1)printf \\",\\"; printf \\"{\\\\\\"username\\\\\\":\\\\\\"%s\\\\\\",\\\\\\"uid\\\\\\":\\\\\\"%s\\\\\\",\\\\\\"home\\\\\\":\\\\\\"%s\\\\\\",\\\\\\"shell\\\\\\":\\\\\\"%s\\\\\\",\\\\\\"groups\\\\\\":\\\\\\"N/A\\\\\\"}\\", $1, $2, $3, $4} END{print \\"]\\"}'
+awk -F: '$3>=1000 || $3==0 {print $1 "|" $3 "|" $6 "|" $7}' /etc/passwd | awk -F'|' 'BEGIN{printf "["} {if(NR>1)printf ","; printf "{\\"username\\":\\"%s\\",\\"uid\\":\\"%s\\",\\"home\\":\\"%s\\",\\"shell\\":\\"%s\\",\\"groups\\":\\"N/A\\"}", $1, $2, $3, $4} END{print "]"}'
 `;
     return ScriptGenerator.buildResponse(script, "List system users as JSON", ["Read-only operation"], "30s");
   }
