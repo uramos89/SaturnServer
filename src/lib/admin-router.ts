@@ -769,7 +769,7 @@ export function createAdminRouter(
         return;
       }
 
-      await ensureConnected(serverId);
+      const key = await ensureConnected(serverId);
       const result = await sshAgent.execCommand(key, command);
 
       // Log to audit and command_history

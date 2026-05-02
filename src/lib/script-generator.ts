@@ -786,6 +786,10 @@ done
     return this.buildResponse(script, "Get SMART disk health info", ["Read-only operation - requires smartmontools"], "30s");
   }
 
+  static health_info(os: OSType, params: Record<string, any>): ScriptResponse {
+    return this.smart_info(os, params);
+  }
+
   // ═══════════════════════════════════════════════════════════════════════
   // SEC01 - SSL
   // ═══════════════════════════════════════════════════════════════════════
