@@ -10,7 +10,7 @@ export class ScriptGenerator {
     const method = `${category}_${action}`;
     const handler = (this as any)[method];
     if (typeof handler === "function") {
-      return handler(os, params);
+      return handler.call(this, os, params);
     }
     // Fallback: generate a generic command
     return this.genericCommand(os, params.command || `${category} ${action}`);
