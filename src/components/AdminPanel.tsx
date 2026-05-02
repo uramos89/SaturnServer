@@ -25,7 +25,6 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "webserver", label: "Web Server", icon: Globe },
   { id: "smart", label: "SMART", icon: HardDrive },
   { id: "ssl", label: "SSL", icon: Lock },
-  { id: "backups", label: "Backups", icon: Database },
   { id: "console", label: "Console", icon: Terminal },
 ];
 

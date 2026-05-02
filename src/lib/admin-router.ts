@@ -253,7 +253,13 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("processes", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "PROCESS", "PROCESSES_LISTED", `Listed processes on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      let processes = [];
+      try {
+        processes = JSON.parse(result.stdout);
+      } catch (e) {
+        console.error("Failed to parse processes JSON:", result.stdout);
+      }
+      res.json({ success: true, processes, raw: result });
     })
   );
 
@@ -354,7 +360,13 @@ export function createAdminRouter(
       const sr = scriptGenerator.generate(buildRequest("network", "list", os));
       const result = await execOnServer(db, sshAgent, serverId, sr.script);
       auditLog(db, "NETWORK", "NETWORK_INTERFACES_LISTED", `Listed network interfaces on ${serverId}`);
-      res.json({ success: true, data: result.stdout, raw: result });
+      let network = [];
+      try {
+        network = JSON.parse(result.stdout);
+      } catch (e) {
+        console.error("Failed to parse network JSON:", result.stdout);
+      }
+      res.json({ success: true, network, raw: result });
     })
   );
 

@@ -297,7 +297,7 @@ echo "Task ${taskId} removed from crontab"
   static processes_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${ScriptGenerator.shebang(os)}
-powershell -Command "Get-Process | Sort-Object CPU -Descending | Select-Object -First 20 | Select-Object @{Name='pid';Expression={$_.Id}}, @{Name='user';Expression={'N/A'}}, @{Name='name';Expression={$_.ProcessName}}, @{Name='cpu';Expression={[math]::Round($_.CPU, 2)}}, @{Name='mem';Expression={[math]::Round($_.WorkingSet64 / 1MB, 2)}}, @{Name='state';Expression={if($_.Responding){'Running'}else{'Not Responding'}}} | ConvertTo-Json -Compress"
+powershell -Command "$res = Get-Process | Sort-Object CPU -Descending | Select-Object -First 20 | Select-Object @{Name='pid';Expression={$_.Id}}, @{Name='user';Expression={'N/A'}}, @{Name='name';Expression={$_.ProcessName}}, @{Name='cpu';Expression={[math]::Round($_.CPU, 2)}}, @{Name='mem';Expression={[math]::Round($_.WorkingSet64 / 1MB, 2)}}, @{Name='state';Expression={if($_.Responding){'Running'}else{'Not Responding'}}}; if($res -is [Array]){ $res | ConvertTo-Json -Compress } else { @($res) | ConvertTo-Json -Compress }"
 `;
       return ScriptGenerator.buildResponse(script, "List top 20 processes as JSON", ["Read-only operation"], "30s");
     }
@@ -445,18 +445,14 @@ echo "Log rotation completed"
   static network_list(os: OSType, params: Record<string, any>): ScriptResponse {
     if (os === "windows") {
       const script = `${ScriptGenerator.shebang(os)}
-    if(NR>1)printf ",";
-    iface=$1; status=$2; split($3,a,"/"); ip=a[1]; mask=a[2];
-    "ip route show dev " iface " | grep default | awk \"{print \\$3}\"" | getline gateway;
-    if(!gateway) gateway="None";
-    "ip link show " iface " | grep -oP \"(?<=link/ether\\s)[0-9a-fA-F:]{17}\"" | getline mac;
-    if(!mac) mac="None";
-    "grep nameserver /etc/resolv.conf | awk \"{print \\$2}\" | tr \"\\n\" \",\" | sed \"s/,$//\"" | getline dns;
-    if(!dns) dns="None";
-    printf "{\\"iface\\":\\"%s\\",\\"status\\":\\"%s\\",\\"ip\\":\\"%s\\",\\"mask\\":\\"%s\\",\\"mac\\":\\"%s\\",\\"gateway\\":\\"%s\\",\\"dns\\":\\"%s\\"}", iface, status, ip, mask, mac, gateway, dns;
-} END{print "]"}'
+powershell -Command "$res = Get-NetIPConfiguration | ForEach-Object { [PSCustomObject]@{ iface = $_.InterfaceAlias; status = ($_.NetAdapter.Status -if $null -eq $_.NetAdapter.Status -then 'Unknown' -else $_.NetAdapter.Status); ip = ($_.IPv4Address.IPAddress -if $null -eq $_.IPv4Address.IPAddress -then 'N/A' -else $_.IPv4Address.IPAddress); mask = ($_.IPv4DefaultGateway.PrefixLength -if $null -eq $_.IPv4DefaultGateway.PrefixLength -then '0' -else $_.IPv4DefaultGateway.PrefixLength); mac = ($_.NetAdapter.LinkLayerAddress -if $null -eq $_.NetAdapter.LinkLayerAddress -then 'N/A' -else $_.NetAdapter.LinkLayerAddress); gateway = ($_.IPv4DefaultGateway.NextHop -if $null -eq $_.IPv4DefaultGateway.NextHop -then 'None' -else $_.IPv4DefaultGateway.NextHop); dns = ($_.DNSServer.ServerAddresses -join ',') } }; if($res -is [Array]){ $res | ConvertTo-Json -Compress } else { @($res) | ConvertTo-Json -Compress }"
 `;
-    return ScriptGenerator.buildResponse(script, "List network interfaces with advanced properties as JSON", ["Read-only operation"], "30s");
+      return ScriptGenerator.buildResponse(script, "List network interfaces as JSON", ["Read-only operation"], "30s");
+    }
+    const script = `${ScriptGenerator.shebang(os)}
+ip -o addr show | awk 'BEGIN{printf "["} {if(NR>1)printf ","; split($4,a,"/"); printf "{\\"iface\\":\\"%s\\",\\"status\\":\\"UP\\",\\"ip\\":\\"%s\\",\\"mask\\":\\"%s\\",\\"mac\\":\\"N/A\\",\\"gateway\\":\\"N/A\\",\\"dns\\":\\"N/A\\"}", $2, a[1], a[2]} END{print "]"}'
+`;
+    return ScriptGenerator.buildResponse(script, "List network interfaces as JSON", ["Read-only operation"], "30s");
   }
 
   static network_configure(os: OSType, params: Record<string, any>): ScriptResponse {

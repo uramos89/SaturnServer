@@ -12,6 +12,7 @@ import { ScriptGenerator } from "./src/lib/script-generator.js";
 import { ScriptValidator } from "./src/lib/script-validator.js";
 import { createAdminRouter } from "./src/lib/admin-router.js";
 import { getStatus as getContextPStatus, getContractContent, getIndexContent, getMetricsContent, writeAuditLog, getAuditLogs, getParams, getCpiniContent } from "./src/lib/contextp-service.js";
+import { ARESWorker } from "./src/lib/ares-worker.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1152,6 +1153,9 @@ async function startServer() {
 
     await sendNotification("warning", `New Incident: ${title}`, description, severity);
     
+    // Wake up ARES immediately
+    aresWorker.wakeUp().catch(console.error);
+
     res.json({ id, status: "open" });
   });
 
@@ -1599,6 +1603,32 @@ Return ONLY a JSON object with the following structure:
     res.json({ success: true, message: "All users deleted. Onboarding will create a new admin." });
   });
 
+  // ── Global User Creation ───────────────────────────────────────────────────
+  app.post("/api/admin/create-user", (req, res) => {
+    const { username, password, role } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: "Username and password required" });
+    }
+    
+    const id = crypto.randomUUID();
+    const salt = crypto.randomBytes(16).toString("hex");
+    const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512").toString("hex");
+    const passwordHash = `${salt}:${hash}`;
+    const createdAt = new Date().toISOString();
+
+    try {
+      db.prepare("INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)")
+        .run(id, username, passwordHash, role || 'admin', createdAt);
+      
+      db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
+        .run(`audit-${Date.now()}`, "USER", "USER_CREATED", `Global user ${username} created by system`, createdAt);
+      
+      res.json({ success: true, id });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ── AI Providers & Models (2026 comprehensive list - 50+ providers) ────
   const AI_PROVIDERS = [
     // ═══ FRONTIER PROVIDERS (Top Tier - proprietary models) ═══
@@ -1811,6 +1841,10 @@ Return ONLY a JSON object with the following structure:
   // ── Fase 2: Admin Router (Server Administration) ──────────────────────────
   const adminRouter = createAdminRouter(db, sshAgent, ScriptGenerator);
   app.use(adminRouter);
+
+  // ── ARES Neural Core Worker ───────────────────────────────────────────────
+  const aresWorker = new ARESWorker(db, sshAgent);
+  aresWorker.start(60000);
 
   // ── Background SSH Metrics Scheduler ──────────────────────────────────────
   if (process.env.NODE_ENV === "production") {
