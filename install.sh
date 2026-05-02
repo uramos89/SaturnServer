@@ -96,46 +96,20 @@ npm run build >/dev/null 2>&1
 echo -e "│  ${GREEN}Build completed${NC}"
 echo -e "│"
 
-# 4. Environment & Start
-echo -e "├─ ${BOLD}[4/4] Finalizing configuration...${NC}"
-if [ ! -f ".env" ]; then
-  echo -e "│  Generating new .env file..."
-  cat > .env <<EOF
-PORT=3000
-NODE_ENV=production
-EOF
-else
-  echo -e "│  Validating existing .env file..."
-  # Ensure PORT is set to 3000 to avoid permission issues with port 80
-  if ! grep -q "^PORT=" .env; then
-    echo "PORT=3000" >> .env
-    echo -e "│  ${YELLOW}Added PORT=3000 to .env${NC}"
-  fi
-fi
+# 4. Interactive Setup & Start
+echo -e "├─ ${BOLD}[4/4] Launching Interactive Setup Wizard...${NC}"
+npm run setup
 
-# Ensure mandatory keys exist
-for key in "SSH_ENCRYPTION_PEPPER" "JWT_SECRET" "SATURN_MASTER_KEY"; do
-  if ! grep -q "^$key=" .env; then
-    VAL=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-    echo "$key=$VAL" >> .env
-    echo -e "│  ${YELLOW}Generated $key${NC}"
-  fi
-done
-
-
-echo -e "│  Restarting PM2 process..."
-pm2 stop saturn 2>/dev/null || true
-pm2 delete saturn 2>/dev/null || true
-NODE_ENV=production pm2 start tsx --name saturn -- server.ts >/dev/null 2>&1
-pm2 save >/dev/null 2>&1
+# The setup script handles .env and systemd generation.
+# We can optionally start it here if they didn't choose systemd, 
+# or just let the user follow the setup instructions.
 
 echo -e "│"
-echo -e "└─ ${BOLD}${GREEN}Installation Complete!${NC}"
+echo -e "└─ ${BOLD}${GREEN}Deployment Script Finished!${NC}"
 echo ""
-echo -e "  ${BOLD}🚀 SATURN SERVER IS RUNNING${NC}"
+echo -e "  ${BOLD}🪐 SATURN SERVER${NC}"
 echo -e "  ───────────────────────────"
-echo -e "  ${CYAN}URL:${NC} http://$(hostname -I | awk '{print $1}'):${BOLD}3000${NC}"
-echo -e "  ${CYAN}DIR:${NC} $APP_DIR"
-echo -e "  ${CYAN}LOG:${NC} pm2 logs saturn"
+echo -e "  Follow the instructions above to start the service."
 echo ""
 echo -e "=============================================================================="
+
