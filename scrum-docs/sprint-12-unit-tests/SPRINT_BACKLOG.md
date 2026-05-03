@@ -1,7 +1,7 @@
 # 🏃 Sprint 12: Unit Tests
 
 > **Feature Reference:** Tech Debt TD-003 (Tests automatizados)
-> **Estado:** ❌ No iniciado (pendiente de implementación)
+> **Estado:** ✅ COMPLETADO (11 archivos, 100 tests, 0 fallos)
 
 ---
 

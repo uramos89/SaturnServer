@@ -98,20 +98,20 @@
 
 | ID | Título | Feature Ref | Esfuerzo | Estado |
 |---|---|---|---|---|
-| US-065 | Server Selector en Dashboard | EP-13 | 3 | 📝 Backlog |
-| US-066 | Gauges CPU/RAM/Disk en tiempo real | EP-13 | 5 | 📝 Backlog |
-| US-067 | Charts históricos (60 puntos) | EP-13 | 5 | 📝 Backlog |
-| US-068 | Buffer de métricas frontend | EP-13 | 3 | 📝 Backlog |
-| US-069 | Auto-suscripción Socket.io | EP-13 | 2 | 📝 Backlog |
+| US-065 | Server Selector en Dashboard | EP-13 | 3 | ✅ Done |
+| US-066 | Gauges CPU/RAM/Disk en tiempo real | EP-13 | 5 | ✅ Done |
+| US-067 | Charts históricos (60 puntos) | EP-13 | 5 | ✅ Done |
+| US-068 | Buffer de métricas frontend | EP-13 | 3 | ✅ Done |
+| US-069 | Auto-suscripción Socket.io | EP-13 | 2 | ✅ Done |
 
 ## 📦 SPRINT 12 — Unit Tests (⚠️ Pendiente)
 
 | ID | Título | Feature Ref | Esfuerzo | Estado |
 |---|---|---|---|---|
-| US-070 | threshold-engine tests | TD-003 | 5 | 📝 Backlog |
-| US-071 | notification-service tests | TD-003 | 5 | 📝 Backlog |
-| US-072 | ssh-agent tests | TD-003 | 3 | 📝 Backlog |
-| US-073 | telegram-service tests | TD-003 | 3 | 📝 Backlog |
+| US-070 | threshold-engine tests | TD-003 | 5 | ✅ Done |
+| US-071 | notification-service tests | TD-003 | 5 | ✅ Done |
+| US-072 | ssh-agent tests | TD-003 | 3 | ✅ Done |
+| US-073 | telegram-service tests | TD-003 | 3 | ✅ Done |
 
 ## 📦 SPRINT 13 — Refactor server.ts (Completado ✅)
 
