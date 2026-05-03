@@ -126,10 +126,10 @@ export function createAuthRouter(db: Database.Database): Router {
   // ── Create Admin User ──────────────────────────────────────────────
   router.post("/create", (req: Request, res: Response) => {
     const { username, password } = req.body;
-    if (!username || !password || password.length < 8) {
+    if (typeof username !== 'string' || typeof password !== 'string' || password.length < 8) {
       return res
         .status(400)
-        .json({ error: "Username required and password must be at least 8 characters" });
+        .json({ error: "Username required and password must be a string of at least 8 characters" });
     }
     const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
     if (existing) return res.status(409).json({ error: "User already exists" });

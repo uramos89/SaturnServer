@@ -49,18 +49,14 @@ describe("Fuzz: Endpoints with malformed payloads", () => {
   ENDPOINTS.forEach(({ method, path, body }) => {
     MALFORMED_PAYLOADS.forEach((payload) => {
       it(`[${method}] ${path} — payload: ${payload === undefined ? 'undefined' : JSON.stringify(payload).slice(0, 40)}`, async () => {
-        try {
-          const res = await fetch(`${BASE}${path}`, {
-            method,
-            headers: { "Content-Type": "application/json" },
-            body: method === "GET" ? undefined : JSON.stringify(payload),
-          });
-          // Accept 200, 400, 401, 404 — REJECT 500
-          expect(res.status).not.toBe(500);
-        } catch (e: any) {
-          // Network errors are OK (timeout, connection refused)
-          console.warn(`Network error for ${path}: ${e.message}`);
-        }
+        const res = await fetch(`${BASE}${path}`, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: method === "GET" ? undefined : JSON.stringify(payload),
+          signal: AbortSignal.timeout(5000),
+        });
+        // Accept 200, 400, 401, 404 — REJECT 500
+        expect(res.status).not.toBe(500);
       });
     });
   });
