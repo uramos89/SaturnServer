@@ -627,7 +627,7 @@ async function startServer() {
 
   // ── Public paths (no JWT required) ─────────────────────────────────
   app.use("/api", (req, res, next) => {
-    const PUBLIC_PATHS = ["/health", "/setup/status", "/setup/import", "/admin/login"];
+    const PUBLIC_PATHS = ["/health", "/setup/status", "/setup/import", "/admin/login", "/admin/create"];
     if (PUBLIC_PATHS.includes(req.path)) return next();
     authenticateJWT(req, res, next);
   });
@@ -681,30 +681,13 @@ async function startServer() {
   const adminRouter = createLibAdminRouter(db, sshAgent, ScriptGenerator, decrypt);
   app.use(adminRouter);
 
-  // ── Seed default admin user ────────────────────────────────────────
-  const userCount = db.prepare("SELECT COUNT(*) as c FROM users").get() as {
-    c: number;
-  };
+  // ── Seed: NO crear admin por defecto ────────────────────────────────
+  // El admin se crea en el Onboarding Wizard (UI).
+  // Si no hay usuarios, setup/status devuelve initialized: false
+  // y el frontend muestra el wizard en lugar del login.
+  const userCount = db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number };
   if (userCount.c === 0) {
-    const defaultUsername = "admin";
-    const defaultPassword = "saturn2024";
-    const salt = crypto.randomBytes(16).toString("hex");
-    const hash = crypto
-      .pbkdf2Sync(defaultPassword, salt, 100000, 64, "sha512")
-      .toString("hex");
-    const passwordHash = `${salt}:${hash}`;
-    db.prepare(
-      "INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(
-      "user-default",
-      defaultUsername,
-      passwordHash,
-      "admin",
-      new Date().toISOString()
-    );
-    console.log(
-      `Default admin user created: ${defaultUsername} / ${defaultPassword}`
-    );
+    console.log("[SETUP] No users found. Onboarding wizard will be shown.");
   }
 
   // ── ARES Worker ────────────────────────────────────────────────────
