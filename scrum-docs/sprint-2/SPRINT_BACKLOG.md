@@ -61,3 +61,12 @@ proactive_execution_history (
   script, output, error, executed_at
 )
 ```
+
+## Criterios de Aceptación
+
+### US-001: Proactive Executor funcional
+**Dado** una actividad proactiva configurada, **cuando** ARES Worker ejecuta su ciclo, **entonces** evalúa la condición y ejecuta la skill si se cumple.
+### US-002: Detección de thresholds
+**Dado** thresholds configurados, **cuando** las métricas de un servidor superan el umbral, **entonces** se crea un incidente.
+### US-003: Pause/Resume de worker
+**Dado** el ARES Worker corriendo, **cuando** se pausa, **entonces** detiene el ciclo; **cuando** se reanuda, **entonces** retoma desde donde quedó.

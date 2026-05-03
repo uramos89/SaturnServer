@@ -11,3 +11,10 @@
 ## US-03: Compliance tags en audit_logs
 - Audit logs existentes no incluyen `_compliance` en metadata
 - Agregar tags en logs clave (SSH connected, cloud scan, remediation)
+
+## Criterios de Aceptación
+
+### US-001: Auto-test SSH post cloud scan
+**Dado** un servidor descubierto por cloud scan con status `pending`, **cuando** se completa el scan, **entonces** se intenta conexión SSH automática.
+### US-002: Compliance post-procesamiento
+**Dado** un servidor conectado, **cuando** se registra en el sistema, **entonces** se agregan metadatos de compliance.

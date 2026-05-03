@@ -38,3 +38,12 @@ src/services/ssm-service.ts  ← AWS SSM service
 |---|---|---|---|
 | `/api/cloud/scan` | POST | Descubrir instancias de nube y poblarlas en servers | AWS EC2, GCP, Azure |
 | `/api/cloud/scan` | — | Inserta discovered instances en tabla `servers` con tags `provider,region` | — |
+
+## Criterios de Aceptación
+
+### US-001: Cloud Scan AWS
+**Dado** credenciales AWS configuradas, **cuando** se ejecuta cloud scan, **entonces** descubre instancias EC2 y las agrega como servidores.
+### US-002: Cloud Scan GCP
+**Dado** credenciales GCP configuradas, **cuando** se ejecuta cloud scan, **entonces** descubre instancias Compute Engine.
+### US-003: Identity Proxy (Bastion)
+**Dado** una instancia privada, **cuando** se conecta vía Bastion/IAP, **entonces** la conexión SSH se establece a través del túnel.

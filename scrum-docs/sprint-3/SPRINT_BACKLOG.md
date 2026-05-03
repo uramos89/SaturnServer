@@ -50,3 +50,12 @@ src/services/notification-service.ts  ← Servicio de notificaciones multi-canal
 | Bug | Síntoma | Fix |
 |---|---|---|
 | Placeholder `res.json([])` en GET /api/notifications | Siempre retornaba lista vacía | Removida línea 932; ahora usa handler real en línea 1500 |
+
+## Criterios de Aceptación
+
+### US-001: Notificaciones multi-canal
+**Dado** una configuración de notificación activa, **cuando** se dispara una alerta, **entonces** el mensaje llega al canal configurado (webhook/email/telegram).
+### US-002: Webhooks funcionales
+**Dado** una URL de webhook configurada, **cuando** se envía una notificación, **entonces** la URL recibe un POST con el payload de la alerta.
+### US-003: DELETE endpoints
+**Dado** un recurso existente (servidor, skill, notificación), **cuando** se invoca DELETE, **entonces** el recurso se elimina y responde HTTP 200.

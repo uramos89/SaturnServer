@@ -32,6 +32,23 @@
 
 ## ✅ SPRINTS COMPLETADOS
 
+### Sprint 0 — Auditoría Inicial (Completado ✅)
+Auditoría de código, matriz de cumplimiento, gap analysis.
+
+### Sprint 1 — Frontend-Backend Integración (Completado ✅)
+Conexión frontend a backend real, matriz de funcionalidad.
+
+### Sprint 2 — Proactive Executor (Completado ✅)
+ARES Worker, thresholds, pause/resume.
+
+### Sprint 3 — Notificaciones + Webhooks (Completado ✅)
+Multi-canal, DELETE endpoints.
+
+### Sprint 4 — Cloud Connectors (Completado ✅)
+AWS/GCP/Azure scan, Identity Proxy.
+
+
+
 ### Sprint 1 — Auditoría y estabilización (Completado ✅)
 17 US. Gemini 2.5 Flash, fixes de decrypt, credentials, errores silenciosos.
 

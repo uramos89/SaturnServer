@@ -20,3 +20,10 @@ Resultado: incidentes mudos, notificaciones jamás enviadas.
 
 ## US-04: Verificación
 - Servidor corriendo, thresholds configurados, métricas altas → incidente + notificación
+
+## Criterios de Aceptación
+
+### US-001: Thresholds unificados
+**Dado** dos sistemas de thresholds compitiendo, **cuando** se evalúa una métrica, **entonces** solo un sistema procesa la alerta (sin duplicados).
+### US-002: evaluateThresholds funcional
+**Dado** `evaluateThresholds()` con métricas que superan el umbral, **cuando** se ejecuta, **entonces** notifica y crea incidente.

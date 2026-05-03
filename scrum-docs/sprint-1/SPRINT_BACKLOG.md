@@ -51,3 +51,12 @@
 | Credentials field mismatch | `src/App.tsx:2998` | 400 "Missing fields" | Cambiar `credentials: {...}` por `content: JSON.stringify(...)` |
 | API key encriptada sin decrypt | `src/services/llm-service.ts:81` | Gemini siempre fallaba con 401 | Agregar `decrypt()` y detectar formato `iv:ciphertext` |
 | Silent error catch | `server.ts:1292` | Errores de IA invisibles | Agregar `console.error` y devolver `error` en response |
+
+## Criterios de Aceptación
+
+### US-001: Frontend conectado a backend real
+**Dado** el dashboard de Saturn, **cuando** se navega por todas las tabs, **entonces** cada botón y acción ejecuta llamadas API reales y recibe respuestas del backend.
+### US-002: Matriz de funcionalidad
+**Dado** todos los endpoints del backend, **cuando** se mapean contra el frontend, **entonces** no hay botones rotos ni llamadas a APIs inexistentes.
+### US-003: Endpoints funcionales
+**Dado** cada endpoint REST, **cuando** se invoca con datos válidos, **entonces** responde HTTP 200 con el formato esperado.

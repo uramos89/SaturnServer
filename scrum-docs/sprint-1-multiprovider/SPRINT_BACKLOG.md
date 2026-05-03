@@ -36,3 +36,10 @@ getLLMResponse(provider, prompt)
 **36 proveedores OpenAI-compatibles automáticos**: openai, groq, together, fireworks, deepinfra, deepseek, openrouter, perplexity, replicate, nvidia, huggingface, azure, alibaba, zhipu, stepfun, 01ai, minimax, vllm, localai, lmstudio, textgen, kobold, tabbyapi, xai, meta, mistral, cohere, ai21, writer, upstage, sambanova, yandex, custom + 10 más
 
 **Para agregar uno nuevo:** Solo ir a Settings → seleccionar provider → poner API key → Test → Save. Cero código.
+
+## Criterios de Aceptación
+
+### US-001: Multi-Provider AI
+**Dado** cualquier proveedor OpenAI-compatible configurado desde la UI, **cuando** ARES necesita una respuesta, **entonces** la obtiene del proveedor activo sin hardcodear.
+### US-002: Sin dependencia de Gemini
+**Dado** que Gemini no está configurado, **cuando** hay otro proveedor activo, **entonces** ARES funciona sin errores.
