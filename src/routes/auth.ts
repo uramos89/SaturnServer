@@ -25,6 +25,9 @@ export function createAuthRouter(db: Database.Database): Router {
   // ── Admin Login ────────────────────────────────────────────────────
   router.post("/login", loginLimiter, (req: Request, res: Response) => {
     const { username, password } = req.body;
+    if (typeof username !== "string" || typeof password !== "string") {
+      return res.status(400).json({ error: "Invalid credentials format", code: "VALIDATION_ERROR" });
+    }
     const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
     const loginRole = user.role;
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
@@ -127,6 +130,9 @@ export function createAuthRouter(db: Database.Database): Router {
   // ── Create Admin User ──────────────────────────────────────────────
   router.post("/create", (req: Request, res: Response) => {
     const { username, password } = req.body;
+    if (typeof username !== "string" || typeof password !== "string") {
+      return res.status(400).json({ error: "Invalid credentials format", code: "VALIDATION_ERROR" });
+    }
     const fixedRole = "admin";
     if (typeof username !== 'string' || typeof password !== 'string' || password.length < 8 || /[<>"&]/.test(username)) {
       return res

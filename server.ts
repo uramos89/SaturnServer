@@ -599,7 +599,8 @@ async function startServer() {
           upgradeInsecureRequests: null,
         },
       },
-      hsts: false,
+      strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
+      xXssProtection: "1; mode=block",
       crossOriginResourcePolicy: { policy: "cross-origin" },
       crossOriginEmbedderPolicy: false,
     })
