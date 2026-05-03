@@ -171,34 +171,204 @@ async function callOllama(model: string, endpoint: string, prompt: string): Prom
 
 // ── API Pública ────────────────────────────────────────────────────
 
+// ── Task Routing / Fail-over System ──────────────────────────────────
+
+export type TaskComplexity = "basic" | "complex";
+
+interface LocalProvider { id: string; model: string; endpoint: string; }
+interface CloudProvider { id: string; model: string; apiKey: string; endpoint: string; format: ApiFormat; }
+
+let localProvider: LocalProvider | null = null;
+let cloudProvider: CloudProvider | null = null;
+let cloudFailingSince: number | null = null;
+const CLOUD_COOLDOWN_MS = 60000; // 1 min antes de reintentar cloud
+let tokenBudget: number | null = null; // null = sin límite
+let tokensUsedThisCycle = 0;
+
 /**
- * Obtiene respuesta de CUALQUIER proveedor configurado.
- *
- * @param provider - ID del proveedor (opcional, usa el activo si se omite)
- * @param prompt - Prompt a enviar
- * @returns Texto de respuesta
+ * Inicializa los proveedores local y cloud desde la DB.
  */
-export async function getLLMResponse(provider: string, prompt: string): Promise<string> {
+export function initDualProviders(): void {
+  if (!db) return;
+  try {
+    // Provider local (Ollama)
+    const local = db.prepare("SELECT * FROM ai_providers WHERE provider = 'ollama' AND enabled = 1 LIMIT 1").get() as any;
+    if (local) {
+      localProvider = { id: local.id, model: local.model || "qwen2.5-coder:1.5b", endpoint: local.endpoint || "http://localhost:11434" };
+      console.log(`[LLM] Local provider: ${local.model} at ${localProvider.endpoint}`);
+    }
+
+    // Provider cloud (cualquier enabled que NO sea ollama)
+    const cloud = db.prepare("SELECT * FROM ai_providers WHERE provider != 'ollama' AND enabled = 1 LIMIT 1").get() as any;
+    if (cloud) {
+      const rawKey = cloud.api_key || "";
+      const apiKey = rawKey.includes(":") ? decrypt(rawKey) : rawKey;
+      cloudProvider = {
+        id: cloud.id, model: cloud.model, apiKey,
+        endpoint: cloud.endpoint || "", format: detectFormat(cloud.provider)
+      };
+      console.log(`[LLM] Cloud provider: ${cloud.provider}/${cloud.model}`);
+      cloudFailingSince = null;
+    }
+  } catch (e: any) {
+    console.warn("[LLM] initDualProviders error:", e.message);
+  }
+}
+
+/**
+ * Configura un límite de tokens por ciclo.
+ */
+export function setTokenBudget(maxTokens: number): void {
+  tokenBudget = maxTokens;
+  tokensUsedThisCycle = 0;
+}
+
+/**
+ * Decide qué proveedor debe manejar una tarea según su complejidad y estado.
+ * Retorna: { provider, model, endpoint, apiKey, format }
+ */
+function routeTask(complexity: TaskComplexity): {
+  provider: string; model: string; endpoint: string; apiKey: string; format: ApiFormat;
+} {
+  const isCloudAvailable = cloudProvider && cloudProvider.apiKey;
+  const isCloudOnCooldown = cloudFailingSince !== null &&
+    (Date.now() - cloudFailingSince) < CLOUD_COOLDOWN_MS;
+  const isOverBudget = tokenBudget !== null && tokensUsedThisCycle >= tokenBudget;
+
+  // Tareas basicas SIEMPRE van al local
+  if (complexity === "basic" && localProvider) {
+    return {
+      provider: "ollama",
+      model: localProvider.model,
+      endpoint: localProvider.endpoint,
+      apiKey: "",
+      format: "ollama"
+    };
+  }
+
+  // Tareas complejas: intentar cloud si disponible
+  if (complexity === "complex" && isCloudAvailable && !isCloudOnCooldown && !isOverBudget) {
+    return {
+      provider: cloudProvider!.id,
+      model: cloudProvider!.model,
+      endpoint: cloudProvider!.endpoint,
+      apiKey: cloudProvider!.apiKey,
+      format: cloudProvider!.format
+    };
+  }
+
+  // Fallback: si cloud no disponible o en cooldown o over budget, usar local
+  if (localProvider) {
+    console.log(`[LLM] ❌ Cloud unavailable (cooldown:${isCloudOnCooldown}, overBudget:${isOverBudget}), using local fallback`);
+    return {
+      provider: "ollama",
+      model: localProvider.model,
+      endpoint: localProvider.endpoint,
+      apiKey: "",
+      format: "ollama"
+    };
+  }
+
+  // Sin local ni cloud — error
+  throw new Error("No AI provider available. Configure Ollama (local) or a cloud provider.");
+}
+
+/**
+ * Marca el cloud como fallido para activar cooldown.
+ */
+function markCloudFailed(): void {
+  cloudFailingSince = Date.now();
+  console.warn(`[LLM] ⚠️ Cloud provider marked as failed. Cooldown: ${CLOUD_COOLDOWN_MS / 1000}s`);
+}
+
+/**
+ * Obtiene respuesta del proveedor con fail-over automático.
+ */
+export async function getLLMResponse(provider: string, prompt: string, complexity: TaskComplexity = "complex"): Promise<string> {
+  // Si se especificó un proveedor exacto (no routing), usarlo directamente
+  if (provider && provider !== "auto") {
+    return callProvider(provider, prompt);
+  }
+
+  // Routing automático según complejidad
+  const target = routeTask(complexity);
+
+  if (target.format === "ollama") {
+    try {
+      return await callOllama(target.model, target.endpoint, prompt);
+    } catch (e: any) {
+      throw new Error(`Local model failed: ${e.message}`);
+    }
+  }
+
+  // Intentar cloud, con fail-over
+  try {
+    const result = await callProviderByFormat(target.format, target.model, target.apiKey, target.endpoint, target.provider, prompt);
+    return result;
+  } catch (e: any) {
+    markCloudFailed();
+    // Fail-over a local
+    if (localProvider) {
+      console.log("[LLM] 🔁 Fail-over: cloud failed, retrying with local model");
+      return await callOllama(localProvider.model, localProvider.endpoint, prompt);
+    }
+    throw new Error(`Cloud failed: ${e.message}. No local fallback available.`);
+  }
+}
+
+/**
+ * Llama a un proveedor exacto por su ID (sin routing).
+ */
+async function callProvider(providerId: string, prompt: string): Promise<string> {
   const config = resolveActive();
-  const pId = provider || config.provider;
-  const fmt = detectFormat(pId);
+  const fmt = detectFormat(providerId);
+  const key = config.apiKey || process.env[`${providerId.toUpperCase()}_API_KEY`] || "";
+  const mdl = config.model || "";
+  const ep = config.endpoint || "";
 
-  // Si el provider no tiene API key propia, usar la del activo
-  const key = config.apiKey || process.env[`${pId.toUpperCase()}_API_KEY`] || "";
-  const mdl = config.model || process.env[`${pId.toUpperCase()}_MODEL`] || "";
-  const ep = config.endpoint || process.env.AI_ENDPOINT || "";
+  if (!key && fmt !== "ollama") throw new Error(`No API key for ${providerId}`);
 
-  if (!key) throw new Error(`No API key configured for ${pId}. Configure a provider in Settings.`);
+  return callProviderByFormat(fmt, mdl, key, ep, providerId, prompt);
+}
 
-  switch (fmt) {
+async function callProviderByFormat(format: ApiFormat, model: string, apiKey: string, endpoint: string, providerId: string, prompt: string): Promise<string> {
+  switch (format) {
     case "gemini":
-      return callGemini(mdl || "gemini-2.5-flash", key, prompt);
+      return callGemini(model || "gemini-2.5-flash", apiKey, prompt);
     case "anthropic":
-      return callAnthropic(mdl || "claude-3-5-sonnet-20241022", key, prompt);
+      return callAnthropic(model || "claude-3-5-sonnet-20241022", apiKey, prompt);
     case "ollama":
-      return callOllama(mdl || "llama3", ep, prompt);
+      return callOllama(model || "qwen2.5-coder:1.5b", endpoint, prompt);
     case "openai":
     default:
-      return callOpenAI(pId, mdl || "gpt-4o", key, ep, prompt);
+      return callOpenAI(providerId, model || "gpt-4o", apiKey, endpoint, prompt);
+  }
+}
+
+/**
+ * Consulta el estado del motor local (Ollama).
+ */
+export async function getLocalModelStatus(): Promise<{
+  ollama_running: boolean; model: string; ram_usage: string; status: string; error?: string;
+}> {
+  try {
+    const { execSync } = await import("child_process");
+    const ps = execSync("ps aux | grep '[o]llama' | head -1", { encoding: "utf8", timeout: 3000 });
+    if (!ps.trim()) {
+      return { ollama_running: false, model: "", ram_usage: "0", status: "error", error: "Ollama process not found" };
+    }
+    const parts = ps.trim().split(/\s+/);
+    const ramMb = parts[5] ? (parseInt(parts[5]) / 1024).toFixed(1) : "0";
+    const model = localProvider?.model || "unknown";
+    // Verificar que responde
+    try {
+      const axios = (await import("axios")).default;
+      await axios.get((localProvider?.endpoint || "http://localhost:11434") + "/api/tags", { timeout: 3000 });
+      return { ollama_running: true, model, ram_usage: `${ramMb}MB`, status: "ready" };
+    } catch {
+      return { ollama_running: true, model, ram_usage: `${ramMb}MB`, status: "loading" };
+    }
+  } catch (e: any) {
+    return { ollama_running: false, model: "", ram_usage: "0", status: "error", error: e.message };
   }
 }

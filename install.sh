@@ -88,7 +88,7 @@ echo -e "│  ${GREEN}Code update successful${NC}"
 echo -e "│"
 
 # 3. Build
-echo -e "├─ ${BOLD}[3/4] Installing dependencies & building...${NC}"
+echo -e "├─ ${BOLD}[3/5] Installing dependencies & building...${NC}"
 echo -e "│  Running npm install (this may take a minute)..."
 npm install --silent >/dev/null 2>&1
 echo -e "│  Building frontend assets..."
@@ -96,20 +96,51 @@ npm run build >/dev/null 2>&1
 echo -e "│  ${GREEN}Build completed${NC}"
 echo -e "│"
 
-# 4. Interactive Setup & Start
-echo -e "├─ ${BOLD}[4/4] Launching Interactive Setup Wizard...${NC}"
+# 4. Local AI Engine (Ollama + Qwen)
+echo -e "├─ ${BOLD}[4/5] Installing Local AI Engine...${NC}"
+
+# Check if Ollama is already installed
+if command -v ollama &> /dev/null; then
+  echo -e "│  ✅ Ollama already installed"
+else
+  echo -e "│  Installing Ollama (local AI runtime)..."
+  curl -fsSL https://ollama.com/install.sh | sh 2>&1 | tail -1
+fi
+
+# Detect available RAM and select appropriate Qwen model
+echo -e "│  📡 Detecting hardware for model selection..."
+RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
+RAM_GB=$(echo "scale=1; $RAM_MB/1024" | bc)
+echo -e "│  System RAM: ${RAM_GB}GB"
+
+if (( $(echo "$RAM_MB >= 12000" | bc -l) )); then
+  MODEL="qwen2.5:14b"
+elif (( $(echo "$RAM_MB >= 8000" | bc -l) )); then
+  MODEL="qwen2.5-coder:7b"
+elif (( $(echo "$RAM_MB >= 6000" | bc -l) )); then
+  MODEL="qwen2.5-coder:3b"
+else
+  MODEL="qwen2.5-coder:1.5b"
+fi
+
+echo -e "│  📥 Pulling ${MODEL} (this may take a few minutes)..."
+ollama pull "$MODEL" 2>&1 | tail -1
+echo -e "│  ✅ Local AI Engine ready: ${MODEL}"
+echo -e "│"
+
+# 5. Interactive Setup & Start
+echo -e "├─ ${BOLD}[5/5] Launching Interactive Setup Wizard...${NC}"
 npm run setup
 
-# The setup script handles .env and systemd generation.
-# We can optionally start it here if they didn't choose systemd, 
-# or just let the user follow the setup instructions.
-
+# The setup script handles .env, systemd generation, and AI provider config.
 echo -e "│"
 echo -e "└─ ${BOLD}${GREEN}Deployment Script Finished!${NC}"
 echo ""
 echo -e "  ${BOLD}🪐 SATURN SERVER${NC}"
 echo -e "  ───────────────────────────"
-echo -e "  Follow the instructions above to start the service."
+echo -e "  ${GREEN}✅ Local AI: ${MODEL}${NC}"
+echo -e "  🌐 Open: http://localhost:3000 to configure cloud API"
+echo -e "  📖 Docs: https://github.com/uramos89/SaturnServer"
 echo ""
 echo -e "=============================================================================="
 

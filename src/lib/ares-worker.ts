@@ -418,19 +418,14 @@ export class ARESWorker {
       // Construir prompt para Aegis
       const prompt = this.buildAegisPrompt(incident, server, domain, rootContract);
 
-      // Llamar a la IA (con fallback a local si cloud falla)
+      // Llamar a la IA con routing automático (complejo → cloud, básico → local)
+      // La generación de skills es "complex" para mejor calidad
       const { getLLMResponse } = await import("../services/llm-service.js");
       let aiResponse: string;
       try {
-        aiResponse = await getLLMResponse(activeProvider, prompt);
-      } catch (cloudErr: any) {
-        console.warn(`[ARES] Cloud AI failed (${cloudErr.message}), trying local fallback...`);
-        // Intentar con Ollama local como fallback
-        try {
-          aiResponse = await getLLMResponse("ollama", prompt);
-        } catch (localErr: any) {
-          throw new Error(`Both cloud and local AI failed. Cloud: ${cloudErr.message}, Local: ${localErr.message}`);
-        }
+        aiResponse = await getLLMResponse("auto", prompt, "complex");
+      } catch (e: any) {
+        throw new Error(`Aegis AI call failed: ${e.message}`);
       }
 
       // Parsear respuesta

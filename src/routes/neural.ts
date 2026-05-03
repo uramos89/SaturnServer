@@ -364,5 +364,15 @@ Real-time SSH Metrics (${sshConn.host}):
     res.json({ feedbacks, stats });
   });
 
+  // ── GET /api/neural/local-status — Estado del motor local ──────────
+  router.get("/neural/local-status", async (_req: Request, res: Response) => {
+    try {
+      const status = await import("../services/llm-service.js").then(m => m.getLocalModelStatus());
+      res.json(status);
+    } catch (e: any) {
+      res.json({ ollama_running: false, model: "", ram_usage: "0", status: "error", error: e.message });
+    }
+  });
+
   return router;
 }

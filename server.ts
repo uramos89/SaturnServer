@@ -27,7 +27,7 @@ import {
   getCpiniContent,
 } from "./src/lib/contextp-service.js";
 import { ARESWorker } from "./src/lib/ares-worker.js";
-import { initLLMService, getLLMResponse } from "./src/services/llm-service.js";
+import { initLLMService, getLLMResponse, initDualProviders } from "./src/services/llm-service.js";
 import { seedDatabase } from "./src/services/database-seed.js";
 import { SSHConnectSchema, CommandExecSchema, UserCreateSchema } from "./src/lib/validators.js";
 import { z } from "zod";
@@ -526,6 +526,7 @@ if (fs.existsSync(SETUP_JSON_PATH)) {
 }
 
 initLLMService(db);
+initDualProviders();
 
 // ══════════════════════════════════════════════════════════════════════════
 // ── Saturn-X JWT Middleware ─────────────────────────────────────────────
