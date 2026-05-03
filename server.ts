@@ -599,11 +599,23 @@ async function startServer() {
           upgradeInsecureRequests: null,
         },
       },
-      hsts: false,
+      hsts: { maxAge: 31536000, includeSubDomains: true },
       crossOriginResourcePolicy: { policy: "cross-origin" },
       crossOriginEmbedderPolicy: false,
+      permissionsPolicy: {
+        camera: false,
+        microphone: false,
+        geolocation: false,
+      },
     })
   );
+
+  // Set X-XSS-Protection for legacy browsers (helmet v8 defaults this to 0)
+  app.use((_req: any, res: any, next: any) => {
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    next();
+  });
 
   const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
