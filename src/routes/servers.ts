@@ -6,6 +6,7 @@ import path from "path";
 import { SSHConnectSchema, CommandExecSchema } from "../lib/validators.js";
 import { decryptCredential, logAudit } from "../lib/server-helpers.js";
 import type { SSHAgent, SSHConnectionConfig, SystemMetrics } from "../lib/ssh-agent.js";
+import { validateHost } from "../lib/ssh-agent.js";
 import type { ScriptGenerator } from "../lib/script-generator.js";
 import { evaluateThresholds } from "../services/threshold-engine.js";
 import { emitServerMetrics } from "../services/socket-service.js";
@@ -67,6 +68,11 @@ export function createServersRouter(
       bastionKey,
       bastionPassword,
     } = req.body;
+
+    // SSRF Protection
+    if (host && !validateHost(host)) {
+      return res.status(400).json({ error: "Host not allowed for security reasons", code: "SSRF_BLOCKED" });
+    }
 
     if (!host || !username) {
       return res.status(400).json({ error: "Host and username are required" });

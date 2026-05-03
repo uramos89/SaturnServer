@@ -586,7 +586,13 @@ async function startServer() {
   app.use(cors());
 
   app.use(
-    helmet({
+    app.use((_req, res, next) => {
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
+helmet({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
@@ -600,9 +606,10 @@ async function startServer() {
         },
       },
       strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
-      xXssProtection: "1; mode=block",
+      
       crossOriginResourcePolicy: { policy: "cross-origin" },
       crossOriginEmbedderPolicy: false,
+    
     })
   );
 
