@@ -688,7 +688,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
                       <input
                         type="password"
                         value={apiKey}
-                        onChange={(e) => { setApiKey(e.target.value); setTestResult(null); }}
+                        onChange={(e) => { setApiKey(e.target.value); }}
                         placeholder={t('onboarding.apiKey.placeholder')}
                         className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none font-mono"
                       />
@@ -1754,6 +1754,7 @@ export default function App() {
   const [serverDetailTab, setServerDetailTab] = useState('summary');
   const [remediationConfigs, setRemediationConfigs] = useState<any[]>([]);
   const [globalConfig, setGlobalConfig] = useState<any>({ mode: 'auto', threshold: 0.7 });
+  const [globalThresholds, setGlobalThresholds] = useState<Record<string,number>>({ cpu: 90, memory: 85, disk: 85 });
   const [loading, setLoading] = useState(true);
   const [analyzingIncident, setAnalyzingIncident] = useState<string | null>(null);
 
@@ -3646,7 +3647,7 @@ export default function App() {
                   <input
                     type="password"
                     value={localAiConfig?.apiKey || ''}
-                    onChange={(e) => { setLocalAiConfig({...localAiConfig, apiKey: e.target.value}); setSettingsTestResult(null); }}
+                    onChange={(e) => { setLocalAiConfig({...localAiConfig, apiKey: e.target.value}); }}
                     placeholder="Enter API key for this provider"
                     className="w-full bg-black/60 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white outline-none focus:border-orange-500"
                   />
@@ -3735,9 +3736,39 @@ export default function App() {
 
             <div className="pt-4 border-t border-white/5">
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 flex justify-between">Auto-Execution Confidence Threshold <span>{(globalConfig.threshold || 0.8) * 100}%</span></label>
-              <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden mt-3">
-                <div className="h-full bg-orange-500" style={{ width: `${(globalConfig.threshold || 0.8) * 100}%` }} />
-              </div>
+              <input type="range" min="10" max="100" value={(globalConfig.threshold || 0.8) * 100} onChange={e => setGlobalConfig({...globalConfig, threshold: parseInt(e.target.value) / 100})} className="w-full accent-orange-500 mt-3" />
+            </div>
+
+            {/* ── Reactive Thresholds (CPU/RAM/Disk) ── */}
+            <div className="pt-4 border-t border-white/5 space-y-4">
+              <div className="flex items-center gap-2"><AlertTriangle size={14} className="text-orange-500"/><h4 className="text-[10px] font-black uppercase tracking-widest text-orange-500">Reactive Guardrails</h4></div>
+              <p className="text-[9px] text-slate-500">Define thresholds that trigger autonomous proactive activities when breached.</p>
+              {[
+                {id:'cpu',label:'CPU Usage',icon:Cpu,color:'text-orange-500'},
+                {id:'memory',label:'Memory Usage',icon:Activity,color:'text-emerald-500'},
+                {id:'disk',label:'Disk Usage',icon:Database,color:'text-sky-500'}
+              ].map(m=>{
+                const threshold=globalThresholds[m.id]||80;
+                return (
+                  <div key={m.id} className="p-4 rounded-xl bg-black/40 border border-white/5">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2"><m.icon size={14} className={m.color}/><span className="text-[10px] font-black uppercase text-white">{m.label}</span></div>
+                      <span className="text-lg font-black text-white">{threshold}%</span>
+                    </div>
+                    <input type="range" min="10" max="95" value={threshold}
+                      onChange={e=>setGlobalThresholds({...globalThresholds,[m.id]:parseInt(e.target.value)})}
+                      className="w-full accent-orange-500"
+                    />
+                    <div className="flex justify-between text-[8px] text-slate-600 font-black uppercase mt-1">
+                      <span>Low</span>
+                      <span className={threshold>=90?'text-rose-500':threshold>=80?'text-orange-500':'text-slate-500'}>
+                        {threshold>=90?'Critical':threshold>=80?'Warning':'Normal'}
+                      </span>
+                      <span>High</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -3853,6 +3884,84 @@ export default function App() {
                 </div>
               );
             })
+          )}
+        </div>
+
+        {/* ── Add notification forms ── */}
+        <div className="space-y-4 mt-8">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Add Notification Channel</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Webhook */}
+            <ChannelForm type="webhook" icon={Globe} label="Webhook"
+              fields={[{key:"destination",placeholder:"https://hooks.example.com/alert"}]}
+              onAdd={async (vals) => {
+                const r=await api('/api/notifications/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'webhook',destination:vals.destination,enabled:true})});
+                const d=await r.json();if(d.success){setNotifs(p=>[...p,d.config||d]);return true}throw new Error(d.error||'Failed');
+              }}
+            />
+            {/* Telegram */}
+            <ChannelForm type="telegram" icon={Send} label="Telegram Bot"
+              fields={[{key:"chatId",placeholder:"Chat ID (numeric)"},{key:"token",placeholder:"Bot token",type:"password"}]}
+              onAdd={async (vals) => {
+                const r=await api('/api/notifications/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'telegram',destination:vals.chatId,config:{token:vals.token},enabled:true})});
+                const d=await r.json();if(d.success){setNotifs(p=>[...p,d.config||d]);return true}throw new Error(d.error||'Failed');
+              }}
+            />
+            {/* Email */}
+            <ChannelForm type="email" icon={Mail} label="Email (SMTP)"
+              fields={[
+                {key:"host",placeholder:"smtp.example.com"},{key:"port",placeholder:"587",default:"587"},
+                {key:"user",placeholder:"user@example.com"},{key:"pass",placeholder:"Password",type:"password"},
+                {key:"to",placeholder:"alert@example.com"}
+              ]}
+              onAdd={async (vals) => {
+                const r=await api('/api/notifications/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'email',destination:vals.to||vals.user,config:{host:vals.host,port:parseInt(vals.port),auth:{user:vals.user,pass:vals.pass}},enabled:true})});
+                const d=await r.json();if(d.success){setNotifs(p=>[...p,d.config||d]);return true}throw new Error(d.error||'Failed');
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── ChannelForm sub-component ──
+  const ChannelForm = ({ type, icon: Icon, label, fields, onAdd }: { type: string; icon: any; label: string; fields: {key:string;placeholder:string;type?:string;default?:string}[]; onAdd:(vals:Record<string,string>)=>Promise<boolean> }) => {
+    const [vals,setVals]=useState<Record<string,string>>({});
+    const [saving,setSaving]=useState(false);
+    const [result,setResult]=useState<{ok:boolean;msg:string}|null>(null);
+    return (
+      <div className="p-4 rounded-2xl bg-black/40 border border-white/5 hover:border-white/10 transition-all">
+        <div className="flex items-center gap-2 mb-3"><Icon size={14} className="text-orange-500"/><span className="text-[10px] font-black uppercase text-white">{label}</span></div>
+        <div className="space-y-2">
+          {fields.map(f=>(
+            <input key={f.key} type={f.type||'text'} value={vals[f.key]||''} onChange={e=>setVals({...vals,[f.key]:e.target.value})}
+              placeholder={f.placeholder} className="w-full bg-black/60 border border-white/10 rounded-lg p-2 text-[10px] outline-none focus:border-orange-500 font-mono"
+            />
+          ))}
+          <div className="flex gap-2">
+            <button disabled={saving} onClick={async()=>{
+              setSaving(true);setResult(null);
+              try{const ok=await onAdd(vals);setResult({ok,msg:ok?'Channel added':'Failed'});}catch(e:any){setResult({ok:false,msg:e.message||'Unknown error'});}
+              setSaving(false);
+            }} className="flex-1 py-2 bg-orange-500 text-black text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-orange-400 transition-all disabled:opacity-30">
+              {saving?'Adding...':'Add Channel'}
+            </button>
+            <button disabled={saving} onClick={async()=>{
+              setSaving(true);setResult(null);
+              try{const r=await api('/api/notifications/test/'+type,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(vals)});
+                const d=await r.json();setResult({ok:d.success,msg:d.message||d.error||'Test sent'});
+              }catch(e:any){setResult({ok:false,msg:e.message});}
+              setSaving(false);
+            }} className="px-3 py-2 bg-white/5 border border-white/10 text-slate-400 text-[9px] font-black uppercase tracking-widest rounded-lg hover:border-white/20 transition-all disabled:opacity-30 flex items-center gap-1">
+              <Zap size={10}/> Test
+            </button>
+          </div>
+          {result && (
+            <div className={`flex items-start gap-1.5 text-[9px] ${result.ok?'text-emerald-400':'text-rose-400'}`}>
+              {result.ok?<CheckCircle2 size={10} className="mt-0.5 shrink-0"/>:<XCircle size={10} className="mt-0.5 shrink-0"/>}
+              <span>{result.msg.slice(0,150)}</span>
+            </div>
           )}
         </div>
       </div>
