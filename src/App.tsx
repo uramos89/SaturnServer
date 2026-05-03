@@ -70,7 +70,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 }
 
 // ── Login View ────────────────────────────────────────────────────────
-const LoginView = ({ onLogin, t }: { onLogin: (u: UserData, token?: string) => void, t: (k: string) => string }) => {
+const LoginView = ({ onLogin, t }: { onLogin: (u: UserData, token?: string, refreshToken?: string) => void, t: (k: string) => string }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -88,7 +88,7 @@ const LoginView = ({ onLogin, t }: { onLogin: (u: UserData, token?: string) => v
       });
       const data = await res.json();
       if (data.success) {
-        onLogin(data.user, data.token);
+        onLogin(data.user, data.token, data.refreshToken);
       } else {
         setError(data.error || 'Invalid credentials');
       }
@@ -1829,10 +1829,11 @@ export default function App() {
     return () => clearInterval(interval);
   }, [onboarding]);
 
-  const handleLogin = (u: UserData, token?: string) => {
+  const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
     setUser(u);
     localStorage.setItem('saturn-user', JSON.stringify(u));
     if (token) localStorage.setItem('saturn-token', token);
+    if (refreshToken) localStorage.setItem('saturn-refresh-token', refreshToken);
   };
   const handleLogout = () => { setUser(null); localStorage.removeItem('saturn-user'); };
 

@@ -627,7 +627,7 @@ async function startServer() {
 
   // ── Public paths (no JWT required) ─────────────────────────────────
   app.use("/api", (req, res, next) => {
-    const PUBLIC_PATHS = ["/health", "/setup/status", "/setup/import", "/admin/login", "/admin/create"];
+    const PUBLIC_PATHS = ["/health", "/setup/status", "/setup/import", "/admin/login", "/admin/create", "/admin/refresh", "/admin/logout"];
     if (PUBLIC_PATHS.includes(req.path)) return next();
     authenticateJWT(req, res, next);
   });
