@@ -1,0 +1,17 @@
+{
+  "name": "saturn-e2e-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node runner.js",
+    "test:login": "node runner.js --flow login",
+    "test:nav": "node runner.js --flow navigation",
+    "test:dashboard": "node runner.js --flow dashboard",
+    "test:full": "node runner.js --all",
+    "report": "open reports/report.html"
+  },
+  "dependencies": {
+    "playwright": "^1.52.0"
+  }
+}
