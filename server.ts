@@ -127,7 +127,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS incidents (
     id TEXT PRIMARY KEY, serverId TEXT, severity TEXT, title TEXT,
-    description TEXT, status TEXT, timestamp TEXT
+    description TEXT, status TEXT, timestamp TEXT, resolved_at TEXT
   );
   CREATE TABLE IF NOT EXISTS obpa_cycles (
     id TEXT PRIMARY KEY, incidentId TEXT, phase TEXT, observation TEXT,
