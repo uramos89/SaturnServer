@@ -526,6 +526,17 @@ if (fs.existsSync(SETUP_JSON_PATH)) {
 }
 
 initLLMService(db);
+// ── Ensure local Ollama provider exists ────────────────────────────────
+try {
+  const ollamaExists = (db.prepare("SELECT COUNT(*) as c FROM ai_providers WHERE provider = ?").get("ollama") as any)?.c;
+  if (!ollamaExists) {
+    db.prepare("INSERT INTO ai_providers (id, name, provider, model, endpoint, enabled, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)")
+      .run("provider-ollama", "Ollama Local", "ollama", process.env.OLLAMA_MODEL || "qwen2.5-coder:1.5b", process.env.OLLAMA_BASE_URL || "http://localhost:11434", new Date().toISOString());
+    console.log("[SETUP] Ollama local provider registered");
+  }
+} catch (e: any) {
+  console.warn("[SETUP] Could not register Ollama provider:", e.message);
+}
 initDualProviders();
 
 // ══════════════════════════════════════════════════════════════════════════
