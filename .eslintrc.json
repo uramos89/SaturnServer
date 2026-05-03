@@ -8,8 +8,11 @@
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
     "plugin:react/recommended",
+    "plugin:security/recommended",
+    "plugin:sonarjs/recommended",
     "prettier"
   ],
+  "plugins": ["security", "sonarjs"],
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
     "ecmaFeatures": {

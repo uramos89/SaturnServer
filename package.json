@@ -21,7 +21,9 @@
     "madge": "madge --circular src/",
     "unused": "unimported",
     "spellcheck": "cspell 'src/**/*.{ts,tsx}'",
-    "setup": "tsx scripts/setup.ts"
+    "setup": "tsx scripts/setup.ts",
+    "lint:security": "eslint src/ --ext .ts,.tsx --rules \"security/detect-object-injection: error\"",
+    "audit": "npm audit"
   },
   "dependencies": {
     "@aws-sdk/client-ec2": "^3.1041.0",
@@ -73,6 +75,8 @@
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-security": "^4.0.0",
+    "eslint-plugin-sonarjs": "^4.0.3",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "madge": "^8.0.0",

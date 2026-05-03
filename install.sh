@@ -94,9 +94,21 @@ echo -e "│"
 # ═══════════════════════════════════════════════════════════════════════
 # STEP 3: npm install + Build
 # ═══════════════════════════════════════════════════════════════════════
-echo -e "├─ ${BOLD}[3/5] Installing dependencies & building...${NC}"
+echo -e "├─ ${BOLD}[3/7] Installing dependencies & building...${NC}"
 echo -e "│  Running npm install (may take a minute)..."
 npm install --silent >/dev/null 2>&1
+
+# Security: npm audit
+echo -e "│  🔒 Security audit (npm audit)..."
+AUDIT_OUTPUT=$(npm audit 2>&1 || true)
+AUDIT_CRITICAL=$(echo "$AUDIT_OUTPUT" | grep -c "critical" || true)
+if [ "$AUDIT_CRITICAL" -gt 0 ] 2>/dev/null; then
+  echo -e "│  ${YELLOW}⚠️  $AUDIT_CRITICAL critical vulnerability(ies) found${NC}"
+  echo -e "│  Run 'npm audit fix' to resolve."
+else
+  echo -e "│  ${GREEN}✅ No critical vulnerabilities${NC}"
+fi
+
 echo -e "│  Building frontend..."
 npm run build >/dev/null 2>&1
 echo -e "│  ${GREEN}Build completed${NC}"
@@ -105,7 +117,7 @@ echo -e "│"
 # ═══════════════════════════════════════════════════════════════════════
 # STEP 4: Local AI Engine — Ollama + Model Selection
 # ═══════════════════════════════════════════════════════════════════════
-echo -e "├─ ${BOLD}[4/5] Installing Local AI Engine...${NC}"
+echo -e "├─ ${BOLD}[4/7] Installing Local AI Engine...${NC}"
 
 # ── Detect resources ─────────────────────────────────────────────────
 total_ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
@@ -254,7 +266,25 @@ fi
 # ═══════════════════════════════════════════════════════════════════════
 # STEP 5: Interactive Setup Wizard
 # ═══════════════════════════════════════════════════════════════════════
-echo -e "├─ ${BOLD}[5/5] Launching Setup Wizard...${NC}"
+# ── Generate self-signed TLS certificate ──────────────────────────────
+echo -e "├─ ${BOLD}[6/7] Generating TLS certificate...${NC}"
+CERT_DIR="$APP_DIR/ssl"
+mkdir -p "$CERT_DIR"
+if [ ! -f "$CERT_DIR/server.crt" ]; then
+  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout "$CERT_DIR/server.key" \
+    -out "$CERT_DIR/server.crt" \
+    -subj "/CN=saturn.local" 2>/dev/null
+  echo -e "│  ${GREEN}✅ Self-signed TLS certificate generated${NC}"
+  # Add TLS vars to .env
+  echo "TLS_CERT=$CERT_DIR/server.crt" >> "$APP_DIR/.env"
+  echo "TLS_KEY=$CERT_DIR/server.key" >> "$APP_DIR/.env"
+else
+  echo -e "│  ✅ TLS certificate already exists"
+fi
+echo -e "│"
+
+echo -e "├─ ${BOLD}[7/7] Launching Setup Wizard...${NC}"
 echo -e "│  Configure cloud API keys, notifications, and admin user."
 npm run setup
 
