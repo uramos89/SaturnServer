@@ -338,5 +338,31 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
+  // ── POST /api/neural/feedback — Calificar skill auto-generada ──────
+  router.post("/neural/feedback", (req: Request, res: Response) => {
+    const { skill_id, incident_id, rating, comment } = req.body;
+    if (!skill_id || !rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: "skill_id and rating (1-5) are required" });
+    }
+    const feedbackId = `fb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    db.prepare(
+      "INSERT INTO aegis_feedback (id, skill_id, incident_id, rating, comment) VALUES (?, ?, ?, ?, ?)"
+    ).run(feedbackId, skill_id, incident_id || null, rating, comment || null);
+    
+    logAudit(db, "NEURAL", "FEEDBACK", `Rating ${rating} for skill ${skill_id}`, { skill_id, rating, comment });
+    res.json({ success: true, feedbackId });
+  });
+
+  // ── GET /api/neural/feedback/:skillId — Obtener feedback de una skill ─
+  router.get("/neural/feedback/:skillId", (req: Request, res: Response) => {
+    const feedbacks = db.prepare(
+      "SELECT * FROM aegis_feedback WHERE skill_id = ? ORDER BY created_at DESC"
+    ).all(req.params.skillId);
+    const stats = db.prepare(
+      "SELECT AVG(rating) as avg_rating, COUNT(*) as count FROM aegis_feedback WHERE skill_id = ?"
+    ).get(req.params.skillId) as any;
+    res.json({ feedbacks, stats });
+  });
+
   return router;
 }

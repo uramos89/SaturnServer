@@ -186,6 +186,20 @@ db.exec(`
     executed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (activityId) REFERENCES proactive_activities(id)
   );
+  CREATE TABLE IF NOT EXISTS aegis_cache (
+    cache_key TEXT PRIMARY KEY, skill_script TEXT, skill_metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, ttl_minutes INTEGER DEFAULT 60
+  );
+  CREATE TABLE IF NOT EXISTS aegis_generations (
+    id TEXT PRIMARY KEY, incident_id TEXT NOT NULL, server_id TEXT,
+    iteration INTEGER DEFAULT 1, skill_id TEXT, status TEXT DEFAULT 'generated',
+    prompt_sent TEXT, prompt_used TEXT, confidence REAL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS aegis_feedback (
+    id TEXT PRIMARY KEY, skill_id TEXT NOT NULL, incident_id TEXT,
+    rating INTEGER CHECK(rating BETWEEN 1 AND 5), comment TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
   CREATE TABLE IF NOT EXISTS skill_assignments (
     id TEXT PRIMARY KEY, skillId TEXT NOT NULL, targetId TEXT NOT NULL,
     targetType TEXT DEFAULT 'server', isPreferred INTEGER DEFAULT 0,
