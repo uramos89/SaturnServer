@@ -237,3 +237,37 @@ export class SSHAgent {
 }
 
 export const sshAgent = new SSHAgent();
+
+// ── SSRF Protection ─────────────────────────────────────────────────
+const BLOCKED_IPS = [
+  "169.254.169.254", "169.254.169.253",       // AWS metadata
+  "metadata.google.internal",                   // GCP metadata
+  "100.100.100.200",                            // Alibaba metadata
+  "0.0.0.0", "127.0.0.1", "127.0.0.2", "127.1", "localhost",
+  "0x7f000001", "2130706433",                   // hex/decimal for 127.0.0.1
+  "0",                                           // shortcut for 0.0.0.0
+  "0177.0.0.1",                                  // octal
+  "[::1]", "[::]",                               // IPv6 loopback
+];
+
+// Private IP ranges to block
+const PRIVATE_RANGES = [
+  { start: "10.0.0.0", end: "10.255.255.255" },
+  { start: "172.16.0.0", end: "172.31.255.255" },
+  { start: "192.168.0.0", end: "192.168.255.255" },
+];
+
+function ipToInt(ip: string): number {
+  return ip.split('.').reduce((acc, oct) => (acc << 8) + parseInt(oct, 10), 0) >>> 0;
+}
+
+function isPrivateIP(ip: string): boolean {
+  const ipInt = ipToInt(ip);
+  return PRIVATE_RANGES.some(r => ipInt >= ipToInt(r.start) && ipInt <= ipToInt(r.end));
+}
+
+export function validateHost(host: string): boolean {
+  const cleanHost = host.split(':')[0]; // remove port
+  if (BLOCKED_IPS.includes(cleanHost)) return false;
+  return !isPrivateIP(cleanHost);
+}

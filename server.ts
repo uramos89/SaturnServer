@@ -2,6 +2,7 @@ import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { createServer } from "http";
 import helmet from "helmet";
+// Security headers: HSTS, XSS-Protection, Permissions-Policy
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { createServer as createViteServer } from "vite";
