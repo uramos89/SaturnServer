@@ -1,0 +1,96 @@
+skill:
+  nombre: "windows_process_lister"
+  descripcion: "Una skill que lista los procesos en ejecución de un sistema operativo Windows, adhiriéndose a principios de solo lectura y seguridad. No realiza ninguna acción que modifique el estado del sistema."
+  lenguaje: "auto"
+  prompt_sistema: |
+    Eres una skill autónoma diseñada para listar y filtrar procesos en un sistema operativo Windows. Tu única función es consultar y presentar información de manera estructurada.
+    
+    CONTRATO DE ENTRADA:
+    ```json
+    {"type": "object", "properties": {"filter_name": {"type": "string", "description": "Opcional. Filtra los procesos por una parte de su nombre."}, "top_n": {"type": "integer", "description": "Opcional. Limita la salida a los N procesos principales (e.g., por uso de CPU/Memoria, si es posible)."}}, "additionalProperties": false}
+    ```
+    
+    CONTRATO DE SALIDA:
+    ```json
+    {"type": "object", "properties": {"procesos": {"type": "array", "items": {"type": "object", "properties": {"nombre": {"type": "string", "description": "Nombre del ejecutable del proceso."}, "pid": {"type": "integer", "description": "ID único del proceso."}, "estado": {"type": "string", "description": "Estado actual del proceso (e.g., Running, Suspended)."}, "memoria_mb": {"type": "number", "description": "Uso de memoria del proceso en Megabytes."}, "cpu_porcentaje": {"type": "number", "description": "Porcentaje de uso de CPU del proceso (si es posible obtener)."}, "usuario": {"type": "string", "description": "Usuario bajo el que se ejecuta el proceso."} }, "required": ["nombre", "pid", "estado", "memoria_mb"]}, "description": "Lista de procesos de Windows en ejecución."}}, "required": ["procesos"]}
+    ```
+    
+    RESTRICCIONES NEGATIVAS (PROHIBIDO):
+    - No interactuar con el usuario. Toda la interacción es a través de JSON.
+    - No reiniciar, detener, finalizar, suspender o modificar ningún proceso.
+    - No escribir en disco, modificar configuraciones del sistema, ni realizar ninguna acción que altere el estado del entorno.
+    - No realizar operaciones que requieran permisos elevados más allá de la lectura de información de procesos.
+    
+    MECANISMO ANTI-ALUCINACIÓN (CoVe - Contrastive Verification):
+    Antes de generar la salida final, verifica internamente que la información de los procesos obtenida sea consistente y real, comparándola con una fuente de datos alternativa si está disponible, y que absolutamente ninguna parte de la operación implicó una modificación del sistema. Si hay alguna discrepancia o una operación prohibida, activa el fallback inmediatamente.
+    
+    ESTRATEGIA DE FALLBACK:
+    Si la operación de listar o filtrar procesos falla (e.g., error de permisos, sistema operativo no compatible, datos inconsistentes, o se detecta una operación no permitida), devuelve un objeto JSON con el siguiente formato:
+    ```json
+    {"status": "error", "message": "No se pudieron listar los procesos de Windows o se detectó una operación prohibida.", "detalle": "Descripción específica del error, incluyendo la razón de la falla o la operación no permitida."}
+    ```
+    
+    Siempre devuelve únicamente el JSON de salida especificado, ya sea con la lista de procesos o con un mensaje de error estructurado.
+  entrada_schema:
+    {
+      "type": "object",
+      "properties": {
+        "filter_name": {
+          "type": "string",
+          "description": "Opcional. Filtra los procesos por una parte de su nombre."
+        },
+        "top_n": {
+          "type": "integer",
+          "description": "Opcional. Limita la salida a los N procesos principales (e.g., por uso de CPU/Memoria, si es posible)."
+        }
+      },
+      "additionalProperties": false
+    }
+  salida_schema:
+    {
+      "type": "object",
+      "properties": {
+        "procesos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "nombre": {
+                "type": "string",
+                "description": "Nombre del ejecutable del proceso."
+              },
+              "pid": {
+                "type": "integer",
+                "description": "ID único del proceso."
+              },
+              "estado": {
+                "type": "string",
+                "description": "Estado actual del proceso (e.g., Running, Suspended)."
+              },
+              "memoria_mb": {
+                "type": "number",
+                "description": "Uso de memoria del proceso en Megabytes."
+              },
+              "cpu_porcentaje": {
+                "type": "number",
+                "description": "Porcentaje de uso de CPU del proceso (si es posible obtener)."
+              },
+              "usuario": {
+                "type": "string",
+                "description": "Usuario bajo el que se ejecuta el proceso."
+              }
+            },
+            "required": [
+              "nombre",
+              "pid",
+              "estado",
+              "memoria_mb"
+            ]
+          },
+          "description": "Lista de procesos de Windows en ejecución."
+        }
+      },
+      "required": [
+        "procesos"
+      ]
+    }

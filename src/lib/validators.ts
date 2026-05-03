@@ -30,8 +30,9 @@ export const IncidentCreateSchema = z.object({
 });
 
 export const AIConfigSchema = z.object({
-  provider: z.enum(["gemini", "moonshot", "openai"]),
-  apiKey: z.string().min(1),
+  provider: z.string().min(1),
+  apiKey: z.string().optional(),
   model: z.string().optional(),
   enabled: z.boolean().default(true),
+  endpoint: z.string().optional(),
 });

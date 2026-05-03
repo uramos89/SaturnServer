@@ -1,0 +1,27 @@
+name: SSL/Certbot Manager
+language: bash
+version: 1.0
+description: "Manage SSL certificates via Certbot. Obtain, renew, list certificates, check expiry."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: list, obtain, renew, expiry, revoke"
+    required: true
+    options: [list, obtain, renew, expiry, revoke]
+  - name: DOMAIN
+    type: string
+    description: "Domain name (for obtain/renew actions)"
+    required: false
+  - name: EMAIL
+    type: string
+    description: "Email for Let's Encrypt registration"
+    required: false
+  - name: WEBROOT
+    type: string
+    description: "Webroot path for HTTP-01 challenge"
+    default: /var/www/html
+    required: false
+risks:
+  - "Rate limited: Let's Encrypt has 5 certificates/week/domain"
+  - "DNS: requires domain to resolve to this server for HTTP-01 challenge"
+  - "Expiry: certificates expire after 90 days, renewal must run before then"

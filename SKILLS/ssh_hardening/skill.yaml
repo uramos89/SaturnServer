@@ -1,0 +1,19 @@
+name: SSH Hardening
+language: bash
+version: 1.0
+description: "Harden SSH server configuration. Disable root login, change port, force key-only auth, apply CIS benchmarks."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: audit, apply, port-rotate, key-only, root-disable, report"
+    required: true
+    options: [audit, apply, port-rotate, key-only, root-disable, report]
+  - name: SSH_PORT
+    type: integer
+    description: "New SSH port (for port-rotate action)"
+    default: 2222
+    required: false
+risks:
+  - "Lockout risk: changing SSH port or disabling password auth without testing may lock admin out"
+  - "Irreversible: always keep a secondary SSH session active during changes"
+  - "Compatibility: some automation tools expect SSH on port 22"

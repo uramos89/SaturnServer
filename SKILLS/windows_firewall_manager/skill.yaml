@@ -1,0 +1,32 @@
+name: Windows Firewall Manager
+language: powershell
+version: 1.0
+description: "Manage Windows Firewall rules via netsh and PowerShell. List, add, remove inbound/outbound rules."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: list, allow, deny, delete, status"
+    required: true
+    options: [list, allow, deny, delete, status]
+  - name: PORT
+    type: string
+    description: "Port number (for allow/deny actions)"
+    required: false
+  - name: PROTOCOL
+    type: string
+    description: "Protocol: TCP, UDP"
+    default: TCP
+    options: [TCP, UDP]
+  - name: DIRECTION
+    type: string
+    description: "Rule direction: inbound, outbound"
+    default: inbound
+    options: [inbound, outbound]
+  - name: NAME
+    type: string
+    description: "Rule display name (for identification)"
+    required: false
+risks:
+  - "Disruptive: removing firewall rules may block critical services"
+  - "RDP lockout: blocking port 3389 will terminate Remote Desktop access"
+  - "Safety: always verify with a second connection before applying restrictive rules"

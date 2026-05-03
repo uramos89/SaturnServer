@@ -1,0 +1,32 @@
+name: User Manager
+language: bash
+version: 1.0
+description: "Manage Linux users and groups. Create, delete, list users, manage groups, set passwords."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: list, create, delete, add-group, remove-group, lock, unlock"
+    required: true
+    options: [list, create, delete, add-group, remove-group, lock, unlock]
+  - name: USERNAME
+    type: string
+    description: "Username for the target user"
+    required: false
+  - name: GROUP
+    type: string
+    description: "Group name (for add-group/remove-group actions)"
+    required: false
+  - name: SHELL
+    type: string
+    description: "Login shell for new users"
+    default: /bin/bash
+    required: false
+  - name: SUDO
+    type: boolean
+    description: "Grant sudo access to new user"
+    default: false
+    required: false
+risks:
+  - "Destructive: deleting users removes home directory and data"
+  - "Lockout: locking or deleting the only sudo user may lock admin out"
+  - "Passwords: password changes require sudo and may affect running services"

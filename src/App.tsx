@@ -7,7 +7,7 @@ import {
   LogOut, Menu, Trash2, Folder, FileText, Play, Plus, Trash, Upload, X, Users, Package, HeartPulse, Sliders
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from './lib/utils';
+import { cn, api } from './lib/utils';
 import type { ManagedServer, Incident, AuditLog, NotificationConfig, AIConfig, SshConnection } from './lib/types';
 import { t, Language } from './lib/i18n';
 import { 
@@ -70,7 +70,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 }
 
 // ── Login View ────────────────────────────────────────────────────────
-const LoginView = ({ onLogin, t }: { onLogin: (u: UserData) => void, t: (k: string) => string }) => {
+const LoginView = ({ onLogin, t }: { onLogin: (u: UserData, token?: string) => void, t: (k: string) => string }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -88,7 +88,7 @@ const LoginView = ({ onLogin, t }: { onLogin: (u: UserData) => void, t: (k: stri
       });
       const data = await res.json();
       if (data.success) {
-        onLogin(data.user);
+        onLogin(data.user, data.token);
       } else {
         setError(data.error || 'Invalid credentials');
       }
@@ -171,7 +171,7 @@ const UserManager = ({ t }: { t: (k: string) => string }) => {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('/api/admin/users');
+      const res = await api('/api/admin/users');
       const data = await res.json();
       setUsers(data);
     } catch {} finally {
@@ -184,7 +184,7 @@ const UserManager = ({ t }: { t: (k: string) => string }) => {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
     try {
-      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+      const res = await api(`/api/admin/users/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) fetchUsers();
       else alert(data.error);
@@ -196,7 +196,7 @@ const UserManager = ({ t }: { t: (k: string) => string }) => {
     setCreating(true);
     setError('');
     try {
-      const res = await fetch('/api/admin/create', {
+      const res = await api('/api/admin/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: newUsername, password: newPassword })
@@ -338,6 +338,8 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // SMTP state
   const [smtpHost, setSmtpHost] = useState('');
@@ -361,7 +363,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
   const [adminError, setAdminError] = useState('');
 
   useEffect(() => {
-    fetch('/api/ai/providers')
+    api('/api/ai/providers')
       .then(r => r.json())
       .then(data => {
         setProviders(data.providers);
@@ -376,7 +378,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
     setSaving(true);
     setError('');
     try {
-      const res = await fetch('/api/ai/providers/configure', {
+      const res = await api('/api/ai/providers/configure', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -401,6 +403,30 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
     }
   };
 
+  const handleTestKey = async () => {
+    if (!apiKey) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await api('/api/ai/test-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: selectedProvider,
+          model: selectedModel,
+          apiKey
+        })
+      });
+      const data = await res.json();
+      setTestResult({ ok: data.success, msg: data.message || data.error || 'Unknown error' });
+      if (data.success) setError('');
+    } catch (err: any) {
+      setTestResult({ ok: false, msg: err.message });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const handleSmtpSave = async () => {
     if (!smtpHost || !smtpUser || !smtpPass) {
       setSmtpError('SMTP Host, Username and Password are required');
@@ -409,7 +435,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
     setSmtpSaving(true);
     setSmtpError('');
     try {
-      const res = await fetch('/api/notifications/config', {
+      const res = await api('/api/notifications/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -451,7 +477,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
     setAdminSaving(true);
     setAdminError('');
     try {
-      const res = await fetch('/api/admin/create', {
+      const res = await api('/api/admin/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -533,7 +559,8 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
           transition={{ delay: 0.2 }}
           className="text-4xl font-black text-white tracking-[0.15em] mb-4"
         >
-          SATURN <span className="text-orange-500 font-light">v0.1.0</span>
+          SATURN <span className="text-orange-500 font-light">v0.2.0</span>
+              <span className="ml-2 text-[8px] text-slate-600 font-mono">build: 2026-05-03</span>
         </motion.h1>
         <motion.p 
           initial={{ opacity: 0 }}
@@ -655,16 +682,35 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">
                     {t('onboarding.apiKey')}
                   </label>
-                  <div className="relative">
-                    <Key size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
-                      type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      placeholder={t('onboarding.apiKey.placeholder')}
-                      className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none font-mono"
-                    />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Key size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => { setApiKey(e.target.value); setTestResult(null); }}
+                        placeholder={t('onboarding.apiKey.placeholder')}
+                        className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none font-mono"
+                      />
+                    </div>
+                    <button
+                      onClick={handleTestKey}
+                      disabled={!apiKey || testing}
+                      className="px-3 py-3 bg-black/60 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-wider hover:border-orange-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
+                    >
+                      {testing ? (
+                        <><RefreshCw size={12} className="animate-spin" /> Testing</>
+                      ) : (
+                        <><Zap size={12} /> Test</>
+                      )}
+                    </button>
                   </div>
+                  {testResult && (
+                    <div className={`mt-2 flex items-start gap-2 text-[10px] ${testResult.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {testResult.ok ? <CheckCircle2 size={12} className="mt-0.5 shrink-0" /> : <XCircle size={12} className="mt-0.5 shrink-0" />}
+                      <span>{testResult.msg.slice(0, 200)}</span>
+                    </div>
+                  )}
                   <p className="text-[9px] text-slate-600 mt-1">{t('onboarding.apiKey.desc')}</p>
                 </div>
 
@@ -1180,7 +1226,7 @@ const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: 
     if (!newServerIp || !newServerUser || (!newServerKey && !newServerPassword && !confirm('No key or password provided. Attempt using default?'))) return;
     setAddingServer(true);
     try {
-      const res = await fetch('/api/ssh/connect', {
+      const res = await api('/api/ssh/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ host: newServerIp, username: newServerUser, privateKey: newServerKey, password: newServerPassword })
@@ -1189,11 +1235,16 @@ const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: 
         onSuccess();
         onClose();
       } else {
-        const error = await res.json();
-        setErrorMsg(`Connection Failed: ${error.error}`);
+        try {
+          const error = await res.json();
+          setErrorMsg(`Connection Failed: ${error.error || error.message || 'Unknown error'} (HTTP ${res.status})`);
+        } catch(e) {
+          const text = await res.text();
+          setErrorMsg(`Connection Failed (HTTP ${res.status}): ${text.substring(0,200)}`);
+        }
       }
     } catch (e: any) {
-      setErrorMsg(`Network Error: ${e.message}`);
+      setErrorMsg(`Error: ${e.message}`);
     }
     setAddingServer(false);
   };
@@ -1257,23 +1308,26 @@ const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: 
 
 const ImportSkillModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) => {
   const [prompt, setPrompt] = useState('');
+  const [skillName, setSkillName] = useState('');
   const [os, setOs] = useState('linux');
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatedSkill, setGeneratedSkill] = useState<any>(null);
+  const [importError, setImportError] = useState('');
 
   const handleGenerate = async () => {
     if (!prompt) return;
     setGenerating(true);
+    setImportError('');
     try {
-      const res = await fetch('/api/neural/generate-script', {
+      const res = await api('/api/neural/generate-script', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, os, context: {} })
       });
       const data = await res.json();
       setGeneratedSkill({
-        name: `AI_${os}_${Date.now().toString().slice(-4)}`,
+        name: skillName || `AI_${os}_${Date.now().toString().slice(-4)}`,
         language: os === 'windows' ? 'powershell' : 'bash',
         version: '1.0',
         description: data.description,
@@ -1281,7 +1335,7 @@ const ImportSkillModal = ({ onClose, onSuccess }: { onClose: () => void, onSucce
       });
     } catch (e) {
       console.error(e);
-      alert('Failed to generate script');
+      setImportError('Failed to generate script: ' + (e as any).message);
     }
     setGenerating(false);
   };
@@ -1289,18 +1343,22 @@ const ImportSkillModal = ({ onClose, onSuccess }: { onClose: () => void, onSucce
   const handleSave = async () => {
     if (!generatedSkill) return;
     setSaving(true);
+    setImportError('');
     try {
-      const res = await fetch('/api/skills/import', {
+      const res = await api('/api/skills/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(generatedSkill)
+        body: JSON.stringify({ ...generatedSkill, name: skillName || generatedSkill.name })
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
         onSuccess();
         onClose();
+      } else {
+        setImportError(data.error || 'Failed to save');
       }
     } catch (e) {
-      console.error(e);
+      setImportError('Error saving skill: ' + (e as any).message);
     }
     setSaving(false);
   };
@@ -1313,8 +1371,23 @@ const ImportSkillModal = ({ onClose, onSuccess }: { onClose: () => void, onSucce
         <h3 className="text-sm font-black uppercase tracking-widest mb-6 text-white flex items-center gap-2"><Brain className="text-orange-500" size={18}/> Neural Skill Generator</h3>
         
         <div className="space-y-4 overflow-y-auto custom-scrollbar flex-1 pr-2">
+          {importError && (
+            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-mono">
+              {importError}
+            </div>
+          )}
           {!generatedSkill ? (
             <>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Skill Name</label>
+                <input
+                  type="text"
+                  value={skillName}
+                  onChange={e => setSkillName(e.target.value)}
+                  placeholder="e.g. Memory Usage Monitor"
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none"
+                />
+              </div>
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Target Environment</label>
                 <select value={os} onChange={e => setOs(e.target.value)} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none">
@@ -1323,7 +1396,7 @@ const ImportSkillModal = ({ onClose, onSuccess }: { onClose: () => void, onSucce
                 </select>
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Skill Description / Goal</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Description / Goal</label>
                 <textarea 
                   value={prompt} 
                   onChange={e => setPrompt(e.target.value)} 
@@ -1336,25 +1409,25 @@ const ImportSkillModal = ({ onClose, onSuccess }: { onClose: () => void, onSucce
                 disabled={generating || !prompt} 
                 className="w-full py-3 mt-4 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2"
               >
-                {generating ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><Brain size={14}/> Generate via AI</>}
+                {generating ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><Brain size={14}/> Generate Script</>}
               </button>
             </>
           ) : (
             <div className="space-y-4">
               <div className="p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-2">Generated Description</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-2">Skill: {generatedSkill.name}</h4>
                 <p className="text-xs text-slate-300 leading-relaxed">{generatedSkill.description}</p>
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Generated Script ({generatedSkill.language})</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Script ({generatedSkill.language})</label>
                 <div className="bg-black border border-white/10 rounded-xl p-4 overflow-x-auto">
                   <pre className="text-[10px] text-slate-300 font-mono whitespace-pre-wrap">{generatedSkill.script}</pre>
                 </div>
               </div>
               <div className="flex gap-4 mt-8">
-                <button onClick={() => setGeneratedSkill(null)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">Discard & Retry</button>
+                <button onClick={() => { setGeneratedSkill(null); setImportError(''); }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">Discard</button>
                 <button onClick={handleSave} disabled={saving} className="flex-1 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2">
-                  {saving ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><Plus size={14}/> Add to Library</>}
+                  {saving ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : <><Plus size={14}/> Save Skill</>}
                 </button>
               </div>
             </div>
@@ -1388,7 +1461,7 @@ const SkillsView = ({ skills, setSkills }: { skills: any[], setSkills: any }) =>
   const handleSyncSkills = async () => {
     setSyncingSkills(true);
     try {
-      const res = await fetch('/api/skills');
+      const res = await api('/api/skills');
       setSkills(await res.json());
     } catch {} finally {
       setSyncingSkills(false);
@@ -1433,8 +1506,28 @@ const SkillsView = ({ skills, setSkills }: { skills: any[], setSkills: any }) =>
               </span>
               <div className="flex gap-2">
                 <button onClick={() => setSelectedSource(s)} className="p-1.5 text-slate-500 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors" title="View Source"><FileText size={14} /></button>
-                <button onClick={() => alert('Assign to Node API not fully implemented')} className="p-1.5 text-slate-500 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors" title="Assign to Node"><Plug size={14} /></button>
-                <button onClick={() => alert('Run Skill API not fully implemented')} className="p-1.5 text-orange-500 hover:text-white bg-orange-500/10 hover:bg-orange-500/30 rounded-lg transition-colors font-black text-[9px] uppercase px-3">Run</button>
+                <button onClick={async () => {
+                  const targetId = prompt('Enter target server ID or group name:');
+                  if (targetId) {
+                    await api('/api/skills/assignments', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ skillId: s.id, targetId, targetType: 'server' })
+                    });
+                    alert('Skill assigned to ' + targetId);
+                  }
+                }} className="p-1.5 text-slate-500 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-colors" title="Assign to Node"><Plug size={14} /></button>
+                <button onClick={async () => {
+                  const targetId = prompt('Enter target server ID to run on:');
+                  if (targetId) {
+                    await api('/api/skills/generate', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ skillId: s.id, serverId: targetId })
+                    });
+                    alert('Skill execution triggered on ' + targetId);
+                  }
+                }} className="p-1.5 text-orange-500 hover:text-white bg-orange-500/10 hover:bg-orange-500/30 rounded-lg transition-colors font-black text-[9px] uppercase px-3">Run</button>
               </div>
             </div>
           </div>
@@ -1486,7 +1579,7 @@ const ContextPView = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch('/api/contextp/files').then(res => res.json()).then(setTree).catch(console.error);
+    api('/api/contextp/files').then(res => res.json()).then(setTree).catch(console.error);
   }, []);
 
   const loadFile = async (f: any) => {
@@ -1494,7 +1587,7 @@ const ContextPView = () => {
     setSelectedFile(f);
     setLoading(true);
     try {
-      const res = await fetch(`/api/contextp/read?path=${encodeURIComponent(f.path)}`);
+      const res = await api(`/api/contextp/read?path=${encodeURIComponent(f.path)}`);
       const data = await res.json();
       setFileContent(data.content || 'File not found or empty.');
     } catch (e) {
@@ -1544,7 +1637,7 @@ const AuditView = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/audit')
+    api('/api/audit')
       .then(res => res.json())
       .then(data => {
         setLogs(Array.isArray(data) ? data : []);
@@ -1651,6 +1744,13 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedServer, setSelectedServer] = useState<ManagedServer | null>(null);
+  const [dashboardServerId, setDashboardServerId] = useState<string | null>(null);
+  const [metricsBuffer, setMetricsBuffer] = useState<Record<string, Array<{ time: string; cpu: number; memory: number; disk: number }>>>(() => {
+    try {
+      const saved = localStorage.getItem('saturn-metrics-buffer');
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
   const [serverDetailTab, setServerDetailTab] = useState('summary');
   const [remediationConfigs, setRemediationConfigs] = useState<any[]>([]);
   const [globalConfig, setGlobalConfig] = useState<any>({ mode: 'auto', threshold: 0.7 });
@@ -1660,6 +1760,18 @@ export default function App() {
   // Real-time Metrics Handler
   const handleMetricsUpdate = useCallback((data: any) => {
     setServers(prev => prev.map(s => s.id === data.serverId ? { ...s, ...data } : s));
+    // Accumulate into metrics buffer
+    if (data.cpu != null && data.serverId) {
+      const point = { time: new Date().toLocaleTimeString(), cpu: data.cpu, memory: data.memory ?? 0, disk: data.disk ?? 0 };
+      setMetricsBuffer(prev => {
+        const buf = { ...prev };
+        const arr = [...(buf[data.serverId] || []), point].slice(-120);
+        buf[data.serverId] = arr;
+        // Persist to localStorage (throttled)
+        try { localStorage.setItem('saturn-metrics-buffer', JSON.stringify(buf)); } catch {}
+        return buf;
+      });
+    }
   }, []);
 
   const handleNewIncident = useCallback((incident: any) => {
@@ -1692,9 +1804,9 @@ export default function App() {
     const fetchData = async () => {
       try {
         const [sRes, iRes, aRes, nRes, aiRes, sshRes, cRes, skRes, rRes, pRes, cpRes] = await Promise.all([
-          fetch('/api/servers'), fetch('/api/incidents'), fetch('/api/audit'), fetch('/api/notifications'),
-          fetch('/api/ai/config'), fetch('/api/ssh/connections'), fetch('/api/credentials'), fetch('/api/skills'),
-          fetch('/api/remediation/config'), fetch('/api/proactive'), fetch('/api/contextp/files')
+          api('/api/servers'), api('/api/incidents'), api('/api/audit'), api('/api/notifications'),
+          api('/api/ai/config'), api('/api/ssh/connections'), api('/api/credentials'), api('/api/skills'),
+          api('/api/remediation/config'), api('/api/proactive'), api('/api/contextp/files')
         ]);
         setServers(await sRes.json());
         setIncidents(await iRes.json());
@@ -1716,16 +1828,20 @@ export default function App() {
     return () => clearInterval(interval);
   }, [onboarding]);
 
-  const handleLogin = (u: UserData) => { setUser(u); localStorage.setItem('saturn-user', JSON.stringify(u)); };
+  const handleLogin = (u: UserData, token?: string) => {
+    setUser(u);
+    localStorage.setItem('saturn-user', JSON.stringify(u));
+    if (token) localStorage.setItem('saturn-token', token);
+  };
   const handleLogout = () => { setUser(null); localStorage.removeItem('saturn-user'); };
 
   const handleUpdateRemediationMode = async (serverId: string | null, mode: string) => {
     try {
-      await fetch('/api/remediation/config', {
+      await api('/api/remediation/config', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serverId: serverId || 'global', mode })
       });
-      const res = await fetch('/api/remediation/config');
+      const res = await api('/api/remediation/config');
       const configs = await res.json();
       setRemediationConfigs(configs);
       if (!serverId || serverId === 'global') setGlobalConfig(configs.find((c: any) => c.serverId === 'global'));
@@ -1735,13 +1851,13 @@ export default function App() {
   const handleAnalyzeIncident = async (incidentId: string) => {
     setAnalyzingIncident(incidentId);
     try {
-      const res = await fetch('/api/neural/analyze', {
+      const res = await api('/api/neural/analyze', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incidentId })
       });
       if (res.ok) {
         // Refetch incidents
-        const iRes = await fetch('/api/incidents');
+        const iRes = await api('/api/incidents');
         setIncidents(await iRes.json());
       }
     } catch (e) {
@@ -1753,9 +1869,9 @@ export default function App() {
 
   const handleResolveIncident = async (incidentId: string) => {
     try {
-      const res = await fetch(`/api/incidents/${incidentId}/resolve`, { method: 'POST' });
+      const res = await api(`/api/incidents/${incidentId}/resolve`, { method: 'POST' });
       if (res.ok) {
-        const iRes = await fetch('/api/incidents');
+        const iRes = await api('/api/incidents');
         setIncidents(await iRes.json());
       }
     } catch (e) {
@@ -1771,29 +1887,206 @@ export default function App() {
     </button>
   );
 
+  // ── Live Metrics Dashboard ────────────────────────────────────────
+  const selectedForDashboard = dashboardServerId
+    ? servers.find(s => s.id === dashboardServerId) || null
+    : servers.length > 0 ? servers[0] : null;
+
+  // Re-subscribe when dashboard server changes
+  useEffect(() => {
+    if (selectedForDashboard) {
+      subscribeToServer(selectedForDashboard.id);
+      return () => unsubscribeFromServer(selectedForDashboard.id);
+    }
+  }, [selectedForDashboard?.id]);
+
+  const dashboardMetrics = selectedForDashboard
+    ? metricsBuffer[selectedForDashboard.id] || []
+    : [];
+
+  const gaugeColor = (val: number) => {
+    if (val >= 90) return 'text-rose-500';
+    if (val >= 75) return 'text-amber-500';
+    return 'text-emerald-500';
+  };
+
+  const gaugeBar = (val: number) => {
+    const color = val >= 90 ? 'bg-rose-500' : val >= 75 ? 'bg-amber-500' : 'bg-emerald-500';
+    return (
+      <div className="w-full bg-white/5 rounded-full h-2 mt-2">
+        <motion.div
+          className={`h-full rounded-full ${color} transition-all`}
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.min(val, 100)}%` }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+        />
+      </div>
+    );
+  };
+
   const DashboardView = () => (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Top Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title={t('stats.total')} value={servers.length} icon={Server} color="text-blue-500" />
         <StatCard title={t('stats.online')} value={servers.filter(s => s.status === 'online').length} icon={CheckCircle2} color="text-emerald-500" />
         <StatCard title={t('stats.incidents')} value={incidents.filter(i => i.status === 'open').length} icon={AlertTriangle} color="text-rose-500" />
         <StatCard title={t('stats.ssh')} value={sshConnections.filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
       </div>
+
+      {/* Server Selector */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-2">Live Monitor:</span>
+        {servers.length === 0 && <span className="text-[10px] text-slate-600 italic">No servers connected</span>}
+        {servers.map(s => (
+          <button
+            key={s.id}
+            onClick={() => setDashboardServerId(s.id)}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              dashboardServerId === s.id
+                ? 'bg-orange-500/10 text-orange-400 border border-orange-500/30'
+                : 'bg-white/5 text-slate-500 hover:text-white hover:bg-white/10 border border-white/5'
+            }`}
+          >
+            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${s.status === 'online' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+            {s.name || s.ip}
+          </button>
+        ))}
+      </div>
+
+      {/* Real-time Gauges */}
+      {selectedForDashboard && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="immersive-card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Cpu size={16} className="text-orange-500" />
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">CPU</h3>
+              </div>
+              <motion.span
+                key={selectedForDashboard.cpu}
+                initial={{ scale: 1.3, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className={`text-2xl font-black ${gaugeColor(selectedForDashboard.cpu || 0)}`}
+              >
+                {Math.round(selectedForDashboard.cpu || 0)}%
+              </motion.span>
+            </div>
+            {gaugeBar(selectedForDashboard.cpu || 0)}
+          </div>
+
+          <div className="immersive-card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Activity size={16} className="text-orange-500" />
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">RAM</h3>
+              </div>
+              <motion.span
+                key={selectedForDashboard.memory}
+                initial={{ scale: 1.3, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className={`text-2xl font-black ${gaugeColor(selectedForDashboard.memory || 0)}`}
+              >
+                {Math.round(selectedForDashboard.memory || 0)}%
+              </motion.span>
+            </div>
+            {gaugeBar(selectedForDashboard.memory || 0)}
+          </div>
+
+          <div className="immersive-card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <HardDrive size={16} className="text-orange-500" />
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Disk</h3>
+              </div>
+              <motion.span
+                key={selectedForDashboard.disk}
+                initial={{ scale: 1.3, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className={`text-2xl font-black ${gaugeColor(selectedForDashboard.disk || 0)}`}
+              >
+                {Math.round(selectedForDashboard.disk || 0)}%
+              </motion.span>
+            </div>
+            {gaugeBar(selectedForDashboard.disk || 0)}
+          </div>
+        </div>
+      )}
+
+      {/* Live Charts */}
+      {selectedForDashboard && dashboardMetrics.length > 1 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="immersive-card p-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-4 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+              CPU {t('over time')}
+            </h3>
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={dashboardMetrics}>
+                <defs>
+                  <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#64748b' }} interval="preserveStartEnd" />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#64748b' }} />
+                <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '10px' }} />
+                <Area type="monotone" dataKey="cpu" stroke="#f97316" fill="url(#cpuGrad)" strokeWidth={2} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="immersive-card p-6">
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-4 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+              RAM &amp; Disk Over Time
+            </h3>
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={dashboardMetrics}>
+                <defs>
+                  <linearGradient id="memGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="diskGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#64748b' }} interval="preserveStartEnd" />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#64748b' }} />
+                <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '10px' }} />
+                <Area type="monotone" dataKey="memory" stroke="#22c55e" fill="url(#memGrad)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="disk" stroke="#3b82f6" fill="url(#diskGrad)" strokeWidth={2} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom: Servers + Incidents */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xs font-black uppercase tracking-widest text-slate-500">Recent Servers</h2>
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-500">Servers</h2>
               <button onClick={() => setActiveTab('servers')} className="text-[10px] font-black uppercase text-orange-500 hover:underline">View All</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {servers.slice(0, 4).map(s => <ServerCard key={s.id} server={s} onClick={() => { setSelectedServer(s); setServerDetailTab('summary'); setActiveTab('servers'); }} />)}
+              {servers.length === 0 && <div className="col-span-full p-12 border border-dashed border-white/10 rounded-2xl text-center"><Server size={24} className="text-slate-600 mx-auto mb-2" /><p className="text-[10px] font-black uppercase text-slate-600">No servers registered</p></div>}
             </div>
           </section>
         </div>
         <div className="space-y-8">
           <section className="space-y-4">
-            <h2 className="text-xs font-black uppercase tracking-widest text-slate-500">Open Incidents</h2>
+            <h2 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+              <AlertTriangle size={12} className="text-rose-500" />
+              Open Incidents
+            </h2>
             <div className="space-y-3">
               {incidents.filter(i => i.status === 'open').length > 0 ? (
                 incidents.filter(i => i.status === 'open').slice(0, 5).map(inc => <IncidentCard key={inc.id} incident={inc} analyzing={analyzingIncident === inc.id} onAnalyze={() => handleAnalyzeIncident(inc.id)} onResolve={() => handleResolveIncident(inc.id)} t={t} />)
@@ -1835,7 +2128,7 @@ export default function App() {
 
       <AnimatePresence>
         {showAddServer && <AddNodeModal onClose={() => setShowAddServer(false)} onSuccess={() => {
-          fetch('/api/servers').then(r => r.json()).then(setServers);
+          api('/api/servers').then(r => r.json()).then(setServers);
         }} />}
       </AnimatePresence>
     </div>
@@ -1851,7 +2144,7 @@ export default function App() {
       if (!selectedServer) return;
       setSyncingServer(true);
       try {
-        const res = await fetch(`/api/servers/${selectedServer.id}/refresh`, { method: 'POST' });
+        const res = await api(`/api/servers/${selectedServer.id}/refresh`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to refresh server');
         setSelectedServer({ ...selectedServer, ...data.metrics });
@@ -1876,7 +2169,7 @@ export default function App() {
       const fetchTab = async () => {
         setLoadingTab(true);
         try {
-          const res = await fetch(`/api/admin/servers/${selectedServer.id}/${serverDetailTab}`);
+          const res = await api(`/api/admin/servers/${selectedServer.id}/${serverDetailTab}`);
           const data = await res.json();
           setTabData(data);
         } catch (e) {
@@ -1982,7 +2275,7 @@ export default function App() {
     const fetchConfigs = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/thresholds/${selectedServer?.id}`);
+        const res = await api(`/api/thresholds/${selectedServer?.id}`);
         setConfigs(await res.json());
       } catch (e) { console.error(e); }
       setLoading(false);
@@ -1990,7 +2283,7 @@ export default function App() {
 
     const handleSave = async (metric: string, value: number, severity: string) => {
       try {
-        await fetch(`/api/servers/${selectedServer?.id}/thresholds`, {
+        await api(`/api/servers/${selectedServer?.id}/thresholds`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ thresholds: [{ metric, warning: value, critical: value + 10 }] }) // Adjusting to backend format
@@ -2053,25 +2346,33 @@ export default function App() {
   const ServerSummaryTab = () => {
     const [prompt, setPrompt] = useState('');
     const [running, setRunning] = useState(false);
-    const [result, setResult] = useState('');
+    const [neuralResult, setNeuralResult] = useState<any>(null);
 
     const handleRunNeural = async () => {
       if (!prompt || !selectedServer) return;
       setRunning(true);
-      setResult('');
+      setNeuralResult(null);
       try {
-        const res = await fetch(`/api/admin/servers/${selectedServer.id}/script/execute`, {
+        const res = await api('/api/neural/execute', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ category: 'neural', action: 'remediate', params: { prompt } })
+          body: JSON.stringify({ prompt, serverId: selectedServer.id })
         });
         const data = await res.json();
-        setResult(data.message || data.output || JSON.stringify(data));
-      } catch (e) {
-        setResult('Error executing neural remediation.');
+        setNeuralResult(data);
+      } catch (e: any) {
+        setNeuralResult({ success: false, error: e.message, explanation: 'Failed to execute' });
       }
       setRunning(false);
     };
+
+    const getExamplePrompts = () => [
+      'What is the largest file on the system?',
+      'Show disk usage for all mounts',
+      'Check for failed SSH login attempts',
+      'Show top 5 memory-consuming processes',
+      'Check if any services need restarting',
+    ];
 
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -2095,20 +2396,113 @@ export default function App() {
               );
             })}
           </div>
+          
+          {/* Neural Engine Section */}
           <div className="p-6 rounded-2xl bg-orange-500/5 border border-orange-500/10 transition-all">
             <div className="flex items-center gap-2 mb-4">
               <Brain size={16} className="text-orange-500" />
-              <h3 className="text-[10px] font-black uppercase text-orange-500">Neural Remediation</h3>
+              <h3 className="text-[10px] font-black uppercase text-orange-500">Neural Engine — Prompt to SSH</h3>
             </div>
+            <p className="text-[9px] text-slate-500 mb-4">Ask in natural language. ARES will generate the command, execute it via SSH, and explain the result.</p>
+            
+            {/* Example prompts */}
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {getExamplePrompts().map((ex, i) => (
+                <button
+                  key={i}
+                  onClick={() => setPrompt(ex)}
+                  className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-[9px] text-slate-400 hover:text-white transition-colors"
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+
+            {/* Input */}
             <div className="flex gap-2">
-              <input type="text" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Analyze logs and clear cache..." className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs outline-none focus:border-orange-500 text-white" />
-              <button onClick={handleRunNeural} disabled={running || !prompt} className="px-6 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase rounded-xl transition-colors flex items-center justify-center min-w-[80px]">
+              <input 
+                type="text" 
+                value={prompt} 
+                onChange={e => setPrompt(e.target.value)} 
+                onKeyDown={e => e.key === 'Enter' && handleRunNeural()}
+                placeholder="e.g. Find the largest file, check disk health, restart a service..." 
+                className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs outline-none focus:border-orange-500 text-white" 
+              />
+              <button 
+                onClick={handleRunNeural} 
+                disabled={running || !prompt} 
+                className="px-6 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase rounded-xl transition-colors flex items-center justify-center min-w-[80px]"
+              >
                 {running ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full" /> : 'Run'}
               </button>
             </div>
-            {result && (
-              <div className="mt-4 p-4 bg-black/40 rounded-xl border border-white/5">
-                <p className="text-[10px] font-mono text-slate-300 break-words">{result}</p>
+
+            {/* Results */}
+            {neuralResult && (
+              <div className="mt-4 space-y-3">
+                {/* AI Explanation */}
+                {neuralResult.explanation && (
+                  <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/10">
+                    <p className="text-[9px] font-black uppercase text-sky-400 mb-2">AI Analysis</p>
+                    <p className="text-[11px] text-sky-200 leading-relaxed">{neuralResult.explanation}</p>
+                    {neuralResult.confidence && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full rounded-full bg-orange-500" 
+                            style={{ width: `${Math.round(neuralResult.confidence * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-[9px] text-slate-500 font-mono">{Math.round(neuralResult.confidence * 100)}%</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Generated Command */}
+                {neuralResult.command && (
+                  <div className="p-4 rounded-xl bg-black/60 border border-white/10">
+                    <p className="text-[9px] font-black uppercase text-orange-400 mb-2">Generated Command</p>
+                    <pre className="text-[11px] font-mono text-green-400 whitespace-pre-wrap break-all">{neuralResult.command}</pre>
+                  </div>
+                )}
+
+                {/* Execution Output */}
+                {neuralResult.output && (
+                  <div className="p-4 rounded-xl bg-black/60 border border-white/10">
+                    <p className="text-[9px] font-black uppercase text-emerald-400 mb-2">Output</p>
+                    <pre className="text-[11px] font-mono text-slate-300 whitespace-pre-wrap break-all max-h-60 overflow-y-auto">{neuralResult.output}</pre>
+                  </div>
+                )}
+
+                {/* Error output */}
+                {neuralResult.error && (
+                  <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                    <p className="text-[9px] font-black uppercase text-rose-400 mb-2">Error Output</p>
+                    <pre className="text-[11px] font-mono text-rose-300 whitespace-pre-wrap break-all">{neuralResult.error}</pre>
+                  </div>
+                )}
+
+                {/* Risks */}
+                {neuralResult.risks && neuralResult.risks.length > 0 && (
+                  <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10">
+                    <p className="text-[9px] font-black uppercase text-amber-400 mb-2">⚠ Risks</p>
+                    <ul className="list-disc list-inside">
+                      {neuralResult.risks.map((r: string, i: number) => (
+                        <li key={i} className="text-[10px] text-amber-300">{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Exit code */}
+                {neuralResult.exitCode !== undefined && (
+                  <div className="flex items-center gap-2 text-[9px] font-mono">
+                    <span className={neuralResult.exitCode === 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                      Exit code: {neuralResult.exitCode}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -2152,7 +2546,7 @@ export default function App() {
       setExecuting(true);
       
       try {
-        const res = await fetch(`/api/servers/${selectedServer.id}/exec`, {
+        const res = await api(`/api/servers/${selectedServer.id}/exec`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ command: currentCmd })
@@ -2217,7 +2611,7 @@ export default function App() {
 
     const handleAction = async (pid: string, action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/processes/${action}`, {
+        await api(`/api/admin/servers/${selectedServer!.id}/tab/processes/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pid, ...extraParams })
         });
         handleRefreshServer(true);
@@ -2269,7 +2663,7 @@ export default function App() {
 
     const handleAction = async (iface: string, action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/network/${action}`, {
+        await api(`/api/admin/servers/${selectedServer!.id}/tab/network/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ iface, ...extraParams })
         });
         handleRefreshServer(true);
@@ -2330,7 +2724,7 @@ export default function App() {
 
     const handleAction = async (action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/firewall/${action}`, {
+        await api(`/api/admin/servers/${selectedServer!.id}/tab/firewall/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(extraParams)
         });
         handleRefreshServer(true);
@@ -2392,7 +2786,7 @@ export default function App() {
 
     const handleAction = async (action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/tasks/${action}`, {
+        await api(`/api/admin/servers/${selectedServer!.id}/tab/tasks/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(extraParams)
         });
         handleRefreshServer(true);
@@ -2453,7 +2847,7 @@ export default function App() {
 
     const handleAction = async (username: string, action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/users/${action}`, {
+        await api(`/api/admin/servers/${selectedServer!.id}/tab/users/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, ...extraParams })
         });
         handleRefreshServer(true);
@@ -2506,7 +2900,7 @@ export default function App() {
 
     const handleAction = async (action: string, extraParams: any = {}) => {
       try {
-        await fetch(`/api/admin/servers/${selectedServer!.id}/tab/packages/${action}`, {
+        await api(`/api/admin/servers/${selectedServer!.id}/tab/packages/${action}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(extraParams)
         });
         handleRefreshServer(true);
@@ -2637,7 +3031,7 @@ export default function App() {
     const fetchTasks = async () => {
       setLoadingTasks(true);
       try {
-        const res = await fetch('/api/proactive');
+        const res = await api('/api/proactive');
         const data = await res.json();
         setProactiveActivities(data);
       } catch (e) {
@@ -2650,7 +3044,7 @@ export default function App() {
       if (!newTaskForm.name || !newTaskForm.skillId) return;
       setSavingTask(true);
       try {
-        await fetch('/api/proactive', {
+        await api('/api/proactive', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newTaskForm)
@@ -2666,11 +3060,7 @@ export default function App() {
 
     const handleToggleTask = async (task: any) => {
       try {
-        await fetch('/api/proactive', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...task, enabled: !task.enabled })
-        });
+        await api(`/api/proactive/${task.id}/toggle`, { method: 'PATCH' });
         fetchTasks();
       } catch (e) {
         console.error(e);
@@ -2680,7 +3070,7 @@ export default function App() {
     const handleDeleteTask = async (id: string) => {
       if (!confirm('Delete this proactive task?')) return;
       try {
-        await fetch(`/api/proactive/${id}`, { method: 'DELETE' });
+        await api(`/api/proactive/${id}`, { method: 'DELETE' });
         fetchTasks();
       } catch (e) {
         console.error(e);
@@ -2694,9 +3084,14 @@ export default function App() {
             <Zap className="text-orange-500" size={20} />
             <h2 className="text-sm font-black uppercase tracking-[0.2em]">Autonomous Proactive Engine</h2>
           </div>
-          <button onClick={() => setShowNewTaskModal(true)} className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all flex items-center gap-2">
-            <Plus size={14} /> New Task
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowNewTaskModal(true)} className="px-4 py-2 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all flex items-center gap-2">
+              <Plus size={14} /> New Task
+            </button>
+            <button onClick={() => window.open('/api/proactive/history', '_blank')} className="px-4 py-2 bg-black/60 border border-white/10 text-slate-400 text-[10px] font-black uppercase tracking-widest rounded-xl hover:border-white/20 transition-all flex items-center gap-2">
+              <History size={14} /> History
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-4">
           {loadingTasks && proactiveActivities.length === 0 ? (
@@ -2802,7 +3197,7 @@ export default function App() {
     const fetchCreds = async () => {
       setLoadingCreds(true);
       try {
-        const res = await fetch('/api/credentials');
+        const res = await api('/api/credentials');
         const data = await res.json();
         setCloudCreds(data);
       } catch (e) {
@@ -2815,7 +3210,7 @@ export default function App() {
       setScanningId(id);
       setDiscoveredInstances([]);
       try {
-        const res = await fetch('/api/cloud/scan', {
+        const res = await api('/api/cloud/scan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ credId: id })
@@ -2823,7 +3218,7 @@ export default function App() {
         const data = await res.json();
         if (data.success) {
           setDiscoveredInstances(data.instances || []);
-          fetch('/api/servers').then(r => r.json()).then(setServers).catch(() => {});
+          api('/api/servers').then(r => r.json()).then(setServers).catch(() => {});
         } else {
           alert(`Scan failed: ${data.error}`);
         }
@@ -2838,14 +3233,14 @@ export default function App() {
       if (!importForm.name || !importForm.accessKey || !importForm.secretKey) return;
       setSavingCred(true);
       try {
-        await fetch('/api/credentials/import', {
+        await api('/api/credentials/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: importForm.name,
             provider: importForm.provider,
             type: importForm.type,
-            credentials: { accessKey: importForm.accessKey, secretKey: importForm.secretKey }
+            content: JSON.stringify({ accessKey: importForm.accessKey, secretKey: importForm.secretKey })
           })
         });
         await fetchCreds();
@@ -2860,7 +3255,7 @@ export default function App() {
     const handleDeleteCred = async (id: string) => {
       if (!confirm('Delete this credential?')) return;
       try {
-        await fetch(`/api/credentials/${id}`, { method: 'DELETE' });
+        await api(`/api/credentials/${id}`, { method: 'DELETE' });
         fetchCreds();
       } catch (e) {
         console.error(e);
@@ -3040,24 +3435,98 @@ export default function App() {
   const SettingsView = () => {
     const [localAiConfig, setLocalAiConfig] = useState<AIConfig | null>(aiConfig);
     const [savingAi, setSavingAi] = useState(false);
+    const [availableProviders, setAvailableProviders] = useState<AIProvider[]>([]);
+    const [configuredProviders, setConfiguredProviders] = useState<ConfiguredProvider[]>([]);
+    const [settingsProviderId, setSettingsProviderId] = useState('');
+    const [settingsModel, setSettingsModel] = useState('');
+    const [settingsEndpoint, setSettingsEndpoint] = useState('');
+    const [settingsTesting, setSettingsTesting] = useState(false);
+    const [settingsTestResult, setSettingsTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+    const [webhookUrl, setWebhookUrl] = useState('');
+    const [webhooks, setWebhooks] = useState<any[]>([]);
+    const [savingWebhook, setSavingWebhook] = useState(false);
+    const [fetchingWebhooks, setFetchingWebhooks] = useState(false);
+
+    const fetchWebhooks = async () => {
+      setFetchingWebhooks(true);
+      try {
+        const res = await api('/api/notifications');
+        const data = await res.json();
+        setWebhooks(data.filter((n: any) => n.type === 'webhook'));
+      } catch {}
+      setFetchingWebhooks(false);
+    };
+
+    const handleSaveWebhook = async () => {
+      if (!webhookUrl) return;
+      setSavingWebhook(true);
+      try {
+        await api('/api/notifications/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'webhook', destination: webhookUrl, config: {}, enabled: true })
+        });
+        setWebhookUrl('');
+        fetchWebhooks();
+      } catch {}
+      setSavingWebhook(false);
+    };
+
+    const handleDeleteWebhook = async (id: string) => {
+      if (!confirm('Delete this webhook?')) return;
+      try {
+        await api(`/api/notifications/${id}`, { method: 'DELETE' });
+        fetchWebhooks();
+      } catch {}
+    };
 
     useEffect(() => {
       setLocalAiConfig(aiConfig);
+      fetchWebhooks();
+      // Fetch provider list for the settings panel
+      api('/api/ai/providers')
+        .then(r => r.json())
+        .then(data => {
+          setAvailableProviders(data.providers);
+          setConfiguredProviders(data.configured);
+          if (data.configured.length > 0) {
+            const active = data.configured[0];
+            setSettingsProviderId(active.provider);
+            setSettingsModel(active.model);
+          } else if (data.providers.length > 0) {
+            setSettingsProviderId(data.providers[0].id);
+            setSettingsModel(data.providers[0].models[0] || '');
+          }
+        })
+        .catch(() => {});
     }, [aiConfig]);
+
+    const settingsProvider = availableProviders.find(p => p.id === settingsProviderId);
 
     const handleSaveAi = async () => {
       if (!localAiConfig) return;
       setSavingAi(true);
       try {
-        const res = await fetch('/api/ai/config', {
+        // Use the configure endpoint which saves to DB
+        const res = await api('/api/ai/providers/configure', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(localAiConfig)
+          body: JSON.stringify({
+            providerId: settingsProviderId,
+            model: settingsModel,
+            apiKey: localAiConfig.apiKey || undefined,
+            endpoint: settingsEndpoint || undefined,
+            name: settingsProvider?.name || settingsProviderId
+          })
         });
         if (res.ok) {
-          const updated = await res.json();
-          setAiConfig(updated);
-          alert('AI Configuration saved successfully');
+          const data = await res.json();
+          if (data.success) {
+            setAiConfig({ ...localAiConfig, provider: settingsProviderId, model: settingsModel });
+            alert('AI Configuration saved successfully');
+          } else {
+            alert(data.error || 'Failed to save');
+          }
         } else {
           alert('Failed to save AI configuration');
         }
@@ -3065,6 +3534,42 @@ export default function App() {
         alert('Error saving AI configuration');
       }
       setSavingAi(false);
+    };
+
+    const handleSettingsTestKey = async () => {
+      if (!localAiConfig?.apiKey) return;
+      setSettingsTesting(true);
+      setSettingsTestResult(null);
+      try {
+        const res = await api('/api/ai/test-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: settingsProviderId,
+            model: settingsModel,
+            apiKey: localAiConfig.apiKey
+          })
+        });
+        const data = await res.json();
+        setSettingsTestResult({ ok: data.success, msg: data.message || data.error || 'Unknown error' });
+      } catch (err: any) {
+        setSettingsTestResult({ ok: false, msg: err.message });
+      } finally {
+        setSettingsTesting(false);
+      }
+    };
+
+    // Group providers by tier (same as onboarding)
+    const tierOrder = ['frontier', 'hyperscaler', 'aggregator', 'inference', 'value', 'asia', 'specialized', 'selfhosted'];
+    const tierLabels: Record<string, string> = {
+      frontier: 'Frontier (Top Tier)',
+      hyperscaler: 'Hyperscalers & Aggregators',
+      aggregator: 'Multi-Proxy Aggregators',
+      inference: 'High-Performance Inference',
+      value: 'Value (Cost-Effective)',
+      asia: 'Asian Ecosystem',
+      specialized: 'Specialized / Niche',
+      selfhosted: 'Self-Hosted / Local',
     };
 
     return (
@@ -3088,27 +3593,95 @@ export default function App() {
           </div>
           
           <div className="space-y-4">
+            {/* Provider Selector */}
             <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Primary Provider (LLM)</label>
-              <select value={localAiConfig?.provider || 'none'} onChange={(e) => setLocalAiConfig({...localAiConfig, provider: e.target.value as any})} className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-orange-500 transition-colors">
-                <optgroup label="Frontier Models">
-                  <option value="gemini">Google Gemini 1.5 Pro</option>
-                  <option value="openai">OpenAI GPT-4o</option>
-                  <option value="anthropic">Anthropic Claude 3.5 Sonnet</option>
-                </optgroup>
-                <optgroup label="Local / Self-Hosted">
-                  <option value="ollama">Ollama (Local Network)</option>
-                  <option value="vllm">vLLM Inference</option>
-                </optgroup>
-                <option value="none">Disabled</option>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Provider</label>
+              <select
+                value={settingsProviderId}
+                onChange={(e) => {
+                  setSettingsProviderId(e.target.value);
+                  setSettingsModel('');
+                  const prov = availableProviders.find(p => p.id === e.target.value);
+                  if (prov && prov.models.length > 0) setSettingsModel(prov.models[0]);
+                }}
+                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-orange-500 transition-colors"
+              >
+                <option value="">-- Select Provider --</option>
+                {tierOrder.map(tier => {
+                  const items = availableProviders.filter(p => p.tier === tier);
+                  if (items.length === 0) return null;
+                  return (
+                    <optgroup key={tier} label={tierLabels[tier]}>
+                      {items.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
             </div>
-            
+
+            {/* Model Selector */}
+            {settingsProvider && settingsProvider.models.length > 0 && (
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Model</label>
+                <select
+                  value={settingsModel}
+                  onChange={(e) => setSettingsModel(e.target.value)}
+                  className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-orange-500 transition-colors"
+                >
+                  {settingsProvider.models.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* API Key */}
             <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">API Connection String / Key</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">API Key</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Key size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" />
+                  <input
+                    type="password"
+                    value={localAiConfig?.apiKey || ''}
+                    onChange={(e) => { setLocalAiConfig({...localAiConfig, apiKey: e.target.value}); setSettingsTestResult(null); }}
+                    placeholder="Enter API key for this provider"
+                    className="w-full bg-black/60 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white outline-none focus:border-orange-500"
+                  />
+                </div>
+                <button
+                  onClick={handleSettingsTestKey}
+                  disabled={!localAiConfig?.apiKey || settingsTesting}
+                  className="px-3 py-3 bg-black/60 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-wider hover:border-orange-500/50 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
+                >
+                  {settingsTesting ? (
+                    <><RefreshCw size={12} className="animate-spin" /> Testing</>
+                  ) : (
+                    <><Zap size={12} /> Test</>
+                  )}
+                </button>
+              </div>
+              {settingsTestResult && (
+                <div className={`mt-2 flex items-start gap-2 text-[10px] ${settingsTestResult.ok ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {settingsTestResult.ok ? <CheckCircle2 size={12} className="mt-0.5 shrink-0" /> : <XCircle size={12} className="mt-0.5 shrink-0" />}
+                  <span>{settingsTestResult.msg.slice(0, 200)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Custom Endpoint (optional) */}
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Custom Endpoint <span className="text-slate-600">(optional)</span></label>
               <div className="relative">
-                <Key size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" />
-                <input type="password" value={localAiConfig?.apiKey || ''} onChange={(e) => setLocalAiConfig({...localAiConfig, apiKey: e.target.value})} placeholder="Enter API Key or Connection String" className="w-full bg-black/60 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white outline-none focus:border-orange-500" />
+                <input
+                  type="text"
+                  value={settingsEndpoint}
+                  onChange={(e) => setSettingsEndpoint(e.target.value)}
+                  placeholder="e.g. http://localhost:11434 or https://api.custom.com/v1"
+                  className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-orange-500"
+                />
               </div>
             </div>
 
@@ -3167,10 +3740,123 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* Webhook Configuration */}
+          <div className="p-8 rounded-3xl bg-black/40 border border-white/5 space-y-6">
+            <div className="flex items-center gap-3 border-b border-white/5 pb-4">
+              <Bell size={18} className="text-orange-500" />
+              <h3 className="text-xs font-black uppercase tracking-widest">Webhook Notifications</h3>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              Configure webhook URLs to receive notifications when proactive activities fail or thresholds are breached.
+            </p>
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Webhook URL</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    placeholder="https://hooks.example.com/alert"
+                    className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-orange-500"
+                  />
+                </div>
+                <button
+                  onClick={handleSaveWebhook}
+                  disabled={!webhookUrl || savingWebhook}
+                  className="px-4 py-3 bg-orange-500 hover:bg-orange-400 disabled:opacity-50 text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center gap-2"
+                >
+                  {savingWebhook ? <><RefreshCw size={12} className="animate-spin" /> Saving</> : <><Zap size={12} /> Save</>}
+                </button>
+              </div>
+            </div>
+            {webhooks.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Configured Webhooks</p>
+                {webhooks.map(w => (
+                  <div key={w.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <Bell size={12} className="text-emerald-500" />
+                      <span className="text-[10px] text-slate-400 font-mono">{w.destination}</span>
+                    </div>
+                    <button onClick={() => handleDeleteWebhook(w.id)} className="p-1.5 text-slate-600 hover:text-rose-500 transition-colors">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
+  };
+
+  const NotificationsView = () => {
+    const [notifs, setNotifs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      api('/api/notifications')
+        .then(r => r.json())
+        .then(d => { setNotifs(Array.isArray(d) ? d : []); setLoading(false); })
+        .catch(() => setLoading(false));
+    }, []);
+
+    const handleDelete = async (id: string) => {
+      if (!confirm('Delete this notification channel?')) return;
+      await api('/api/notifications/' + id, { method: 'DELETE' });
+      setNotifs(prev => prev.filter(n => n.id !== id));
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+        <div className="flex items-center gap-3 mb-8">
+          <Bell className="text-orange-500" size={24} />
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-[0.2em]">Notification Channels</h2>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Configured alerts and webhooks</p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {loading ? (
+            <div className="p-12 text-center"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full mx-auto" /></div>
+          ) : notifs.length === 0 ? (
+            <div className="p-12 border border-dashed border-white/10 rounded-2xl text-center">
+              <Bell size={32} className="text-slate-600 mx-auto mb-4" />
+              <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No notification channels configured</p>
+              <p className="text-[10px] text-slate-600 mt-2">Configure webhooks, Telegram, or email in Settings</p>
+            </div>
+          ) : (
+            notifs.map(n => {
+              const icons: Record<string, any> = { webhook: Globe, telegram: Send, email: Mail };
+              const Icon = icons[n.type] || Bell;
+              return (
+                <div key={n.id} className="p-4 rounded-2xl bg-black/40 border border-white/5 flex items-center justify-between hover:border-orange-500/30 transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center"><Icon size={18} className="text-orange-500" /></div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-white">{n.type || 'unknown'}</p>
+                      <p className="text-[9px] text-slate-500 font-mono">{n.destination || n.config?.chatId || '(no destination)'}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={"text-[9px] font-black uppercase px-2 py-1 rounded " + (n.enabled ? 'text-emerald-500 bg-emerald-500/10' : 'text-slate-600 bg-white/5')}>
+                      {n.enabled ? 'Active' : 'Disabled'}
+                    </span>
+                    <button onClick={() => handleDelete(n.id)} className="p-1.5 text-slate-600 hover:text-rose-500 transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
   };
 
   const AdminView = () => (
@@ -3197,6 +3883,7 @@ export default function App() {
           <SidebarItem id="proactive" label={t('nav.proactive')} icon={Zap} />
           <SidebarItem id="credentials" label={t('nav.credentials')} icon={Key} />
           <SidebarItem id="contextp" label={t('nav.contextp')} icon={Database} />
+          <SidebarItem id="notifications" label={t('nav.notifications') || 'Notifications'} icon={Bell} />
           <SidebarItem id="audit" label="Audit Logs" icon={History} />
           <SidebarItem id="settings" label={t('nav.settings')} icon={Settings} />
           <SidebarItem id="admin" label={t('nav.admin')} icon={User} />
@@ -3204,7 +3891,7 @@ export default function App() {
         <div className="p-4 border-t border-white/5 space-y-4"><div className="flex items-center gap-3 px-3"><div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-black font-black text-[10px]">{user.username.charAt(0).toUpperCase()}</div>{(!sidebarCollapsed || mobileMenuOpen) && <div className="flex-1 min-w-0"><p className="text-[10px] font-black uppercase text-white truncate">{user.username}</p><p className="text-[8px] font-medium text-slate-500 truncate">{user.role}</p></div>}</div><button onClick={handleLogout} className="flex items-center gap-3 w-full p-3 text-rose-500 hover:bg-rose-500/5 rounded-xl transition-all"><Unplug size={18} />{(!sidebarCollapsed || mobileMenuOpen) && <span className="text-[10px] font-black uppercase tracking-widest">Logout</span>}</button></div>
       </aside>
       <main className={cn("flex-1 flex flex-col min-w-0 transition-all duration-300", sidebarCollapsed ? "lg:ml-20" : "lg:ml-64")}>
-        <header className="h-16 border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50"><div className="flex items-center gap-4"><button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-slate-500 hover:text-white"><Menu size={20} /></button><h1 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{activeTab} <span className="text-white/20 mx-2">/</span> <span className="text-white">{selectedServer ? selectedServer.name : 'Overview'}</span></h1></div><div className="flex items-center gap-6"><div className="hidden sm:flex bg-black/40 border border-white/10 p-1 rounded-xl">{['auto', 'skill', 'manual'].map(m => <button key={m} onClick={() => handleUpdateRemediationMode(null, m)} className={cn("px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all", globalConfig.mode === m ? "bg-orange-500/10 text-orange-400" : "text-slate-600 hover:text-slate-400")}>{m}</button>)}</div><div className="flex items-center gap-3"><div className="flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg"><div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" /><span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Neural Live</span></div></div></div></header>
+        <header className="h-16 border-b border-white/5 bg-black/50 backdrop-blur-xl flex items-center justify-between px-6 sticky top-0 z-50"><div className="flex items-center gap-4"><button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-slate-500 hover:text-white"><Menu size={20} /></button><h1 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{activeTab} <span className="text-white/20 mx-2">/</span> <span className="text-white">{selectedServer ? selectedServer.name : 'Overview'}</span></h1></div><div className="flex items-center gap-6"><div className="hidden sm:flex bg-black/40 border border-white/10 p-1 rounded-xl">{['auto', 'skill', 'manual'].map(m => <button key={m} onClick={() => handleUpdateRemediationMode(null, m)} className={cn("px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all", globalConfig.mode === m ? "bg-orange-500/10 text-orange-400" : "text-slate-600 hover:text-slate-400")}>{m}</button>)}</div><div className="flex items-center gap-3"><div className={cn("flex items-center gap-2 px-3 py-1.5 rounded-lg", aiConfig ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-orange-500/10 border border-orange-500/20")}><div className={cn("w-1.5 h-1.5 rounded-full", aiConfig ? "bg-emerald-500" : "bg-orange-500 animate-pulse")} /><span className={cn("text-[10px] font-black uppercase tracking-widest", aiConfig ? "text-emerald-500" : "text-orange-500")}>Neural {aiConfig ? 'Active' : 'Standby'}</span></div></div></div></header>
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
           <ErrorBoundary>
             {activeTab === 'dashboard' && DashboardView()}
@@ -3214,6 +3901,7 @@ export default function App() {
             {activeTab === 'proactive' && <ProactiveView />}
             {activeTab === 'credentials' && <CredentialsView />}
             {activeTab === 'contextp' && <ContextPView />}
+            {activeTab === 'notifications' && <NotificationsView />}
             {activeTab === 'audit' && <AuditView />}
             {activeTab === 'settings' && <SettingsView />}
             {activeTab === 'admin' && <AdminView />}

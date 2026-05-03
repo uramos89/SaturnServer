@@ -1,0 +1,19 @@
+name: SMART Disk Monitor
+language: bash
+version: 1.0
+description: "Monitor disk health via SMART attributes. Check reallocated sectors, temperature, pending errors, overall health."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: check, all, temperature, errors, health, list"
+    required: true
+    options: [check, all, temperature, errors, health, list]
+  - name: DISK
+    type: string
+    description: "Disk device (e.g. sda, nvme0). If empty, checks all disks"
+    default: ""
+    required: false
+risks:
+  - "Read-only: this skill only reads SMART data, no destructive operations"
+  - "Requires smartctl: smartmontools package must be installed"
+  - "Some VMs/cloud instances may not expose SMART data"

@@ -1,0 +1,17 @@
+name: IIS Manager
+language: powershell
+version: 1.0
+description: "Manage IIS on Windows Server. List sites, app pools, start/stop, create sites."
+params:
+  - name: ACTION
+    type: string
+    required: true
+    options: [list, status, start, stop, restart, create-site]
+  - name: SITE_NAME
+    type: string
+    description: "IIS site name"
+    required: false
+  - name: PORT
+    type: integer
+    default: 80
+    required: false

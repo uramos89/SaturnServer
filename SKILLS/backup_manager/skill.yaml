@@ -1,0 +1,29 @@
+name: Backup Manager
+language: bash
+version: 1.0
+description: "Rsync-based backup automation. Configure source, destination, retention, and exclusion patterns."
+params:
+  - name: SOURCE
+    type: string
+    description: "Source directory to backup (e.g. /var/data)"
+    required: true
+  - name: DESTINATION
+    type: string
+    description: "Destination path or SSH remote (e.g. /backup or user@host:/backup)"
+    required: true
+  - name: RETENTION_DAYS
+    type: integer
+    description: "Days to keep old backups"
+    default: 30
+  - name: EXCLUDE
+    type: string
+    description: "Comma-separated patterns to exclude"
+    default: "*.tmp,*.log,cache"
+  - name: DRY_RUN
+    type: boolean
+    description: "If true, only shows what would be backed up"
+    default: false
+risks:
+  - "Destructive: old backups are deleted based on retention days"
+  - "Network: large transfers may saturate bandwidth"
+  - "Permissions: requires read access to source and write to destination"

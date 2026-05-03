@@ -3,10 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Saturn — Autonomous Infrastructure Platform</title>
     <meta name="description" content="Saturn is an open-source autonomous infrastructure management platform powered by the Ares neural engine and ContextP memory." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <script>
+      // Kill any Service Workers that might cache the app
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (let registration of registrations) {
+            registration.unregister();
+          }
+        });
+      }
+      // Force reload if this is a cached version
+      // Force page to always load fresh from server
+      // (no further cache logic needed since headers are no-cache)
+    </script>
   </head>
   <body>
     <div id="splash">

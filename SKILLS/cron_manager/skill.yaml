@@ -1,0 +1,26 @@
+name: Cron Manager
+language: bash
+version: 1.0
+description: "Manage cron jobs: list, add, edit, remove scheduled tasks on remote servers."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: list, add, remove, enable, disable"
+    required: true
+    options: [list, add, remove, enable, disable]
+  - name: SCHEDULE
+    type: string
+    description: "Cron schedule expression (for add action). E.g. '0 2 * * *'"
+    required: false
+  - name: COMMAND
+    type: string
+    description: "Command to run (for add action)"
+    required: false
+  - name: LABEL
+    type: string
+    description: "Cron job label/comment for identification"
+    required: false
+risks:
+  - "Modifying crontab may remove existing jobs if not careful"
+  - "Malformed cron expressions may cause unexpected scheduling"
+  - "Requires crontab access (usually available for all users)"

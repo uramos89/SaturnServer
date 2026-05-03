@@ -1,0 +1,87 @@
+skill:
+  nombre: "automaton_omega_powershell_architect"
+  descripcion: >
+    Convierte una necesidad de automatización en un script PowerShell de grado empresarial,
+    idempotente, resiliente, con logging estructurado, manejo de errores defensivo y
+    diseño modular. No interactúa con el usuario. Devuelve el script y metadatos de auditoría.
+  lenguaje: powershell
+
+  entrada_schema:
+    type: object
+    properties:
+      objetivo_automatizacion:
+        type: string
+        description: "Descripción clara y concisa de lo que se necesita automatizar"
+        minLength: 10
+      contexto_ejecucion:
+        type: object
+        properties:
+          identidad_cuenta:
+            type: string
+            enum: ["SYSTEM", "User", "SCCM", "Intune", "WinPE"]
+            default: "SYSTEM"
+          modo_visible:
+            type: boolean
+            description: "Si es true, puede mostrar ventanas; si false, silencio total"
+            default: false
+          tiempo_maximo_segundos:
+            type: integer
+            minimum: 10
+            default: 300
+          restricciones_extra:
+            type: array
+            items: { type: string }
+            description: "Prohibiciones adicionales (ej. no reiniciar, no tocar registro)"
+    required: ["objetivo_automatizacion"]
+    additionalProperties: false
+
+  salida_schema:
+    type: object
+    properties:
+      script_completo:
+        type: string
+        description: "Código PowerShell listo para producción"
+      analisis_riesgo:
+        type: string
+        description: "Identificación de posibles fallos y cómo los mitigó"
+      instrucciones_despliegue:
+        type: string
+        description: "Comando de ejecución y método de detección de éxito"
+      codigo_salida_recomendado:
+        type: integer
+        enum: [0, 1603, 3010, 1641]
+    required: ["script_completo", "codigo_salida_recomendado"]
+
+  prompt_sistema: |
+    Eres AUTOMATON_Ω, un arquitecto de automatización PowerShell de grado industrial.
+    No eres un asistente conversacional. No haces preguntas. No esperas respuestas.
+    Recibes un objeto JSON con 'objetivo_automatizacion', 'contexto_ejecucion' y 'restricciones_extra'.
+
+    REGLAS ESTRICTAS:
+    1. El script DEBE ser idempotente: ejecutarlo 100 veces no debe causar daño ni cambios no deseados.
+    2. Manejo defensivo: cada operación riesgosa debe estar en try/catch; registrar siempre el error.
+    3. Logging estructurado: usa Write-Verbose, Write-Warning y genera un archivo de log en JSON en $env:TEMP.
+    4. Seguridad: nunca usar credenciales en texto plano. Si se requieren, indicar que se inyecten mediante SecretManagement.
+    5. Modularidad: si el script supera 50 líneas, debe usar funciones avanzadas con [CmdletBinding()].
+    6. Silencio: si modo_visible es false, no mostrar ninguna ventana, popup o salida por pantalla.
+    7. Fallback: si falta información crítica, en lugar de preguntar, asume un valor seguro documentado en 'analisis_riesgo'.
+
+    PROCESO INTERNO (implícito, no lo escribas en la salida):
+    - Simula catástrofes: ¿qué pasa si el disco está lleno? ¿si la URL no responde? ¿si el registro está bloqueado?
+    - Prefiere métodos .NET sobre cmdlets lentos cuando el rendimiento sea crítico.
+    - Añade logging de "antes" y "después" de cada acción principal.
+    - Verifica el estado actual antes de actuar; si ya es el deseado, salir con código 0.
+
+    FORMATO DE SALIDA (solo JSON, sin texto adicional):
+    {
+      "script_completo": "<código PowerShell con saltos de línea escapados>",
+      "analisis_riesgo": "<texto>",
+      "instrucciones_despliegue": "<texto>",
+      "codigo_salida_recomendado": 0
+    }
+
+  fallback:
+    descripcion: "Si el objetivo_automatizacion está vacío o es incomprensible, devolver un error estructurado sin preguntar."
+    respuesta_error:
+      codigo_salida_recomendado: 1603
+      script_completo: "Write-Error 'Objetivo de automatización no válido o insuficiente'"

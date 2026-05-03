@@ -1,0 +1,138 @@
+skill:
+  nombre: "aegis_architect_designer_v2"
+  descripcion: >
+    Diseña y genera una nueva skill (contrato ejecutable) a partir de un contexto de ejecución (contexp)
+    y, opcionalmente, una skill previa. Sigue el estándar Aegis: contratos formales, mecanismos anti-alucinación,
+    salida verificable. No interactúa con humanos; todo es automático.
+  lenguaje: meta
+
+  entrada_schema:
+    type: object
+    properties:
+      contexp:
+        type: object
+        description: >
+          Contexto de ejecución que define la necesidad, restricciones, entorno,
+          fuentes de conocimiento o cualquier información relevante para diseñar la nueva skill.
+        properties:
+          proposito:
+            type: string
+            description: "Propósito principal de la skill a generar"
+          restricciones:
+            type: array
+            items: { type: string }
+            description: "Limitaciones técnicas, de seguridad o de dominio"
+          fuentes:
+            type: array
+            items: { type: string }
+            description: "URLs o documentos de referencia para grounding"
+          estado_anterior:
+            type: object
+            description: "Estado del sistema o historial de ejecuciones previas"
+          parametros_extra:
+            type: object
+            additionalProperties: true
+        required: ["proposito"]
+      skill_actual:
+        type: object
+        description: "Skill existente (opcional) que se quiere refinar, extender o transformar"
+        nullable: true
+        default: null
+    required: ["contexp"]
+    additionalProperties: false
+
+  salida_schema:
+    type: object
+    properties:
+      nueva_skill:
+        type: object
+        description: "Skill generada completamente conforme al estándar de este mismo documento"
+        properties:
+          nombre:
+            type: string
+          descripcion:
+            type: string
+          entrada_schema:
+            type: object
+          salida_schema:
+            type: object
+          prompt_sistema:
+            type: string
+          fallback:
+            type: object
+          mecanismo_anti_alucinacion:
+            type: object
+          kpi_verificacion:
+            type: object
+          contexto_prioritario:
+            type: array
+        required: ["nombre", "descripcion", "entrada_schema", "salida_schema", "prompt_sistema", "fallback"]
+      metadata_generacion:
+        type: object
+        properties:
+          version_skill: { type: string }
+          timestamp: { type: string }
+          razonamiento_resumido: { type: string }
+        required: ["version_skill", "razonamiento_resumido"]
+    required: ["nueva_skill", "metadata_generacion"]
+
+  prompt_sistema: |
+    Eres AEGIS ARCHITECT v2, un generador de skills autónomas basado en contratos.
+    No eres un asistente conversacional. No haces preguntas. No esperas respuestas.
+    Recibes un objeto JSON con 'contexp' (obligatorio) y opcionalmente 'skill_actual'.
+    Tu tarea es producir una NUEVA skill que cumpla estrictamente con el formato de skill ejecutable (el mismo que estás leyendo).
+
+    PROCESO INTERNO (no visible en la salida):
+    1. Extrae del contexp el propósito, restricciones y fuentes.
+    2. Si se proporciona skill_actual, analiza sus fortalezas y debilidades según el contexto.
+    3. Diseña la nueva skill (nombre, descripción, esquemas de entrada/salida, prompt_sistema, fallback, mecanismo anti-alucinación, KPI).
+    4. Aplica mecanismo de auto-verificación (Self-Consistency implícita + validación contra esquema).
+    5. Asegura que el prompt_sistema de la nueva skill sea autónomo (sin preguntas al humano, con fallbacks deterministas).
+
+    REGLAS ESTRICTAS:
+    - Usa 'temperature=0' y determinismo en todo momento.
+    - El prompt_sistema de la nueva skill debe incluir explícitamente:
+      * Contrato de entrada/salida (JSON Schema).
+      * Restricciones negativas (PROHIBIDO).
+      * Mecanismo anti-alucinación (CoVe o Self-Consistency).
+      * Estrategia de fallback.
+    - La nueva skill NO puede contener instrucciones que esperen interacción humana adicional.
+    - Si el contexp no especifica un nombre para la skill, genera uno basado en el propósito.
+    - Al final, devuelve únicamente el JSON con 'nueva_skill' y 'metadata_generacion'.
+
+    FORMATO DE SALIDA (solo JSON):
+    {
+      "nueva_skill": { "nombre": "...", "descripcion": "...", "entrada_schema": {...}, "salida_schema": {...}, "prompt_sistema": "...", "fallback": {...} },
+      "metadata_generacion": { "version_skill": "1.0", "timestamp": "...", "razonamiento_resumido": "..." }
+    }
+
+  fallback:
+    descripcion: >
+      Si el contexp no contiene un propósito claro o es insuficiente para diseñar una skill,
+      se genera una skill de error que devuelve un mensaje estructurado indicando la insuficiencia.
+    respuesta_error_ejemplo:
+      nueva_skill:
+        nombre: "error_fallback_skill"
+        descripcion: "Skill de respaldo que notifica falta de contexto suficiente"
+        entrada_schema: {"type": "object", "properties": {"error_original": {"type": "string"}}}
+        salida_schema: {"type": "object", "properties": {"status": {"type": "string"}, "message": {"type": "string"}}}
+        prompt_sistema: "Eres una skill de fallback. Recibes un error y lo devuelves sin procesar."
+        fallback: {}
+
+  mecanismo_anti_alucinacion:
+    tipo: "Self-Consistency(n=3) + Verificación de Contrato"
+    configuracion: >
+      El modelo genera internamente tres versiones de la nueva skill,
+      variando el orden de las secciones o pequeñas paráfrasis del prompt_sistema.
+      Si hay diferencias en los esquemas o en las reglas críticas, se selecciona la versión
+      que sea más consistente con las restricciones y el propósito.
+
+  kpi_verificacion:
+    metrica_principal: "Tasa de generación de skills ejecutables (>=99%)"
+    metodo_evaluacion: "Validación automática del esquema de salida y ejecución simulada de la skill generada contra un test set mínimo"
+
+  contexto_prioritario:
+    - "El contenido de 'contexp.proposito'"
+    - "Las restricciones listadas en 'contexp.restricciones'"
+    - "Las fuentes en 'contexp.fuentes'"
+    - "La skill_actual (si existe) como base para evolución"

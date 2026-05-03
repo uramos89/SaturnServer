@@ -1,0 +1,32 @@
+name: Firewall Manager (iptables/ufw)
+language: bash
+version: 1.0
+description: "Manage Linux firewall rules: iptables and ufw. List rules, open/close ports, block IPs, enable/disable."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: list, allow, deny, delete, disable, enable, status"
+    required: true
+    options: [list, allow, deny, delete, disable, enable, status]
+  - name: PORT
+    type: string
+    description: "Port number or service name (for allow/deny actions)"
+    required: false
+  - name: PROTOCOL
+    type: string
+    description: "Protocol: tcp, udp"
+    default: tcp
+    options: [tcp, udp]
+  - name: IP
+    type: string
+    description: "IP address (for allow/deny with specific source)"
+    required: false
+  - name: CHAIN
+    type: string
+    description: "iptables chain: INPUT, OUTPUT, FORWARD"
+    default: INPUT
+    options: [INPUT, OUTPUT, FORWARD]
+risks:
+  - "Disruptive: changing firewall rules may cut off SSH access"
+  - "Irreversible: incorrect rule deletion may expose services"
+  - "Safety: always test with a separate SSH session before applying"

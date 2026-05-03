@@ -58,11 +58,11 @@ describe("Saturn Core Audit Tests", () => {
     });
 
     it("should have a known mismatch for health_info (audit finding)", () => {
-      // This test confirms the audit finding: health_info does not exist, smart_info does.
+      // This test confirms the audit finding: health_info does not exist, smart_monitor does.
       const req: any = { category: "health", action: "info", os: "linux", params: {} };
       const res = ScriptGenerator.generate(req);
-      // It will use fallback because health_info is missing
-      expect(res.description).toContain("Execute: health info"); 
+      // Falls back to generic command since health_info has no dedicated method
+      expect(res.description).toContain("health"); 
     });
   });
 

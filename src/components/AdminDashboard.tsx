@@ -3,9 +3,9 @@ import { motion } from "motion/react";
 import {
   Server, Monitor, Users, CalendarClock, Activity, FileText,
   Network, Shield, Package, Globe, HardDrive, Lock, Database,
-  Terminal, Plus, X, RefreshCw, ChevronRight, Wifi, WifiOff,
+  Terminal, Plus, X, RefreshCw, ChevronRight, Wifi, WifiOff, Unplug,
   AlertTriangle, CheckCircle, Clock, Cpu, HardDrive as Hdd,
-  MemoryStick as Memory
+  MemoryStick as Memory, Trash2
 } from "lucide-react";
 import AdminPanel from "./AdminPanel.js";
 
@@ -21,7 +21,7 @@ export default function AdminDashboard() {
 
   const fetchServers = async () => {
     try {
-      const res = await fetch("/api/servers");
+      const res = await api("/api/servers");
       const data = await res.json();
       setServers(data);
     } catch (e) {
@@ -33,10 +33,40 @@ export default function AdminDashboard() {
 
   useEffect(() => { fetchServers(); }, []);
 
+  const handleDisconnectSSH = async (serverId: string, serverName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Disconnect SSH from "${serverName}"?`)) return;
+    try {
+      const res = await api("/api/ssh/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serverId })
+      });
+      const data = await res.json();
+      if (data.success) fetchServers();
+      else alert(data.error || "Failed to disconnect");
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  const handleDeleteServer = async (serverId: string, serverName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Remove server "${serverName}" and all its data? This cannot be undone.`)) return;
+    try {
+      const res = await api(`/api/servers/${serverId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) fetchServers();
+      else alert(data.error || "Failed to delete server");
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
   const handleConnect = async () => {
     setConnectError("");
     try {
-      const res = await fetch("/api/ssh/connect", {
+      const res = await api("/api/ssh/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -65,6 +95,7 @@ export default function AdminDashboard() {
     online: servers.filter(s => s.status === "online").length,
     degraded: servers.filter(s => s.status === "degraded").length,
     offline: servers.filter(s => s.status === "offline").length,
+    unmanaged: servers.filter(s => s.status === "unmanaged").length,
   };
 
   if (selectedServer) {
@@ -111,6 +142,7 @@ export default function AdminDashboard() {
           { label: "Online", value: stats.online, icon: Wifi, color: "text-green-400" },
           { label: "Degraded", value: stats.degraded, icon: AlertTriangle, color: "text-yellow-400" },
           { label: "Offline", value: stats.offline, icon: WifiOff, color: "text-red-400" },
+          { label: "Unmanaged", value: stats.unmanaged, icon: AlertTriangle, color: "text-slate-500" },
         ].map((stat, i) => (
           <motion.div
             key={i}
@@ -153,11 +185,16 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-4">
                 <div className={`w-2 h-2 rounded-full ${
                   server.status === "online" ? "bg-green-400" :
-                  server.status === "degraded" ? "bg-yellow-400" : "bg-red-400"
+                  server.status === "degraded" ? "bg-yellow-400" :
+                  server.status === "unmanaged" ? "bg-slate-500" : "bg-red-400"
                 }`} />
                 <div>
                   <p className="text-white font-medium">{server.name || server.ip}</p>
-                  <p className="text-slate-500 text-xs">{server.ip} · {server.os} · Kernel {server.kernel}</p>
+                  <p className="text-slate-500 text-xs">
+                    {server.ip} · {server.os}
+                    {server.status === "unmanaged" && <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-400 text-[10px]">Unmanaged</span>}
+                    {server.status === "online" && <span className="ml-2 text-green-400">· SSH</span>}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-6">
@@ -173,6 +210,22 @@ export default function AdminDashboard() {
                   <Hdd className="w-3 h-3 text-slate-500" />
                   <span className={server.disk > 80 ? "text-red-400" : "text-slate-400"}>{server.disk.toFixed(1)}%</span>
                 </div>
+                {server.status === "online" && (
+                  <button
+                    onClick={(e) => handleDisconnectSSH(server.id, server.name || server.ip, e)}
+                    className="p-1.5 hover:bg-yellow-500/20 rounded-lg transition-colors group"
+                    title="Disconnect SSH"
+                  >
+                    <Unplug className="w-3.5 h-3.5 text-slate-600 group-hover:text-yellow-400 transition-colors" />
+                  </button>
+                )}
+                <button
+                  onClick={(e) => handleDeleteServer(server.id, server.name || server.ip, e)}
+                  className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors group"
+                  title="Remove server"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-slate-600 group-hover:text-red-400 transition-colors" />
+                </button>
                 <ChevronRight className="w-4 h-4 text-slate-600" />
               </div>
             </div>

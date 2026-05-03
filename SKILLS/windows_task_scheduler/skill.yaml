@@ -1,0 +1,22 @@
+name: Windows Task Scheduler
+language: powershell
+version: 1.0
+description: "Manage scheduled tasks on Windows. List, create, enable, disable, delete tasks."
+params:
+  - name: ACTION
+    type: string
+    required: true
+    options: [list, create, delete, enable, disable, run]
+  - name: TASK_NAME
+    type: string
+    description: "Task name"
+    required: false
+  - name: SCHEDULE
+    type: string
+    description: "Schedule (e.g. 'daily at 2am', 'hourly')"
+    default: "daily"
+    required: false
+  - name: COMMAND
+    type: string
+    description: "Command or script to execute"
+    required: false

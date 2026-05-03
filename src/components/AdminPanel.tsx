@@ -1,3 +1,4 @@
+import { api } from '../lib/utils';
 import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import {
@@ -40,7 +41,9 @@ export default function AdminPanel({ serverId }: AdminPanelProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`/api/admin/servers/${serverId}/${tab}`);
+      // Map tab IDs to API endpoints if they differ
+      const apiPath = tab === 'smart' ? 'health' : tab;
+      const res = await api(`/api/admin/servers/${serverId}/${apiPath}`);
       const result = await res.json();
       setData(result);
     } catch (e: any) {
@@ -58,7 +61,7 @@ export default function AdminPanel({ serverId }: AdminPanelProps) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`/api/admin/servers/${serverId}/${activeTab}/${action}`, {
+      const res = await api(`/api/admin/servers/${serverId}/${activeTab}/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -79,7 +82,7 @@ export default function AdminPanel({ serverId }: AdminPanelProps) {
     setLoading(true);
     setScriptResult(null);
     try {
-      const res = await fetch(`/api/admin/servers/${serverId}/console/exec`, {
+      const res = await api(`/api/admin/servers/${serverId}/console/exec`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command }),

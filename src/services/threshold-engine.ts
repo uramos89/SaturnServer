@@ -1,4 +1,5 @@
 import type { Database } from 'better-sqlite3';
+import { sendNotification } from './notification-service.js';
 
 interface ThresholdRule {
   id: string;
@@ -21,6 +22,13 @@ const DEFAULT_RULES: ThresholdRule[] = [
 const lastTriggered = new Map<string, number>(); // ruleId:serverId -> timestamp
 
 /**
+ * Resets all in-memory cooldown timers. Useful for testing.
+ */
+export function resetThresholdCooldowns(): void {
+  lastTriggered.clear();
+}
+
+/**
  * Evaluates server metrics against configured thresholds.
  * If a threshold is exceeded, it creates an incident and triggers notifications.
  */
@@ -30,14 +38,28 @@ export async function evaluateThresholds(serverId: string, serverName: string, m
   const customThresholds = db.prepare("SELECT * FROM threshold_configs WHERE serverId = ?").all(serverId) as any[];
   
   const rulesToEvaluate = customThresholds.length > 0 
-    ? customThresholds.map(ct => ({
-        id: `custom-${ct.metric}-${ct.serverId}`,
-        metric: ct.metric,
-        operator: '>', // UI currently only supports '>'
-        value: ct.critical, // Map UI 'critical' to rule value
-        severity: 'critical' as const,
-        cooldownMinutes: 30
-      }))
+    ? customThresholds.flatMap(ct => {
+        const critical = ct.critical ?? 90;
+        const warning = ct.warning ?? 80;
+        return [
+          {
+            id: `custom-${ct.metric}-${ct.serverId}-critical`,
+            metric: ct.metric,
+            operator: '>',
+            value: critical,
+            severity: 'critical' as const,
+            cooldownMinutes: 30
+          },
+          {
+            id: `custom-${ct.metric}-${ct.serverId}-warning`,
+            metric: ct.metric,
+            operator: '>',
+            value: warning,
+            severity: 'warning' as const,
+            cooldownMinutes: 60
+          }
+        ];
+      })
     : DEFAULT_RULES;
 
   for (const rule of rulesToEvaluate) {
@@ -58,10 +80,15 @@ export async function evaluateThresholds(serverId: string, serverName: string, m
       const lastTime = lastTriggered.get(cooldownKey) || 0;
       const cooldownMs = rule.cooldownMinutes * 60 * 1000;
 
-      if (Date.now() - lastTime > cooldownMs) {
+      // Also check DB for recent incidents (survives restarts)
+      const recentIncident = db.prepare(
+        "SELECT COUNT(*) as c FROM incidents WHERE serverId = ? AND title = ? AND timestamp > datetime('now', '-' || ? || ' minutes')"
+      ).get(serverId, `[AUTO] ${rule.metric.toUpperCase()} ${rule.severity.toUpperCase()}`, rule.cooldownMinutes) as any;
+
+      if (Date.now() - lastTime > cooldownMs && recentIncident.c === 0) {
         lastTriggered.set(cooldownKey, Date.now());
         
-        const incidentId = `inc-auto-${Date.now()}`;
+        const incidentId = `inc-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const timestamp = new Date().toISOString();
         
         // Create incident in database
@@ -76,10 +103,22 @@ export async function evaluateThresholds(serverId: string, serverName: string, m
         
         console.log(`[THRESHOLD] Alert triggered for ${server.name}: ${rule.metric} is ${metricValue}%`);
 
-        // Log audit
-        db.prepare("INSERT INTO audit_logs (id, type, event, detail, timestamp) VALUES (?, ?, ?, ?, ?)")
-          .run(`audit-${Date.now()}`, "SYSTEM", "THRESHOLD_ALERT", 
-            `Server ${server.name} exceeded ${rule.metric} threshold: ${metricValue}%`, timestamp);
+        // Log audit with compliance tag
+        const auditId = `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        db.prepare("INSERT INTO audit_logs (id, type, event, detail, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?)")
+          .run(auditId, "SYSTEM", "THRESHOLD_ALERT", 
+            `Server ${server.name} exceeded ${rule.metric} threshold: ${metricValue}%`,
+            JSON.stringify({ _compliance: true, metric: rule.metric, value: metricValue, threshold: rule.value, severity: rule.severity }),
+            timestamp);
+
+        // Send notification for threshold breach
+        const isCritical = rule.severity === 'critical';
+        sendNotification(db, 'threshold_breach',
+          `${isCritical ? '🚨' : '⚠️'} ${rule.metric.toUpperCase()} threshold ${isCritical ? 'CRITICAL' : 'breached'} on ${serverName}`,
+          `${rule.metric} = ${metricValue}% (threshold: ${rule.operator} ${rule.value})`,
+          rule.severity,
+          { metric: rule.metric, serverId, value: metricValue, threshold: rule.value, severity: rule.severity }
+        ).catch(e => console.error('[NOTIFY] Threshold notification failed:', e.message));
       }
     }
   }

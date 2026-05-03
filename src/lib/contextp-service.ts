@@ -25,8 +25,8 @@ export interface ContextPStatus {
 export interface AuditLogEntry {
   id: string;
   date: string;
-  type: "success" | "failure" | "exploration" | "ingest";
-  domain: "TECH" | "FUNC" | "STRUCT" | "AUDIT" | "INGEST" | "NEURAL";
+  type: "success" | "failure" | "exploration" | "ingest" | "warning";
+  domain: "TECH" | "FUNC" | "STRUCT" | "AUDIT" | "INGEST" | "NEURAL" | "THRESHOLD";
   title: string;
   detail: string;
 }

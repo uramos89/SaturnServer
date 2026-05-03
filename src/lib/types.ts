@@ -61,7 +61,7 @@ export interface NotificationConfig {
 }
 
 export interface AIConfig {
-  provider: 'gemini' | 'openai' | 'ollama' | 'anthropic' | 'none';
+  provider: string;
   apiKey: string;
   endpoint?: string;
   model?: string;

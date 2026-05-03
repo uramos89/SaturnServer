@@ -1,0 +1,24 @@
+name: Nginx Manager
+language: bash
+version: 1.0
+description: "Manage Nginx web server. Create/enable/disable sites, configure SSL, reload/restart."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: list, create-site, enable, disable, ssl, reload, restart, test"
+    required: true
+    options: [list, create-site, enable, disable, ssl, reload, restart, test]
+  - name: DOMAIN
+    type: string
+    description: "Domain name for the site"
+    required: false
+  - name: ROOT
+    type: string
+    description: "Document root path"
+    default: /var/www/html
+    required: false
+  - name: PORT
+    type: integer
+    description: "Port number"
+    default: 80
+    required: false

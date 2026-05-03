@@ -1,0 +1,23 @@
+name: Robocopy Backup
+language: powershell
+version: 1.0
+description: "Windows backup with robocopy. Backup files, mirror directories, with multi-threading."
+params:
+  - name: SOURCE
+    type: string
+    description: "Source directory"
+    required: true
+  - name: DESTINATION
+    type: string
+    description: "Destination directory"
+    required: true
+  - name: MIRROR
+    type: boolean
+    description: "Mirror mode (delete files not in source)"
+    default: false
+    required: false
+  - name: THREADS
+    type: integer
+    description: "Number of threads for multi-threaded copy"
+    default: 8
+    required: false

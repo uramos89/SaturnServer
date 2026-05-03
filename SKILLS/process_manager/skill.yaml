@@ -1,0 +1,22 @@
+name: Process Manager
+language: bash
+version: 1.0
+description: "List, monitor, and kill processes. Identify resource hogs and get detailed process information."
+params:
+  - name: ACTION
+    type: string
+    description: "Action to perform: list, top, kill, search, monitor"
+    required: true
+    options: [list, top, kill, search, monitor]
+  - name: TARGET
+    type: string
+    description: "Process name, PID, or search pattern"
+    required: false
+  - name: SORT_BY
+    type: string
+    description: "Sort processes by: cpu, memory, pid, name"
+    default: cpu
+    options: [cpu, memory, pid, name]
+risks:
+  - "Destructive: kill action terminates processes"
+  - "Service disruption: killing critical system processes may cause outages"

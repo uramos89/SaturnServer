@@ -1,0 +1,18 @@
+name: Apache Manager
+language: bash
+version: 1.0
+description: "Manage Apache web server. Enable/disable sites, modules, SSL, restart."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: list, create-site, enable, disable, ssl, reload, restart, modules"
+    required: true
+    options: [list, create-site, enable, disable, ssl, reload, restart, modules]
+  - name: DOMAIN
+    type: string
+    description: "Domain name"
+    required: false
+  - name: ROOT
+    type: string
+    default: /var/www/html
+    required: false
