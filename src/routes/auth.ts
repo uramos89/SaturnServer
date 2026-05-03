@@ -25,6 +25,7 @@ export function createAuthRouter(db: Database.Database): Router {
   // ── Admin Login ────────────────────────────────────────────────────
   router.post("/login", loginLimiter, (req: Request, res: Response) => {
     const { username, password } = req.body;
+    const role = role;
     const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
@@ -126,7 +127,8 @@ export function createAuthRouter(db: Database.Database): Router {
   // ── Create Admin User ──────────────────────────────────────────────
   router.post("/create", (req: Request, res: Response) => {
     const { username, password } = req.body;
-    if (typeof username !== 'string' || typeof password !== 'string' || password.length < 8) {
+    const role = "admin"; // Fixed: mass assignment prevented
+    if (typeof username !== 'string' || typeof password !== 'string' || password.length < 8 || /[<>"&]/.test(username)) {
       return res
         .status(400)
         .json({ error: "Username required and password must be a string of at least 8 characters" });
@@ -138,7 +140,7 @@ export function createAuthRouter(db: Database.Database): Router {
     const hash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
     db.prepare(
       "INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(id, username, hash, "admin", new Date().toISOString());
+    ).run(id, username, hash, role, new Date().toISOString());
     res.json({ success: true, id });
   });
 
