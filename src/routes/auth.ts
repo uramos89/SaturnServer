@@ -25,8 +25,8 @@ export function createAuthRouter(db: Database.Database): Router {
   // ── Admin Login ────────────────────────────────────────────────────
   router.post("/login", loginLimiter, (req: Request, res: Response) => {
     const { username, password } = req.body;
-    const role = role;
     const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
+    const loginRole = user.role;
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
     // Verify password (supports both bcrypt and legacy PBKDF2)
@@ -127,7 +127,7 @@ export function createAuthRouter(db: Database.Database): Router {
   // ── Create Admin User ──────────────────────────────────────────────
   router.post("/create", (req: Request, res: Response) => {
     const { username, password } = req.body;
-    const role = "admin"; // Fixed: mass assignment prevented
+    const fixedRole = "admin";
     if (typeof username !== 'string' || typeof password !== 'string' || password.length < 8 || /[<>"&]/.test(username)) {
       return res
         .status(400)
@@ -140,7 +140,7 @@ export function createAuthRouter(db: Database.Database): Router {
     const hash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
     db.prepare(
       "INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(id, username, hash, role, new Date().toISOString());
+    ).run(id, username, hash, fixedRole, new Date().toISOString());
     res.json({ success: true, id });
   });
 
