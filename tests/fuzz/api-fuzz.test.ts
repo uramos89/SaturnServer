@@ -48,7 +48,7 @@ const ENDPOINTS = [
 describe("Fuzz: Endpoints with malformed payloads", () => {
   ENDPOINTS.forEach(({ method, path, body }) => {
     MALFORMED_PAYLOADS.forEach((payload) => {
-      it(`[${method}] ${path} — payload: ${JSON.stringify(payload).slice(0, 40)}`, async () => {
+      it(`[${method}] ${path} — payload: ${payload === undefined ? 'undefined' : JSON.stringify(payload).slice(0, 40)}`, async () => {
         try {
           const res = await fetch(`${BASE}${path}`, {
             method,
