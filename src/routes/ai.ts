@@ -142,7 +142,7 @@ export function createAiRouter(db: Database.Database): Router {
         res.json({ success: true, message: `✅ ${providerId} responded (${trimmed.slice(0, 50)}...)` });
       }
     } catch (e: any) {
-      res.json({ success: false, error: e.message?.slice(0, 300) || "Connection failed" });
+      return res.status(500).json({ error: e.message?.slice(0, 300) || "Connection failed" });
     }
   });
 

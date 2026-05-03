@@ -627,7 +627,7 @@ async function startServer() {
 
   // ── Public paths (no JWT required) ─────────────────────────────────
   app.use("/api", (req, res, next) => {
-    const PUBLIC_PATHS = ["/health", "/setup/status", "/setup/import", "/admin/login", "/admin/create", "/admin/refresh", "/admin/logout"];
+    const PUBLIC_PATHS = ["/health", "/setup/status", "/setup/import", "/admin/login", "/admin/create", "/admin/refresh", "/admin/logout", "/metrics/stream"];
     if (PUBLIC_PATHS.includes(req.path)) return next();
     authenticateJWT(req, res, next);
   });
@@ -743,6 +743,41 @@ async function startServer() {
     console.error("=".repeat(50) + "\n");
     process.exit(1);
   }
+
+  // ── SSE: Metrics Stream (lightweight alternative to Socket.io) ────
+  app.get("/api/metrics/stream", (req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.write("event: connected\ndata: {}\n\n");
+
+    // Send metrics every 5 seconds
+    const interval = setInterval(() => {
+      const servers = db
+        .prepare("SELECT id, name, cpu, memory, disk, uptime, status, os FROM servers")
+        .all();
+      res.write(`event: metrics\ndata: ${JSON.stringify({ servers, timestamp: new Date().toISOString() })}\n\n`);
+    }, 5000);
+
+    // Keep-alive
+    const keepAlive = setInterval(() => {
+      res.write(":keepalive\n\n");
+    }, 30000);
+
+    req.on("close", () => {
+      clearInterval(interval);
+      clearInterval(keepAlive);
+    });
+  });
+
+  // ── Error handling middleware (catch-all) ─────────────────────────
+  app.use((err: any, _req: any, res: any, _next: any) => {
+    console.error("[UNHANDLED ERROR]", err?.message || err);
+    res.status(500).json({ error: "Internal server error" });
+  });
 
   const httpServer = createServer(app);
   initSocket(httpServer);

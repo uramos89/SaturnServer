@@ -238,7 +238,7 @@ export function createNeuralRouter(
         exitCode: execResult.code,
       });
     } catch (e: any) {
-      res.status(500).json({ success: false, error: e.message, explanation: "Failed to execute neural command" });
+      res.status(500).json({ error: e.message });
     }
   });
 
