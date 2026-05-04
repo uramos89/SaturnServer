@@ -1229,7 +1229,7 @@ const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: 
       const res = await api('/api/ssh/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host: newServerIp, username: newServerUser, privateKey: newServerKey, password: newServerPassword })
+        body: JSON.stringify({ host: newServerIp, port: parseInt(newServerPort) || 22, username: newServerUser, privateKey: newServerKey, password: newServerPassword })
       });
       if (res.ok) {
         onSuccess();
@@ -1265,9 +1265,15 @@ const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: 
         )}
 
         <div className="space-y-4">
-          <div>
-            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">IP Address or Hostname</label>
-            <input type="text" value={newServerIp} onChange={e => setNewServerIp(e.target.value)} placeholder="e.g. 192.168.1.100" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">IP Address or Hostname</label>
+              <input type="text" value={newServerIp} onChange={e => setNewServerIp(e.target.value)} placeholder="e.g. 192.168.1.100" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+            </div>
+            <div className="w-24">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Port</label>
+              <input type="text" value={newServerPort} onChange={e => setNewServerPort(e.target.value)} placeholder="22" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none text-center" />
+            </div>
           </div>
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">SSH Username</label>
