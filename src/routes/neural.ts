@@ -402,5 +402,91 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
+  // ── POST /api/neural/rca — Root Cause Analysis ─────────────────
+  router.post("/neural/rca", async (req: Request, res: Response) => {
+    const { incident, server, metrics } = req.body;
+    const prompt = `Analyze this infrastructure incident and determine root cause.
+
+SERVER: ${server?.name || "unknown"} (${server?.os || "unknown"})
+INCIDENT: ${incident?.title || "Unknown"} - ${incident?.description || ""}
+SEVERITY: ${incident?.severity || "info"}
+METRICS: CPU=${metrics?.cpu || "N/A"}% RAM=${metrics?.memory || "N/A"}% DISK=${metrics?.disk || "N/A"}%
+
+Respond with JSON:
+{
+  "root_cause": "Brief root cause description",
+  "confidence": 0.0-1.0,
+  "contributing_factors": ["factor1", "factor2"],
+  "recommended_action": "Action to take",
+  "prevention": "How to prevent recurrence"
+}`;
+
+    try {
+      const activeProvider = (db.prepare("SELECT provider FROM ai_providers WHERE enabled = 1 LIMIT 1").get() as any)?.provider || "";
+      if (!activeProvider) {
+        // Fallback: deterministic RCA
+        const cpuHigh = (metrics?.cpu || 0) > 85;
+        const memHigh = (metrics?.memory || 0) > 80;
+        const diskHigh = (metrics?.disk || 0) > 90;
+        return res.json({
+          root_cause: cpuHigh ? "CPU saturation detected" : memHigh ? "Memory pressure" : diskHigh ? "Disk space running low" : "No clear root cause detected",
+          confidence: 0.7,
+          contributing_factors: [
+            cpuHigh ? `CPU at ${metrics.cpu}%` : "",
+            memHigh ? `RAM at ${metrics.memory}%` : "",
+            diskHigh ? `Disk at ${metrics.disk}%` : ""
+          ].filter(Boolean),
+          recommended_action: cpuHigh ? "Check top processes and consider scaling" : memHigh ? "Review memory usage patterns" : diskHigh ? "Clean up disk or expand storage" : "No action needed",
+          prevention: "Set up proactive thresholds at 70% to act before critical",
+          fallback: true
+        });
+      }
+      
+      const { getLLMResponse } = await import("../services/llm-service.js");
+      const response = await getLLMResponse(activeProvider, prompt);
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0]);
+        return res.json(result);
+      }
+      return res.json({ root_cause: response.substring(0, 200), confidence: 0.5 });
+    } catch (e: any) {
+      return res.json({ root_cause: `Analysis failed: ${e.message}`, confidence: 0.0 });
+    }
+  });
+
+  // ── GET /api/neural/predict/:metric — Predicción Prophet ──────
+  router.get("/neural/predict/:metric", async (req: Request, res: Response) => {
+    const { metric } = req.params;
+    if (!["cpu", "memory", "disk"].includes(metric)) {
+      return res.status(400).json({ error: "Metric must be cpu, memory, or disk" });
+    }
+    
+    try {
+      const axios = (await import("axios")).default;
+      const response = await axios.get(`http://192.168.174.133:9501/predict/${metric}`, { timeout: 10000 });
+      return res.json(response.data);
+    } catch {
+      // Fallback: simple trend prediction
+      const history = db.prepare(
+        "SELECT cpu, memory, disk FROM servers WHERE cpu IS NOT NULL LIMIT 5"
+      ).all() as any[];
+      const values = history.map((h: any) => h[metric as keyof typeof h]).filter((v: any) => v != null);
+      const avg = values.length > 0 ? values.reduce((a: number, b: number) => a + b, 0) / values.length : 50;
+      
+      return res.json({
+        metric,
+        predictions: Array.from({ length: 6 }, (_, i) => ({
+          timestamp: new Date(Date.now() + i * 600000).toISOString(),
+          value: Math.round((avg + Math.random() * 10 - 5) * 10) / 10,
+          lower_bound: Math.round((avg - 10) * 10) / 10,
+          upper_bound: Math.round((avg + 10) * 10) / 10
+        })),
+        trend: "stable",
+        fallback: true
+      });
+    }
+  });
+
   return router;
 }
