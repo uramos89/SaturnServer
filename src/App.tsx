@@ -243,7 +243,7 @@ const UserManager = ({ t }: { t: (k: string) => string }) => {
           <div className="text-right">Actions</div>
         </div>
         <div className="divide-y divide-white/5">
-          {users.map(u => (
+          {(users || []).map((u: any) => (
             <div key={u.id} className="grid grid-cols-4 p-4 items-center text-xs">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-500 font-bold">
@@ -1523,7 +1523,7 @@ const SkillsView = ({ skills, setSkills }: { skills: any[], setSkills: any }) =>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {skills.map(s => (
+        {(skills || []).map((s: any) => (
           <div key={s.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 hover:border-orange-500/30 transition-all group flex flex-col">
             <div className="flex items-start justify-between mb-4">
               <h3 className="text-xs font-black uppercase text-white leading-relaxed">{s.name}</h3>
@@ -1598,7 +1598,7 @@ const TreeNode = ({ node, level = 0, onSelectFile, selectedFile }: any) => {
       </button>
       {isDir && expanded && node.children && (
         <div className="border-l border-white/5 ml-4 mt-1">
-          {node.children.map((child: any, i: number) => (
+          {(node.children || []).map((child: any, i: number) => (
             <TreeNode key={i} node={child} level={level + 1} onSelectFile={onSelectFile} selectedFile={selectedFile} />
           ))}
         </div>
@@ -1641,7 +1641,7 @@ const ContextPView = () => {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div className="lg:col-span-1 bg-black/40 border border-white/5 rounded-2xl p-4 overflow-y-auto max-h-[600px] custom-scrollbar">
-          {tree.map((node, i) => (
+          {(tree || []).map((node: any, i: number) => (
             <TreeNode key={i} node={node} onSelectFile={loadFile} selectedFile={selectedFile} />
           ))}
         </div>
@@ -1703,7 +1703,7 @@ const AuditView = () => {
             <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full mx-auto mb-4" />
             <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Loading Audit Trail...</p>
           </div>
-        ) : logs.length === 0 ? (
+        ) : (logs || []).length === 0 ? (
           <div className="flex flex-col items-center justify-center flex-1 text-center p-8">
             <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">No audit logs found.</p>
           </div>
@@ -1720,7 +1720,7 @@ const AuditView = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {logs.map((log, i) => (
+                {(logs || []).map((log, i) => (
                   <tr key={i} className="hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
                     <td className="p-4 text-slate-500">{new Date(log.timestamp).toLocaleString()}</td>
                     <td className="p-4"><span className="px-2 py-1 bg-white/5 rounded-lg text-orange-500 uppercase">{log.action}</span></td>
@@ -2010,17 +2010,17 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Top Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title={t('stats.total')} value={servers.length} icon={Server} color="text-blue-500" />
-        <StatCard title={t('stats.online')} value={servers&&servers.filter(s => s.status === 'online').length} icon={CheckCircle2} color="text-emerald-500" />
-        <StatCard title={t('stats.incidents')} value={incidents&&incidents.filter(i => i.status === 'open').length} icon={AlertTriangle} color="text-rose-500" />
-        <StatCard title={t('stats.ssh')} value={sshConnections&&sshConnections.filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
+        <StatCard title={t('stats.total')} value={(servers || []).length} icon={Server} color="text-blue-500" />
+        <StatCard title={t('stats.online')} value={(servers || []).filter(s => s.status === 'online').length} icon={CheckCircle2} color="text-emerald-500" />
+        <StatCard title={t('stats.incidents')} value={(incidents || []).filter(i => i.status === 'open').length} icon={AlertTriangle} color="text-rose-500" />
+        <StatCard title={t('stats.ssh')} value={(sshConnections || []).filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
       </div>
 
       {/* Server Selector */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-2">Live Monitor:</span>
-        {servers.length === 0 && <span className="text-[10px] text-slate-600 italic">No servers connected</span>}
-        {servers.map(s => (
+        {(servers || []).length === 0 && <span className="text-[10px] text-slate-600 italic">No servers connected</span>}
+        {(servers || []).map(s => (
           <button
             key={s.id}
             onClick={() => setDashboardServerId(s.id)}
@@ -2158,8 +2158,8 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
               <button onClick={() => setActiveTab('servers')} className="text-[10px] font-black uppercase text-orange-500 hover:underline">View All</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {servers.slice(0, 4).map(s => <ServerCard key={s.id} server={s} onClick={() => { setSelectedServer(s); setServerDetailTab('summary'); setActiveTab('servers'); }} />)}
-              {servers.length === 0 && <div className="col-span-full p-12 border border-dashed border-white/10 rounded-2xl text-center"><Server size={24} className="text-slate-600 mx-auto mb-2" /><p className="text-[10px] font-black uppercase text-slate-600">No servers registered</p></div>}
+              {(servers || []).slice(0, 4).map(s => <ServerCard key={s.id} server={s} onClick={() => { setSelectedServer(s); setServerDetailTab('summary'); setActiveTab('servers'); }} />)}
+              {(servers || []).length === 0 && <div className="col-span-full p-12 border border-dashed border-white/10 rounded-2xl text-center"><Server size={24} className="text-slate-600 mx-auto mb-2" /><p className="text-[10px] font-black uppercase text-slate-600">No servers registered</p></div>}
             </div>
           </section>
         </div>
@@ -2170,8 +2170,8 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
               Open Incidents
             </h2>
             <div className="space-y-3">
-              {incidents.filter(i => i.status === 'open').length > 0 ? (
-                incidents.filter(i => i.status === 'open').slice(0, 5).map(inc => <IncidentCard key={inc.id} incident={inc} analyzing={analyzingIncident === inc.id} onAnalyze={() => handleAnalyzeIncident(inc.id)} onResolve={() => handleResolveIncident(inc.id)} t={t} />)
+              {(incidents || []).filter((i: any) => i.status === 'open').length > 0 ? (
+                (incidents || []).filter((i: any) => i.status === 'open').slice(0, 5).map(inc => <IncidentCard key={inc.id} incident={inc} analyzing={analyzingIncident === inc.id} onAnalyze={() => handleAnalyzeIncident(inc.id)} onResolve={() => handleResolveIncident(inc.id)} t={t} />)
               ) : <div className="p-8 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 text-center"><p className="text-[10px] font-black uppercase text-emerald-500">All clear</p></div>}
             </div>
           </section>
@@ -2202,8 +2202,8 @@ let _neuralResultCache: any = null;
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {servers.map(s => <ServerCard key={s.id} server={s} onClick={() => { setSelectedServer(s); setServerDetailTab('summary'); }} />)}
-        {servers.length === 0 && (
+        {(servers || []).map(s => <ServerCard key={s.id} server={s} onClick={() => { setSelectedServer(s); setServerDetailTab('summary'); }} />)}
+        {(servers || []).length === 0 && (
           <div className="col-span-full p-12 border border-dashed border-white/10 rounded-2xl text-center">
             <Server size={32} className="text-slate-600 mx-auto mb-4" />
             <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No nodes registered</p>
@@ -2302,9 +2302,9 @@ let _neuralResultCache: any = null;
               </tr>
             </thead>
             <tbody>
-              {dataArray.map((row: any, i: number) => (
+              {(dataArray || []).map((row: any, i: number) => (
                 <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
-                  {keys.map(k => <td key={k} className="p-4 truncate max-w-[200px]">{typeof row[k] === 'object' ? JSON.stringify(row[k]) : String(row[k])}</td>)}
+                  {(keys || []).map(k => <td key={k} className="p-4 truncate max-w-[200px]">{typeof row[k] === 'object' ? JSON.stringify(row[k]) : String(row[k])}</td>)}
                 </tr>
               ))}
             </tbody>
@@ -2831,7 +2831,7 @@ let _neuralResultCache: any = null;
             </tr>
           </thead>
           <tbody>
-            {dataArray.map((row: any, i: number) => (
+            {((dataArray || [])).map((row: any, i: number) => (
               <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
                 <td className="p-4">{row.pid}</td>
                 <td className="p-4">{row.user}</td>
@@ -2883,7 +2883,7 @@ let _neuralResultCache: any = null;
             </tr>
           </thead>
           <tbody>
-            {dataArray.map((row: any, i: number) => (
+            {((dataArray || [])).map((row: any, i: number) => (
               <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
                 <td className="p-4 font-bold text-white">{row.iface}</td>
                 <td className="p-4">
@@ -2950,7 +2950,7 @@ let _neuralResultCache: any = null;
               </tr>
             </thead>
             <tbody>
-              {dataArray.map((row: any, i: number) => (
+              {((dataArray || [])).map((row: any, i: number) => (
                 <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
                   <td className="p-4 text-slate-500">{row.id}</td>
                   <td className="p-4 font-bold text-white">{row.name}</td>
@@ -3014,7 +3014,7 @@ let _neuralResultCache: any = null;
               </tr>
             </thead>
             <tbody>
-              {dataArray.map((row: any, i: number) => (
+              {((dataArray || [])).map((row: any, i: number) => (
                 <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
                   <td className="p-4 font-bold text-white">{row.name}</td>
                   <td className="p-4 text-orange-400">{row.schedule}</td>
@@ -3066,7 +3066,7 @@ let _neuralResultCache: any = null;
             </tr>
           </thead>
           <tbody>
-            {dataArray.map((row: any, i: number) => (
+            {((dataArray || [])).map((row: any, i: number) => (
               <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
                 <td className="p-4 font-bold text-white">{row.username}</td>
                 <td className="p-4">{row.uid}/{row.gid}</td>
@@ -3124,7 +3124,7 @@ let _neuralResultCache: any = null;
               </tr>
             </thead>
             <tbody>
-              {dataArray.map((row: any, i: number) => (
+              {((dataArray || [])).map((row: any, i: number) => (
                 <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
                   <td className="p-4 font-bold text-white">{row.name}</td>
                   <td className="p-4 text-orange-400">{row.version}</td>
@@ -3159,7 +3159,7 @@ let _neuralResultCache: any = null;
             </tr>
           </thead>
           <tbody>
-            {dataArray.map((row: any, i: number) => (
+            {((dataArray || [])).map((row: any, i: number) => (
               <tr key={i} className="border-b border-white/5 hover:bg-white/5 text-[10px] text-slate-300 font-mono transition-colors">
                 <td className="p-4 font-bold text-white">{row.domain}</td>
                 <td className="p-4 truncate max-w-[200px]">{row.root}</td>
@@ -3188,7 +3188,7 @@ let _neuralResultCache: any = null;
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {dataArray.map((row: any, i: number) => (
+        {((dataArray || [])).map((row: any, i: number) => (
           <div key={i} className="p-6 rounded-2xl bg-black/40 border border-white/5 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -3290,15 +3290,15 @@ let _neuralResultCache: any = null;
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4">
-          {loadingTasks && proactiveActivities.length === 0 ? (
+          {loadingTasks && (proactiveActivities || []).length === 0 ? (
             <div className="p-12 text-center"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full mx-auto" /></div>
-          ) : proactiveActivities.length === 0 ? (
+          ) : (proactiveActivities || []).length === 0 ? (
             <div className="p-12 border border-dashed border-white/10 rounded-2xl text-center">
               <Activity size={32} className="text-slate-600 mx-auto mb-4" />
               <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No proactive tasks defined</p>
             </div>
           ) : (
-            proactiveActivities.map(a => (
+            (proactiveActivities || []).map((a: any) => (
               <div key={a.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:border-orange-500/30 transition-all group">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
@@ -3316,7 +3316,7 @@ let _neuralResultCache: any = null;
                 <div className="flex items-center gap-4 w-full md:w-auto">
                   <div className="hidden md:block text-right">
                     <p className="text-[9px] font-black uppercase text-slate-600 mb-1">Assigned Skill</p>
-                    <p className="text-[10px] font-mono text-slate-400">{skills.find(s => s.id === a.skillId)?.name || a.skillId}</p>
+                    <p className="text-[10px] font-mono text-slate-400">{(skills || []).find((s: any) => s.id === a.skillId)?.name || a.skillId}</p>
                   </div>
                   <div className="h-8 w-px bg-white/10 mx-2 hidden md:block" />
                   <button onClick={() => handleToggleTask(a)} className={cn(
@@ -3349,7 +3349,7 @@ let _neuralResultCache: any = null;
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Assigned Skill</label>
                     <select value={newTaskForm.skillId} onChange={e => setNewTaskForm({...newTaskForm, skillId: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none">
                       <option value="">-- Select Skill --</option>
-                      {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {(skills || []).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -3476,12 +3476,12 @@ let _neuralResultCache: any = null;
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {loadingCreds && cloudCreds.length === 0 ? (
+          {loadingCreds && (cloudCreds || []).length === 0 ? (
             <div className="p-12 text-center col-span-full flex flex-col items-center gap-4">
                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-10 h-10 border-4 border-slate-700 border-t-orange-500 rounded-full" />
                 <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Decrypting Vault...</p>
             </div>
-          ) : cloudCreds.length === 0 ? (
+          ) : (cloudCreds || []).length === 0 ? (
             <div className="p-16 border-2 border-dashed border-white/5 rounded-[2.5rem] text-center col-span-full flex flex-col items-center gap-4">
               <Key size={48} className="text-slate-800" />
               <div>
@@ -3490,7 +3490,7 @@ let _neuralResultCache: any = null;
               </div>
             </div>
           ) : (
-            cloudCreds.map(c => (
+            (cloudCreds || []).map((c: any) => (
               <CredentialCard 
                 key={c.id} 
                 cred={c} 
@@ -3503,7 +3503,7 @@ let _neuralResultCache: any = null;
         </div>
 
         <AnimatePresence>
-          {discoveredInstances.length > 0 && (
+          {(discoveredInstances || []).length > 0 && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -3513,13 +3513,13 @@ let _neuralResultCache: any = null;
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <Activity className="text-emerald-500" size={20} />
-                    <h3 className="text-sm font-black uppercase tracking-widest text-white">Discovery Results ({discoveredInstances.length} nodes)</h3>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-white">Discovery Results ({(discoveredInstances || []).length} nodes)</h3>
                 </div>
                 <button onClick={() => setDiscoveredInstances([])} className="text-[10px] font-black uppercase text-slate-500 hover:text-white">Clear Results</button>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {discoveredInstances.map((inst, i) => (
+                {(discoveredInstances || []).map((inst, i) => (
                   <motion.div 
                     key={i} 
                     initial={{ opacity: 0, scale: 0.9 }}
@@ -3648,7 +3648,7 @@ let _neuralResultCache: any = null;
       try {
         const res = await api('/api/notifications');
         const data = await res.json();
-        setWebhooks(data.filter((n: any) => n && n.type === 'webhook'));
+        setWebhooks(Array.isArray(data) ? data.filter((n: any) => n && n.type === 'webhook') : []);
       } catch {}
       setFetchingWebhooks(false);
     };
@@ -4000,7 +4000,7 @@ let _neuralResultCache: any = null;
             {webhooks.length > 0 && (
               <div className="space-y-2">
                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Configured Webhooks</p>
-                {webhooks.map(w => (
+                {(webhooks || []).map((w: any) => (
                   <div key={w.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl">
                     <div className="flex items-center gap-2">
                       <Bell size={12} className="text-emerald-500" />
@@ -4052,14 +4052,14 @@ let _neuralResultCache: any = null;
         <div className="space-y-3">
           {loading ? (
             <div className="p-12 text-center"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full mx-auto" /></div>
-          ) : notifs.length === 0 ? (
+          ) : (notifs || []).length === 0 ? (
             <div className="p-12 border border-dashed border-white/10 rounded-2xl text-center">
               <Bell size={32} className="text-slate-600 mx-auto mb-4" />
               <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No notification channels configured</p>
               <p className="text-[10px] text-slate-600 mt-2">Configure webhooks, Telegram, or email in Settings</p>
             </div>
           ) : (
-            notifs.map(n => {
+            (notifs || []).map((n: any) => {
               const icons: Record<string, any> = { webhook: Globe, telegram: Send, email: Mail };
               const Icon = icons[n.type] || Bell;
               return (
