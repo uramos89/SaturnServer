@@ -1178,12 +1178,28 @@ const CredentialCard = ({ cred, onDelete, onScan, scanning }: { cred: any, onDel
 );
 
 // ── Main App Component ─────────────────────────────────────────────────
-const ServerCard = ({ server, onClick }: { server: ManagedServer, onClick: () => void }) => (
+const ServerCard = ({ server, onClick }: { server: ManagedServer, onClick: () => void }) => {
+  const [deleting, setDeleting] = useState(false);
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Delete server ${server.name} (${server.ip})? This cannot be undone.`)) return;
+    setDeleting(true);
+    await api(`/api/servers/${server.id}`, { method: 'DELETE' });
+    setDeleting(false);
+    window.location.reload();
+  };
+  return (
   <motion.div 
     whileHover={{ y: -4 }}
     onClick={onClick}
-    className="p-5 rounded-2xl bg-black/40 border border-white/5 hover:border-orange-500/30 transition-all cursor-pointer group"
+    className="p-5 rounded-2xl bg-black/40 border border-white/5 hover:border-orange-500/30 transition-all cursor-pointer group relative"
   >
+    <button onClick={handleDelete} disabled={deleting}
+      className="absolute top-3 right-3 p-1.5 rounded-lg bg-rose-500/10 text-rose-500 opacity-0 group-hover:opacity-100 hover:bg-rose-500/20 transition-all"
+      title="Delete server"
+    >
+      {deleting ? <RefreshCw size={12} className="animate-spin" /> : <Trash2 size={12} />}
+    </button>
     <div className="flex items-start justify-between mb-4">
       <div className={cn(
         "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
@@ -1212,6 +1228,7 @@ const ServerCard = ({ server, onClick }: { server: ManagedServer, onClick: () =>
     </div>
   </motion.div>
 );
+  };
 
 const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) => {
   const [newServerIp, setNewServerIp] = useState('');
