@@ -374,5 +374,33 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
+  // ── POST /api/neural/anomaly — Detección de anomalías ML ──────────
+  router.post("/neural/anomaly", async (req: Request, res: Response) => {
+    const { cpu, memory, disk } = req.body;
+    const cpuVal = cpu ?? 0;
+    const memVal = memory ?? 0;
+    const diskVal = disk ?? 0;
+
+    try {
+      const axios = (await import("axios")).default;
+      const response = await axios.post("http://192.168.174.133:9500/check",
+        { cpu: cpuVal, memory: memVal, disk: diskVal },
+        { timeout: 5000 }
+      );
+      return res.json(response.data);
+    } catch {
+      // Fallback: threshold-based anomaly detection
+      const isAnomaly = cpuVal > 90 || memVal > 85 || diskVal > 90;
+      return res.json({
+        is_anomaly: isAnomaly,
+        anomaly_score: isAnomaly ? 0.8 : 0.1,
+        prediction: isAnomaly ? "ANOMALY" : "NORMAL",
+        features: { cpu: cpuVal, memory: memVal, disk: diskVal },
+        severity: isAnomaly ? "warning" : "normal",
+        fallback: true
+      });
+    }
+  });
+
   return router;
 }
