@@ -17,6 +17,8 @@
 | B-006 | Skills sin contenido real | Skills | 🟡 Media | Skills en DB sin scripts |
 | B-007 | Terminal pobre (solo texto) | Server Detail | 🟡 Media | No hay terminal interactiva real |
 | B-008 | Resultados desaparecen al navegar | Server Detail | 🟡 Media | Componente se remonta |
+| B-009 | Sin timeout de sesión por inactividad | Global | 🟡 Media | No hay cierre automático |
+| B-010 | Sin bloqueo de IP tras intentos fallidos | Login | 🟡 Media | Rate limit global, no por IP |
 
 ## 📋 Items del Sprint con Criterios de Aceptación
 
@@ -47,6 +49,6 @@
 | Métrica | Valor |
 |---|---|
 | Bugs a corregir | 8 |
-| Items del sprint | 5 |
+| Items del sprint | 7 |
 | Esfuerzo estimado | ~3-4 horas |
 | Dependencia | Ninguna |

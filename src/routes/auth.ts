@@ -10,11 +10,50 @@ const BCRYPT_ROUNDS = 12;
 const ACCESS_TOKEN_EXPIRY = "15m";
 const REFRESH_TOKEN_EXPIRY = "7d";
 
+// ── IP-based rate limiting with 5-minute block after 5 failures ──
+const loginAttempts = new Map<string, { count: number; blockedUntil: number }>();
+
 const loginLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,
-  message: { error: "Too many login attempts. Please try again in 1 minute." },
+  max: 100,
+  message: { error: "Too many requests" },
+  keyGenerator: (req: any) => req.ip || req.connection?.remoteAddress || "unknown",
 });
+
+// Per-IP 5-attempt block middleware
+function ipBlockMiddleware(req: any, res: any, next: any) {
+  const ip = req.ip || req.connection?.remoteAddress || "unknown";
+  const now = Date.now();
+  
+  // Check if IP is blocked
+  const record = loginAttempts.get(ip);
+  if (record && record.blockedUntil > now) {
+    const remaining = Math.ceil((record.blockedUntil - now) / 1000);
+    return res.status(429).json({
+      error: `IP blocked for ${remaining}s due to too many failed attempts`,
+      code: "IP_BLOCKED",
+      blockedFor: remaining
+    });
+  }
+  
+  // Store original json to intercept failed logins
+  const originalJson = res.json.bind(res);
+  res.json = function(body: any) {
+    if (!body?.success && body?.error === "Invalid credentials") {
+      const record = loginAttempts.get(ip) || { count: 0, blockedUntil: 0 };
+      record.count++;
+      if (record.count >= 5) {
+        record.blockedUntil = now + 5 * 60 * 1000; // 5 minutes
+        record.count = 0;
+        console.log(`[SECURITY] IP ${ip} blocked for 5 minutes (5 failed attempts)`);
+      }
+      loginAttempts.set(ip, record);
+    }
+    return originalJson(body);
+  };
+  
+  next();
+}
 
 // ── Store refresh tokens in memory (in production use DB/Redis) ──────
 const refreshTokens = new Set<string>();
@@ -23,7 +62,7 @@ export function createAuthRouter(db: Database.Database): Router {
   const router = Router();
 
   // ── Admin Login ────────────────────────────────────────────────────
-  router.post("/login", loginLimiter, (req: Request, res: Response) => {
+  router.post("/login", loginLimiter, ipBlockMiddleware, (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (typeof username !== "string" || typeof password !== "string") {
       return res.status(400).json({ error: "Invalid credentials format", code: "VALIDATION_ERROR" });

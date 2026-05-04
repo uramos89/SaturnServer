@@ -1876,12 +1876,45 @@ export default function App() {
     return () => clearInterval(interval);
   }, [onboarding]);
 
-  const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
+  const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 min inactivity
+
+const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
     setUser(u);
     localStorage.setItem('saturn-user', JSON.stringify(u));
     if (token) localStorage.setItem('saturn-token', token);
     if (refreshToken) localStorage.setItem('saturn-refresh-token', refreshToken);
+    localStorage.setItem('saturn-last-activity', Date.now().toString());
   };
+
+  // ── Session inactivity timeout ──
+  useEffect(() => {
+    const checkSession = () => {
+      const lastActivity = localStorage.getItem('saturn-last-activity');
+      if (lastActivity && Date.now() - parseInt(lastActivity) > SESSION_TIMEOUT_MS) {
+        console.log('[SESSION] Expired due to inactivity');
+        localStorage.removeItem('saturn-token');
+        localStorage.removeItem('saturn-user');
+        localStorage.removeItem('saturn-refresh-token');
+        localStorage.removeItem('saturn-last-activity');
+        window.location.reload();
+      }
+    };
+    const interval = setInterval(checkSession, 30000); // check every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Update activity timestamp on user interaction ──
+  useEffect(() => {
+    const updateActivity = () => localStorage.setItem('saturn-last-activity', Date.now().toString());
+    window.addEventListener('mousemove', updateActivity, { passive: true });
+    window.addEventListener('keydown', updateActivity, { passive: true });
+    window.addEventListener('click', updateActivity, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', updateActivity);
+      window.removeEventListener('keydown', updateActivity);
+      window.removeEventListener('click', updateActivity);
+    };
+  }, []);
   const handleLogout = () => { setUser(null); localStorage.removeItem('saturn-user'); };
 
   const handleUpdateRemediationMode = async (serverId: string | null, mode: string) => {
