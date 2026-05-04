@@ -36,6 +36,8 @@ export default function AdminPanel({ serverId }: AdminPanelProps) {
   const [error, setError] = useState("");
   const [scriptResult, setScriptResult] = useState<any>(null);
   const [command, setCommand] = useState("");
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const fetchData = async (tab: TabId) => {
     setLoading(true);
@@ -81,15 +83,21 @@ export default function AdminPanel({ serverId }: AdminPanelProps) {
     if (!command.trim()) return;
     setLoading(true);
     setScriptResult(null);
+    const cmd = command;
+    setCommand('');
+    setCommandHistory(prev => [cmd, ...prev].slice(0, 50));
+    setHistoryIndex(-1);
     try {
       const res = await api(`/api/admin/servers/${serverId}/console/exec`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command }),
+        body: JSON.stringify({ command: cmd }),
       });
-      setScriptResult(await res.json());
+      const result = await res.json();
+      result._cmd = cmd;
+      setScriptResult(result);
     } catch (e: any) {
-      setScriptResult({ error: e.message });
+      setScriptResult({ error: e.message, _cmd: cmd });
     } finally {
       setLoading(false);
     }
@@ -114,20 +122,47 @@ export default function AdminPanel({ serverId }: AdminPanelProps) {
       case "backups": return <BackupsTab data={data} onAction={executeAction} />;
       case "console": return (
         <div className="space-y-4">
-          <div className="flex gap-2">
-            <input
-              value={command}
-              onChange={e => setCommand(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && executeCommand()}
-              className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-orange-500"
-              placeholder="Enter command or paste script..."
-            />
+          <div className="flex gap-2 items-start">
+            <div className="flex-1 space-y-1">
+              <input
+                value={command}
+                onChange={e => { setCommand(e.target.value); setHistoryIndex(-1); }}
+                onKeyDown={e => {
+                  if (e.key === "Enter") executeCommand();
+                  if (e.key === "ArrowUp" && commandHistory.length > 0) {
+                    e.preventDefault();
+                    const nextIdx = historyIndex === -1 ? 0 : Math.min(historyIndex + 1, commandHistory.length - 1);
+                    setHistoryIndex(nextIdx);
+                    setCommand(commandHistory[nextIdx]);
+                  }
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    if (historyIndex <= 0) {
+                      setHistoryIndex(-1);
+                      setCommand('');
+                    } else {
+                      const nextIdx = historyIndex - 1;
+                      setHistoryIndex(nextIdx);
+                      setCommand(commandHistory[nextIdx]);
+                    }
+                  }
+                }}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-orange-500"
+                placeholder="Enter command or paste script..."
+              />
+              {commandHistory.length > 0 && (
+                <div className="text-[9px] text-slate-600 px-2">
+                  ↑↓ for history ({commandHistory.length} commands saved)
+                </div>
+              )}
+            </div>
             <button onClick={executeCommand} className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-black font-medium rounded-lg transition-colors flex items-center gap-2">
               <Play className="w-4 h-4" /> Run
             </button>
           </div>
           {scriptResult && (
-            <div className="bg-black/40 border border-white/10 rounded-xl p-4 font-mono text-xs">
+            <div className="bg-black/40 border border-white/10 rounded-xl p-4 font-mono text-xs space-y-2">
+              {scriptResult._cmd && <div className="text-slate-500 border-b border-white/5 pb-2 mb-2">$ {scriptResult._cmd}</div>}
               {scriptResult.stdout && <pre className="text-green-400 whitespace-pre-wrap">{scriptResult.stdout}</pre>}
               {scriptResult.stderr && <pre className="text-red-400 whitespace-pre-wrap">{scriptResult.stderr}</pre>}
               {scriptResult.error && <pre className="text-red-400">{scriptResult.error}</pre>}
