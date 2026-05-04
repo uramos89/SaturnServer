@@ -640,7 +640,7 @@ async function startServer() {
 
   // ── Public paths (no JWT required) ─────────────────────────────────
   app.use("/api", (req, res, next) => {
-    const PUBLIC_PATHS = ["/health", "/setup/status", "/setup/import", "/admin/login", "/admin/create", "/admin/refresh", "/admin/logout", "/metrics/stream"];
+    const PUBLIC_PATHS = ["/health", "/setup/status", "/setup/import", "/admin/login", "/admin/create", "/admin/refresh", "/admin/logout", "/metrics", "/metrics/stream"];
     if (PUBLIC_PATHS.includes(req.path)) return next();
     authenticateJWT(req, res, next);
   });
@@ -756,6 +756,52 @@ async function startServer() {
     console.error("=".repeat(50) + "\n");
     process.exit(1);
   }
+
+  // ── Prometheus Metrics Endpoint ──────────────────────────────────
+  app.get("/api/metrics", (req, res) => {
+    const servers = db.prepare("SELECT id, name, cpu, memory, disk, uptime, status, os FROM servers").all() as any[];
+    const incidents = db.prepare("SELECT COUNT(*) as c FROM incidents WHERE status = 'open'").get() as any;
+    const skills = db.prepare("SELECT COUNT(*) as c FROM skills WHERE enabled = 1").get() as any;
+    const users = db.prepare("SELECT COUNT(*) as c FROM users").get() as any;
+    const audit = db.prepare("SELECT COUNT(*) as c FROM audit_logs").get() as any;
+
+    let metrics = `# HELP saturn_servers_total Total number of managed servers
+# TYPE saturn_servers_total gauge
+saturn_servers_total ${servers.length}
+# HELP saturn_servers_online Number of online servers
+# TYPE saturn_servers_online gauge
+saturn_servers_online ${servers.filter(s => s.status === 'online').length}
+# HELP saturn_incidents_open Number of open incidents
+# TYPE saturn_incidents_open gauge
+saturn_incidents_open ${incidents?.c || 0}
+# HELP saturn_skills_total Number of enabled skills
+# TYPE saturn_skills_total gauge
+saturn_skills_total ${skills?.c || 0}
+# HELP saturn_users_total Number of registered users
+# TYPE saturn_users_total gauge
+saturn_users_total ${users?.c || 0}
+# HELP saturn_audit_events_total Total audit events
+# TYPE saturn_audit_events_total gauge
+saturn_audit_events_total ${audit?.c || 0}
+`;
+
+    // Per-server metrics
+    for (const s of servers) {
+      metrics += `# HELP saturn_server_cpu CPU usage percentage
+# TYPE saturn_server_cpu gauge
+saturn_server_cpu{server="${s.name}",id="${s.id}"} ${s.cpu || 0}
+# HELP saturn_server_memory Memory usage percentage
+# TYPE saturn_server_memory gauge
+saturn_server_memory{server="${s.name}",id="${s.id}"} ${s.memory || 0}
+# HELP saturn_server_disk Disk usage percentage
+# TYPE saturn_server_disk gauge
+saturn_server_disk{server="${s.name}",id="${s.id}"} ${s.disk || 0}
+`;
+    }
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(metrics);
+  });
 
   // ── SSE: Metrics Stream (lightweight alternative to Socket.io) ────
   app.get("/api/metrics/stream", (req, res) => {
