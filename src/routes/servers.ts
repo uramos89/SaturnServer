@@ -4,7 +4,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { SSHConnectSchema, CommandExecSchema } from "../lib/validators.js";
-import { decryptCredential, logAudit } from "../lib/server-helpers.js";
+import { decryptCredential, encryptCredential, logAudit } from "../lib/server-helpers.js";
 import type { SSHAgent, SSHConnectionConfig, SystemMetrics } from "../lib/ssh-agent.js";
 import { validateHost } from "../lib/ssh-agent.js";
 import type { ScriptGenerator } from "../lib/script-generator.js";
