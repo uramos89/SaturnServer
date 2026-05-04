@@ -65,11 +65,10 @@ export function createAuthRouter(db: Database.Database): Router {
   router.post("/login", loginLimiter, ipBlockMiddleware, (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (typeof username !== "string" || typeof password !== "string") {
-      return res.status(400).json({ error: "Invalid credentials format", code: "VALIDATION_ERROR" });
+      return res.status(400).json({ success: false, error: "Invalid credentials format", code: "VALIDATION_ERROR", status: 400 });
     }
     const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
-    const loginRole = user.role;
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    if (!user) return res.status(401).json({ success: false, error: "Invalid credentials", code: "AUTH_ERROR", status: 401 });
 
     // Verify password (supports both bcrypt and legacy PBKDF2)
     let passwordValid = false;
@@ -92,7 +91,7 @@ export function createAuthRouter(db: Database.Database): Router {
       }
     }
 
-    if (!passwordValid) return res.status(401).json({ error: "Invalid credentials" });
+    if (!passwordValid) return res.status(401).json({ success: false, error: "Invalid credentials", code: "AUTH_ERROR", status: 401 });
 
     // Generate access token (short-lived)
     const token = jwt.sign(
@@ -170,13 +169,13 @@ export function createAuthRouter(db: Database.Database): Router {
   router.post("/create", (req: Request, res: Response) => {
     const { username, password } = req.body;
     if (typeof username !== "string" || typeof password !== "string") {
-      return res.status(400).json({ error: "Invalid credentials format", code: "VALIDATION_ERROR" });
+      return res.status(400).json({ success: false, error: "Invalid credentials format", code: "VALIDATION_ERROR", status: 400 });
     }
     const fixedRole = "admin";
     if (typeof username !== 'string' || typeof password !== 'string' || password.length < 8 || /[<>"&]/.test(username)) {
       return res
         .status(400)
-        .json({ error: "Username required and password must be a string of at least 8 characters" });
+        .json({ success: false, error: "Username required and password must be a string of at least 8 characters", code: "VALIDATION_ERROR", status: 400 });
     }
     const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
     if (existing) return res.status(409).json({ error: "User already exists" });

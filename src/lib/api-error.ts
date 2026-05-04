@@ -1,6 +1,9 @@
 /**
  * Consistent API Error Handling
  *
+ * Standard error response format:
+ *   { "success": false, "error": "mensaje", "code": "ERROR_CODE", "status": 400 }
+ *
  * Uso en routes:
  *   throwApiError(res, 400, "Mensaje", "VALIDATION_ERROR")
  *   throwApiError(res, 401, "Token inválido", "TOKEN_EXPIRED")
@@ -11,9 +14,11 @@
 
 import { type Response } from "express";
 
-export interface ApiError {
+export interface ApiErrorResponse {
+  success: false;
   error: string;
-  code?: string;
+  code: string;
+  status: number;
 }
 
 const ERROR_CODES: Record<number, string> = {
@@ -27,7 +32,23 @@ const ERROR_CODES: Record<number, string> = {
 };
 
 /**
- * Lanza un error API con formato consistente.
+ * Builds a consistent API error response object.
+ */
+export function buildApiError(
+  status: number,
+  message: string,
+  code?: string
+): ApiErrorResponse {
+  return {
+    success: false,
+    error: message,
+    code: code || ERROR_CODES[status] || "UNKNOWN_ERROR",
+    status,
+  };
+}
+
+/**
+ * Sends a consistent API error response.
  */
 export function throwApiError(
   res: Response,
@@ -35,10 +56,7 @@ export function throwApiError(
   message: string,
   code?: string
 ): Response {
-  const body: ApiError = { error: message };
-  if (code) body.code = code;
-  else if (ERROR_CODES[status]) body.code = ERROR_CODES[status];
-  return res.status(status).json(body);
+  return res.status(status).json(buildApiError(status, message, code));
 }
 
 /**

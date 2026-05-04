@@ -7,7 +7,7 @@ import {
   LogOut, Menu, Trash2, Folder, FileText, Play, Plus, Trash, Upload, X, Users, Package, HeartPulse, Sliders
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, api } from './lib/utils';
+import { cn, api, parseApiError } from './lib/utils';
 import type { ManagedServer, Incident, AuditLog, NotificationConfig, AIConfig, SshConnection } from './lib/types';
 import { t, Language } from './lib/i18n';
 import { 
@@ -39,6 +39,7 @@ interface UserData {
 }
 
 // ── Error Boundary ────────────────────────────────────────────────────
+// Wraps component tree to catch rendering errors and show them consistently.
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
   constructor(props: any) {
     super(props);
@@ -47,6 +48,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
   render() {
     if (this.state.hasError) {
+      const errorMsg = parseApiError(this.state.error) || 'Unknown runtime exception';
       return (
         <div className="p-8 rounded-[2rem] bg-rose-500/5 border border-rose-500/20 text-rose-500">
           <div className="flex items-center gap-3 mb-4">
@@ -54,7 +56,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
             <h3 className="text-sm font-black uppercase tracking-widest">Interface Component Error</h3>
           </div>
           <pre className="text-[10px] font-mono bg-black/40 p-4 rounded-xl border border-white/5 mb-4 overflow-x-auto">
-            {this.state.error?.stack || this.state.error?.message || 'Unknown runtime exception'}
+            {this.state.error?.stack || errorMsg}
           </pre>
           <button 
             onClick={() => { this.setState({ hasError: false }); window.location.reload(); }} 
@@ -90,10 +92,10 @@ const LoginView = ({ onLogin, t }: { onLogin: (u: UserData, token?: string, refr
       if (data.success) {
         onLogin(data.user, data.token, data.refreshToken);
       } else {
-        setError(data.error || 'Invalid credentials');
+        setError(parseApiError(data));
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(parseApiError(err));
     } finally {
       setLoading(false);
     }
@@ -1781,6 +1783,70 @@ function useSocket(onMetricsUpdate: (data: any) => void, onNewIncident: (inciden
   return { subscribeToServer, unsubscribeFromServer };
 }
 
+// ── SSE Hook (lightweight alternative to Socket.io, TD-005) ─────────
+// Connect via EventSource to /api/metrics/stream and emit events.
+// Returns the same interface as useSocket for drop-in replacement.
+function useSSE(onMetricsUpdate: (data: any) => void, _onNewIncident: (incident: any) => void) {
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    const es = new EventSource('/api/metrics/stream');
+    eventSourceRef.current = es;
+
+    es.addEventListener('connected', () => {
+      console.log('[SSE] Connected to Saturn Metrics Stream');
+    });
+
+    es.addEventListener('metrics', (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.servers) {
+          // Emit per-server metrics updates
+          for (const s of data.servers) {
+            onMetricsUpdate({
+              serverId: s.id,
+              cpu: s.cpu,
+              memory: s.memory,
+              disk: s.disk,
+              uptime: s.uptime,
+              status: s.status,
+              timestamp: s.timestamp || data.timestamp
+            });
+          }
+        }
+      } catch (e) {
+        console.error('[SSE] Failed to parse metrics event:', e);
+      }
+    });
+
+    // Also listen to per-server events for more granular updates
+    es.onmessage = (event: MessageEvent) => {
+      if (event.type === 'message' && event.data) {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.serverId) {
+            onMetricsUpdate(parsed);
+          }
+        } catch {}
+      }
+    };
+
+    es.onerror = () => {
+      console.warn('[SSE] Connection error — will auto-reconnect');
+    };
+
+    return () => {
+      es.close();
+    };
+  }, [onMetricsUpdate, _onNewIncident]);
+
+  // SSE doesn't support per-server subscription — it receives all data
+  const subscribeToServer = (_serverId: string) => {};
+  const unsubscribeFromServer = (_serverId: string) => {};
+
+  return { subscribeToServer, unsubscribeFromServer };
+}
+
 export default function App() {
   const { lang, setLang, t } = useLang();
   const [onboarding, setOnboarding] = useState<boolean | null>(null);
@@ -1815,6 +1881,11 @@ export default function App() {
   });
   const [analyzingIncident, setAnalyzingIncident] = useState<string | null>(null);
 
+  // Realtime transport toggle: 'socketio' | 'sse'
+  const [realtimeMode, setRealtimeMode] = useState<'socketio' | 'sse'>(() => {
+    return (localStorage.getItem('saturn-realtime-mode') as 'socketio' | 'sse') || 'socketio';
+  });
+
   // Real-time Metrics Handler
   const handleMetricsUpdate = useCallback((data: any) => {
     setServers(prev => prev.map(s => s.id === data.serverId ? { ...s, ...data } : s));
@@ -1836,7 +1907,19 @@ export default function App() {
     setIncidents(prev => [incident, ...prev]);
   }, []);
 
-  const { subscribeToServer, unsubscribeFromServer } = useSocket(handleMetricsUpdate, handleNewIncident);
+  // Choose transport based on toggle
+  const socketHook = useSocket(handleMetricsUpdate, handleNewIncident);
+  const sseHook = useSSE(handleMetricsUpdate, handleNewIncident);
+  const { subscribeToServer, unsubscribeFromServer } = realtimeMode === 'socketio' ? socketHook : sseHook;
+
+  // Toggle handler
+  const toggleRealtimeMode = useCallback(() => {
+    setRealtimeMode(prev => {
+      const next = prev === 'socketio' ? 'sse' : 'socketio';
+      localStorage.setItem('saturn-realtime-mode', next);
+      return next;
+    });
+  }, []);
   
   // Add Server State
   const [showAddServer, setShowAddServer] = useState(false);
@@ -2033,6 +2116,30 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
         <StatCard title={t('stats.online')} value={(servers || []).filter(s => s.status === 'online').length} icon={CheckCircle2} color="text-emerald-500" />
         <StatCard title={t('stats.incidents')} value={(incidents || []).filter(i => i.status === 'open').length} icon={AlertTriangle} color="text-rose-500" />
         <StatCard title={t('stats.ssh')} value={(sshConnections || []).filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
+      </div>
+
+      {/* Realtime Transport Toggle */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            Transport:
+          </span>
+          <button
+            onClick={toggleRealtimeMode}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+              realtimeMode === 'socketio'
+                ? "bg-orange-500/10 text-orange-400 border border-orange-500/30"
+                : "bg-sky-500/10 text-sky-400 border border-sky-500/30"
+            )}
+            title="Toggle between WebSocket (Socket.io) and SSE for real-time metrics"
+          >
+            {realtimeMode === 'socketio' ? '⚡ Socket.io' : '📡 SSE'}
+          </button>
+          <span className="text-[9px] text-slate-600 italic">
+            {realtimeMode === 'socketio' ? 'Bidirectional (default)' : 'Lightweight (EventSource)'}
+          </span>
+        </div>
       </div>
 
       {/* Server Selector */}

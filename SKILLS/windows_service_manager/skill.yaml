@@ -1,0 +1,125 @@
+name: Windows Service Manager
+language: powershell
+version: 1.0
+description: "Manage Windows services — list, start, stop, restart, enable, disable, and query service status and dependencies."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: list, start, stop, restart, enable, disable, status, dependencies"
+    required: true
+    options: [list, start, stop, restart, enable, disable, status, dependencies]
+  - name: SERVICE_NAME
+    type: string
+    description: "Name of the Windows service (e.g. wuauserv, MSSQLSERVER)"
+    required: false
+  - name: DISPLAY_NAME
+    type: string
+    description: "Display name filter for listing services"
+    required: false
+  - name: STARTUP_TYPE
+    type: string
+    description: "Startup type: Automatic, Manual, Disabled, AutomaticDelayedStart"
+    options: [Automatic, Manual, Disabled, AutomaticDelayedStart]
+    required: false
+risks:
+  - "High impact: stopping critical services (e.g. RpcSs, EventLog) may destabilize the OS"
+  - "Service dependencies: stopping a service may cascade to dependent services"
+  - "Safe rollback: services can be restarted if ACTION is restart or start after stop"
+script: |
+  param(
+      [Parameter(Mandatory=$false)]
+      [string]$ACTION = "list",
+      [Parameter(Mandatory=$false)]
+      [string]$SERVICE_NAME = "",
+      [Parameter(Mandatory=$false)]
+      [string]$DISPLAY_NAME = "",
+      [Parameter(Mandatory=$false)]
+      [string]$STARTUP_TYPE = ""
+  )
+
+  switch ($ACTION) {
+      "list" {
+          if ($DISPLAY_NAME) {
+              Get-Service | Where-Object { $_.DisplayName -like "*$DISPLAY_NAME*" } | Select-Object Name, DisplayName, Status, StartType, ServiceType | ConvertTo-Json
+          } else {
+              Get-Service | Select-Object Name, DisplayName, Status, StartType, ServiceType | ConvertTo-Json
+          }
+          break
+      }
+      "start" {
+          if (-not $SERVICE_NAME) { Write-Error "SERVICE_NAME is required for start action"; exit 1 }
+          Start-Service -Name $SERVICE_NAME -ErrorAction SilentlyContinue
+          if ($?) {
+              $svc = Get-Service -Name $SERVICE_NAME
+              Write-Output "Service $SERVICE_NAME started successfully. Status: $($svc.Status)"
+          } else {
+              Write-Error "Failed to start service $SERVICE_NAME"
+              exit 1
+          }
+          break
+      }
+      "stop" {
+          if (-not $SERVICE_NAME) { Write-Error "SERVICE_NAME is required for stop action"; exit 1 }
+          Stop-Service -Name $SERVICE_NAME -Force -ErrorAction SilentlyContinue
+          if ($?) {
+              $svc = Get-Service -Name $SERVICE_NAME
+              Write-Output "Service $SERVICE_NAME stopped. Status: $($svc.Status)"
+          } else {
+              Write-Error "Failed to stop service $SERVICE_NAME"
+              exit 1
+          }
+          break
+      }
+      "restart" {
+          if (-not $SERVICE_NAME) { Write-Error "SERVICE_NAME is required for restart action"; exit 1 }
+          Restart-Service -Name $SERVICE_NAME -Force -ErrorAction SilentlyContinue
+          if ($?) {
+              $svc = Get-Service -Name $SERVICE_NAME
+              Write-Output "Service $SERVICE_NAME restarted. Status: $($svc.Status)"
+          } else {
+              Write-Error "Failed to restart service $SERVICE_NAME"
+              exit 1
+          }
+          break
+      }
+      "enable" {
+          if (-not $SERVICE_NAME) { Write-Error "SERVICE_NAME is required for enable action"; exit 1 }
+          if ($STARTUP_TYPE) {
+              Set-Service -Name $SERVICE_NAME -StartupType $STARTUP_TYPE
+          } else {
+              Set-Service -Name $SERVICE_NAME -StartupType Automatic
+          }
+          $svc = Get-Service -Name $SERVICE_NAME
+          Write-Output "Service $SERVICE_NAME enabled. StartType: $($svc.StartType)"
+          break
+      }
+      "disable" {
+          if (-not $SERVICE_NAME) { Write-Error "SERVICE_NAME is required for disable action"; exit 1 }
+          Stop-Service -Name $SERVICE_NAME -Force -ErrorAction SilentlyContinue
+          Set-Service -Name $SERVICE_NAME -StartupType Disabled
+          $svc = Get-Service -Name $SERVICE_NAME
+          Write-Output "Service $SERVICE_NAME disabled. StartType: $($svc.StartType)"
+          break
+      }
+      "status" {
+          if (-not $SERVICE_NAME) { Write-Error "SERVICE_NAME is required for status action"; exit 1 }
+          Get-Service -Name $SERVICE_NAME | Select-Object Name, DisplayName, Status, StartType, CanPauseAndContinue, CanShutdown, CanStop, DependentServices | ConvertTo-Json -Depth 3
+          break
+      }
+      "dependencies" {
+          if (-not $SERVICE_NAME) { Write-Error "SERVICE_NAME is required for dependencies action"; exit 1 }
+          $svc = Get-Service -Name $SERVICE_NAME
+          $dependent = $svc.DependentServices | Select-Object Name, DisplayName, Status
+          $dependsOn = Get-Service | Where-Object { $_.DependentServices.Name -contains $SERVICE_NAME }
+          @{
+              ServiceName = $SERVICE_NAME
+              Dependencies = @($dependent)
+              DependedBy = @($dependsOn | Select-Object Name, DisplayName, Status)
+          } | ConvertTo-Json -Depth 3
+          break
+      }
+      default {
+          Write-Error "Unknown action: $ACTION. Valid actions: list, start, stop, restart, enable, disable, status, dependencies"
+          exit 1
+      }
+  }

@@ -56,7 +56,7 @@ export function createSkillsRouter(
         ).run(id, name, language, version, description, "custom");
         res.json({ success: true, id, warning: "Saved without script body" });
       } else {
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ success: false, error: e.message, code: "IMPORT_ERROR", status: 500 });
       }
     }
   });
@@ -64,26 +64,24 @@ export function createSkillsRouter(
   // ── Seed default skills if empty ────────────────────────────────────
   const existingSkills = db.prepare("SELECT COUNT(*) as c FROM skills").get() as any;
   if (existingSkills.c === 0) {
-    db.prepare(
+    const insert = db.prepare(
       "INSERT INTO skills (id, name, language, version, description, path) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(
-      "ps_remediation_v1",
-      "PowerShell Remediation Expert",
-      "powershell",
-      "1.0",
-      "Expert in Windows Server remediation",
-      "SKILLS/powershell_remediation_v1/skill.yaml"
     );
-    db.prepare(
-      "INSERT INTO skills (id, name, language, version, description, path) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(
-      "bash_remediation_v1",
-      "Bash Linux Remediation",
-      "bash",
-      "1.0",
-      "Expert in Linux system recovery",
-      "SKILLS/bash_remediation_v1/skill.yaml"
-    );
+    const defaultSkills = [
+      ["ps_remediation_v1", "PowerShell Remediation Expert", "powershell", "1.0", "Expert in Windows Server remediation", "SKILLS/powershell_remediation_v1/skill.yaml"],
+      ["bash_remediation_v1", "Bash Linux Remediation", "bash", "1.0", "Expert in Linux system recovery", "SKILLS/bash_remediation_v1/skill.yaml"],
+      ["windows_firewall_manager", "Windows Firewall Manager", "powershell", "1.0", "Manage Windows Firewall rules via netsh and PowerShell. List, add, remove inbound/outbound rules.", "SKILLS/windows_firewall_manager/skill.yaml"],
+      ["windows_task_scheduler", "Windows Task Scheduler", "powershell", "1.0", "Manage scheduled tasks on Windows. List, create, enable, disable, delete tasks.", "SKILLS/windows_task_scheduler/skill.yaml"],
+      ["windows_service_manager", "Windows Service Manager", "powershell", "1.0", "Manage Windows services — list, start, stop, restart, enable, disable, and query service status.", "SKILLS/windows_service_manager/skill.yaml"],
+      ["windows_event_log_reader", "Windows Event Log Reader", "powershell", "1.0", "Read and query Windows Event Logs — system, application, security, and custom logs with filters.", "SKILLS/windows_event_log_reader/skill.yaml"],
+    ];
+    for (const s of defaultSkills) {
+      try {
+        insert.run(...s);
+      } catch (e: any) {
+        console.warn(`[SEED] Could not seed skill ${s[0]}: ${e.message}`);
+      }
+    }
   }
 
   // ── Remediation Modes ───────────────────────────────────────────────
@@ -129,7 +127,7 @@ export function createSkillsRouter(
     }
 
     const skill = db.prepare("SELECT * FROM skills WHERE id = ?").get(targetSkillId) as any;
-    if (!skill) return res.status(404).json({ error: "Skill not found" });
+    if (!skill) return res.status(404).json({ success: false, error: "Skill not found", code: "NOT_FOUND", status: 404 });
 
     const server = db.prepare("SELECT * FROM servers WHERE id = ?").get(serverId) as any;
     const skillDef = fs.readFileSync(skill.path, "utf8");
@@ -205,7 +203,7 @@ export function createSkillsRouter(
 
       res.json({ success: true, ...result, status, skill: skill.name });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "GENERATE_ERROR", status: 500 });
     }
   });
 

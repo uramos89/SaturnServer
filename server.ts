@@ -544,17 +544,17 @@ initDualProviders();
 // ── Saturn-X JWT Middleware ─────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════
 
-// Zod validation middleware
+// Zod validation middleware with consistent error format
 function validate(schema: z.ZodSchema) {
   return (req: Request, res: Response, next: NextFunction) => {
     const result = schema.safeParse(req.body);
     if (!result.success) {
-      return res
-        .status(400)
-        .json({
-          error: "VALIDATION_ERROR",
-          message: result.error.issues.map((i) => i.message).join(", "),
-        });
+      return res.status(400).json({
+        success: false,
+        error: result.error.issues.map((i) => i.message).join(", "),
+        code: "VALIDATION_ERROR",
+        status: 400,
+      });
     }
     req.body = result.data;
     next();
@@ -567,12 +567,22 @@ function authenticateJWT(req: Request, res: Response, next: NextFunction) {
     const token = authHeader.split(" ")[1];
     jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
       if (err)
-        return res.status(403).json({ error: "Invalid or expired token" });
+        return res.status(403).json({
+          success: false,
+          error: "Invalid or expired token",
+          code: "TOKEN_EXPIRED",
+          status: 403,
+        });
       (req as any).user = user;
       next();
     });
   } else {
-    res.status(401).json({ error: "Authentication required" });
+    res.status(401).json({
+      success: false,
+      error: "Authentication required",
+      code: "AUTH_REQUIRED",
+      status: 401,
+    });
   }
 }
 
@@ -624,7 +634,10 @@ async function startServer() {
     windowMs: 60 * 1000,
     max: 500,
     message: {
+      success: false,
       error: "Too many requests from this IP, please try again after 1 minute",
+      code: "RATE_LIMITED",
+      status: 429,
     },
     keyGenerator: (req) => {
       return req.ip || req.connection?.remoteAddress || 'unknown';
@@ -634,15 +647,19 @@ async function startServer() {
   // Apply rate limiter to API routes (not static assets)
   app.use("/api/", globalLimiter);
 
+  // Login-specific rate limiter (referenced but not used as middleware directly; auth.ts has its own)
   const loginLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 5,
     message: {
+      success: false,
       error: "Too many login attempts. Please try again in 1 minute.",
+      code: "RATE_LIMITED",
+      status: 429,
     },
   });
 
-  // Not used as middleware directly anymore; auth.ts has its own limiter
+  // Auth routes have their own rate limiting in auth.ts
 
   app.use(express.json({ limit: "1mb" }));
 
@@ -812,6 +829,8 @@ saturn_server_disk{server="${s.name}",id="${s.id}"} ${s.disk || 0}
   });
 
   // ── SSE: Metrics Stream (lightweight alternative to Socket.io) ────
+  // Emits per-server metrics and incidents as SSE events every 5 seconds.
+  // Connect from frontend: new EventSource('/api/metrics/stream')
   app.get("/api/metrics/stream", (req, res) => {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -821,15 +840,36 @@ saturn_server_disk{server="${s.name}",id="${s.id}"} ${s.disk || 0}
     });
     res.write("event: connected\ndata: {}\n\n");
 
-    // Send metrics every 5 seconds
+    // Send aggregate + per-server metrics every 5 seconds
     const interval = setInterval(() => {
-      const servers = db
+      const serversData = db
         .prepare("SELECT id, name, cpu, memory, disk, uptime, status, os FROM servers")
-        .all();
-      res.write(`event: metrics\ndata: ${JSON.stringify({ servers, timestamp: new Date().toISOString() })}\n\n`);
+        .all() as any[];
+      const openIncidents = db.prepare("SELECT COUNT(*) as c FROM incidents WHERE status = 'open'").get() as any;
+
+      // Aggregate event
+      res.write(`event: metrics\ndata: ${JSON.stringify({
+        servers: serversData,
+        openIncidents: openIncidents?.c || 0,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+
+      // Per-server events for live dashboard
+      for (const s of serversData) {
+        res.write(`event: server_${s.id}\ndata: ${JSON.stringify({
+          serverId: s.id,
+          name: s.name,
+          cpu: s.cpu,
+          memory: s.memory,
+          disk: s.disk,
+          uptime: s.uptime,
+          status: s.status,
+          timestamp: new Date().toISOString()
+        })}\n\n`);
+      }
     }, 5000);
 
-    // Keep-alive
+    // Keep-alive to prevent proxy timeouts
     const keepAlive = setInterval(() => {
       res.write(":keepalive\n\n");
     }, 30000);
@@ -841,9 +881,16 @@ saturn_server_disk{server="${s.name}",id="${s.id}"} ${s.disk || 0}
   });
 
   // ── Error handling middleware (catch-all) ─────────────────────────
+  // Returns consistent JSON format: { success: false, error, code, status }
   app.use((err: any, _req: any, res: any, _next: any) => {
     console.error("[UNHANDLED ERROR]", err?.message || err);
-    res.status(500).json({ error: "Internal server error" });
+    const status = err?.status || err?.statusCode || 500;
+    res.status(status).json({
+      success: false,
+      error: err?.message || "Internal server error",
+      code: err?.code || "INTERNAL_ERROR",
+      status,
+    });
   });
 
   const httpServer = createServer(app);

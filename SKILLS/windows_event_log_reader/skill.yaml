@@ -1,0 +1,141 @@
+name: Windows Event Log Reader
+language: powershell
+version: 1.0
+description: "Read and query Windows Event Logs — system, application, security, and custom logs with filtering by level, time, source, and event ID."
+params:
+  - name: ACTION
+    type: string
+    description: "Action: list, read, recent, errors, clear, export"
+    required: true
+    options: [list, read, recent, errors, clear, export]
+  - name: LOG_NAME
+    type: string
+    description: "Log name: System, Application, Security, or custom log"
+    default: System
+    options: [System, Application, Security, Setup, ForwardedEvents]
+    required: false
+  - name: MAX_EVENTS
+    type: number
+    description: "Maximum number of events to return"
+    default: 50
+    required: false
+  - name: EVENT_LEVEL
+    type: string
+    description: "Filter by level: Critical, Error, Warning, Information, Verbose"
+    options: [Critical, Error, Warning, Information, Verbose]
+    required: false
+  - name: EVENT_ID
+    type: number
+    description: "Filter by specific Event ID"
+    required: false
+  - name: SOURCE
+    type: string
+    description: "Filter by event source (e.g. 'Application Error', 'Service Control Manager')"
+    required: false
+  - name: TIME_RANGE_MINUTES
+    type: number
+    description: "Look back N minutes from now"
+    required: false
+risks:
+  - "Read-only: no risk to system stability"
+  - "Security logs may require elevated privileges to query"
+  - "Large volumes: requesting too many events may be slow on systems with big logs"
+script: |
+  param(
+      [Parameter(Mandatory=$false)]
+      [string]$ACTION = "recent",
+      [Parameter(Mandatory=$false)]
+      [string]$LOG_NAME = "System",
+      [Parameter(Mandatory=$false)]
+      [int]$MAX_EVENTS = 50,
+      [Parameter(Mandatory=$false)]
+      [string]$EVENT_LEVEL = "",
+      [Parameter(Mandatory=$false)]
+      [int]$EVENT_ID = 0,
+      [Parameter(Mandatory=$false)]
+      [string]$SOURCE = "",
+      [Parameter(Mandatory=$false)]
+      [int]$TIME_RANGE_MINUTES = 0
+  )
+
+  function Get-LogEvents {
+      param($LogName, $MaxEvents)
+      Get-WinEvent -LogName $LogName -MaxEvents $MaxEvents -ErrorAction SilentlyContinue
+  }
+
+  switch ($ACTION) {
+      "list" {
+          Get-WinEvent -ListLog * | Select-Object LogName, LogType, IsEnabled, RecordCount, LogIsolation, FileSize | ConvertTo-Json
+          break
+      }
+      "read" {
+          if (-not (Get-WinEvent -ListLog $LOG_NAME -ErrorAction SilentlyContinue)) {
+              Write-Error "Log '$LOG_NAME' not found. Use 'list' action to see available logs."
+              exit 1
+          }
+          $events = Get-LogEvents -LogName $LOG_NAME -MaxEvents $MAX_EVENTS
+          if (-not $events) {
+              Write-Output "[]"
+              break
+          }
+          $events | Where-Object {
+              ($EVENT_LEVEL -eq "" -or $_.LevelDisplayName -eq $EVENT_LEVEL) -and
+              ($EVENT_ID -eq 0 -or $_.Id -eq $EVENT_ID) -and
+              ($SOURCE -eq "" -or $_.ProviderName -like "*$SOURCE*") -and
+              ($TIME_RANGE_MINUTES -eq 0 -or $_.TimeCreated -ge (Get-Date).AddMinutes(-$TIME_RANGE_MINUTES))
+          } | Select-Object Id, LevelDisplayName, TimeCreated, ProviderName, MachineName, @{Name="Message";Expression={$_.Message.Substring(0, [Math]::Min(200, $_.Message.Length))}} | ConvertTo-Json -Depth 2
+          break
+      }
+      "recent" {
+          $events = Get-LogEvents -LogName $LOG_NAME -MaxEvents $MAX_EVENTS
+          if (-not $events) {
+              Write-Output "[]"
+              break
+          }
+          $events | Select-Object Id, LevelDisplayName, TimeCreated, ProviderName, @{Name="Message";Expression={$_.Message.Substring(0, [Math]::Min(150, $_.Message.Length))}} | ConvertTo-Json -Depth 2
+          break
+      }
+      "errors" {
+          $events = Get-LogEvents -LogName $LOG_NAME -MaxEvents ($MAX_EVENTS * 2)
+          if (-not $events) {
+              Write-Output "[]"
+              break
+          }
+          $events | Where-Object { $_.LevelDisplayName -in @("Error", "Critical", "Warning") } |
+              Select-Object Id, LevelDisplayName, TimeCreated, ProviderName, @{Name="Message";Expression={$_.Message.Substring(0, [Math]::Min(250, $_.Message.Length))}} |
+              Select-Object -First $MAX_EVENTS | ConvertTo-Json -Depth 2
+          break
+      }
+      "clear" {
+          Write-Warning "Clearing log: $LOG_NAME. This action may require admin privileges and is irreversible."
+          try {
+              Clear-WinEvent -LogName $LOG_NAME -ErrorAction Stop
+              Write-Output "Log '$LOG_NAME' cleared successfully."
+          } catch {
+              Write-Error "Failed to clear log '$LOG_NAME': $_"
+              exit 1
+          }
+          break
+      }
+      "export" {
+          $filename = "evtx_export_$LOG_NAME_$(Get-Date -Format 'yyyyMMdd_HHmmss').evtx"
+          $path = Join-Path $env:TEMP $filename
+          try {
+              wevtutil epl "$LOG_NAME" "$path" 2>$null
+              if (Test-Path $path) {
+                  Write-Output "Log exported to: $path (size: $((Get-Item $path).Length) bytes)"
+              } else {
+                  Write-Error "Export failed. Log may be empty or permission denied."
+                  exit 1
+              }
+          } catch {
+              Write-Error "Export failed: $_"
+              exit 1
+          }
+          break
+      }
+      default {
+          Write-Error "Unknown action: $ACTION. Valid actions: list, read, recent, errors, clear, export"
+          exit 1
+      }
+  }
