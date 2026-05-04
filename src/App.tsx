@@ -2218,6 +2218,7 @@ export default function App() {
       { id: 'ssl', label: 'SSL', icon: Lock },
       { id: 'thresholds', label: 'Thresholds', icon: Sliders },
       { id: 'audit', label: 'Audit', icon: FileText },
+      { id: 'config', label: 'Config', icon: Settings },
       { id: 'terminal', label: 'Terminal', icon: Terminal }
     ];
     
@@ -2273,6 +2274,7 @@ export default function App() {
         </div>
         <div className="min-h-[500px]">
           {serverDetailTab === 'summary' && <ServerSummaryTab />}
+          {serverDetailTab === 'config' && <ServerConfigTab selectedServer={selectedServer} />}
           {serverDetailTab === 'terminal' && <TerminalTab />}
           {serverDetailTab === 'processes' && <ProcessesTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
           {serverDetailTab === 'network' && <NetworkTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
@@ -2364,6 +2366,109 @@ export default function App() {
             );
           })}
         </div>
+      </div>
+    );
+  };
+
+  const ServerConfigTab = ({ selectedServer }: { selectedServer: ManagedServer | null }) => {
+    const [configUser, setConfigUser] = useState(selectedServer?.username || '');
+    const [configPass, setConfigPass] = useState('');
+    const [configPort, setConfigPort] = useState('22');
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState<string | null>(null);
+    const [thresholds, setThresholds] = useState<Record<string, {warning: number; critical: number}>>({
+      cpu: { warning: 70, critical: 90 },
+      memory: { warning: 75, critical: 85 },
+      disk: { warning: 80, critical: 95 }
+    });
+
+    useEffect(() => {
+      if (!selectedServer) return;
+      // Load existing thresholds
+      api(`/api/servers/${selectedServer.id}/thresholds`).then(r => r.json()).then((data: any[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const t: any = {};
+          for (const item of data) {
+            t[item.metric] = { warning: item.warning, critical: item.critical };
+          }
+          if (t.cpu || t.memory || t.disk) setThresholds(prev => ({...prev, ...t}));
+        }
+      }).catch(() => {});
+    }, [selectedServer?.id]);
+
+    const handleSave = async () => {
+      if (!selectedServer) return;
+      setSaving(true);
+      setSaved(null);
+      try {
+        const res = await api(`/api/servers/${selectedServer.id}/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            port: parseInt(configPort) || 22,
+            username: configUser || undefined,
+            password: configPass || undefined,
+            thresholds: Object.entries(thresholds).map(([metric, vals]) => ({
+              metric, warning: vals.warning, critical: vals.critical
+            }))
+          })
+        });
+        const data = await res.json();
+        setSaved(data.message || 'Configuration saved');
+        setTimeout(() => setSaved(null), 3000);
+      } catch (e: any) {
+        setSaved('Error: ' + e.message);
+      }
+      setSaving(false);
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+        {/* SSH Configuration */}
+        <div className="p-6 rounded-2xl bg-black/40 border border-white/5 space-y-4">
+          <div className="flex items-center gap-2 border-b border-white/5 pb-3">
+            <Terminal size={16} className="text-orange-500" />
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-white">SSH Connection</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div><label className="text-[9px] font-black uppercase text-slate-500 block mb-1">Username</label>
+              <input type="text" value={configUser} onChange={e => setConfigUser(e.target.value)} placeholder={selectedServer?.username || 'ubuntu'} className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs outline-none focus:border-orange-500" /></div>
+            <div><label className="text-[9px] font-black uppercase text-slate-500 block mb-1">Port</label>
+              <input type="text" value={configPort} onChange={e => setConfigPort(e.target.value)} placeholder="22" className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs outline-none focus:border-orange-500 text-center" /></div>
+          </div>
+          <div><label className="text-[9px] font-black uppercase text-slate-500 block mb-1">New Password</label>
+            <input type="password" value={configPass} onChange={e => setConfigPass(e.target.value)} placeholder="Leave empty to keep current" className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs outline-none focus:border-orange-500" /></div>
+        </div>
+
+        {/* Thresholds */}
+        <div className="p-6 rounded-2xl bg-black/40 border border-white/5 space-y-4">
+          <div className="flex items-center gap-2 border-b border-white/5 pb-3">
+            <Sliders size={16} className="text-orange-500" />
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-white">Remediation Thresholds</h3>
+          </div>
+          {['cpu', 'memory', 'disk'].map(m => {
+            const t = thresholds[m] || { warning: 70, critical: 90 };
+            return (
+              <div key={m} className="p-4 rounded-xl bg-white/5">
+                <p className="text-[9px] font-black uppercase text-slate-400 mb-3">{m.toUpperCase()}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-[8px] text-slate-500 uppercase font-black">Warning %</label>
+                    <input type="range" min="10" max="95" value={t.warning} onChange={e => setThresholds({...thresholds, [m]: {...t, warning: parseInt(e.target.value)}})} className="w-full accent-orange-500" />
+                    <span className="text-[10px] font-black text-orange-500">{t.warning}%</span></div>
+                  <div><label className="text-[8px] text-slate-500 uppercase font-black">Critical %</label>
+                    <input type="range" min="20" max="100" value={t.critical} onChange={e => setThresholds({...thresholds, [m]: {...t, critical: parseInt(e.target.value)}})} className="w-full accent-rose-500" />
+                    <span className="text-[10px] font-black text-rose-500">{t.critical}%</span></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <button onClick={handleSave} disabled={saving || !selectedServer}
+          className="w-full py-3 bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-400 transition-all disabled:opacity-30">
+          {saving ? 'Saving...' : 'Save Configuration'}
+        </button>
+        {saved && <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">{saved}</div>}
       </div>
     );
   };
