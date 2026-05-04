@@ -171,7 +171,14 @@ export default function AdminDashboard() {
           <div className="text-center py-12">
             <Server className="w-12 h-12 text-slate-600 mx-auto mb-4" />
             <p className="text-slate-400">No servers connected</p>
-            <p className="text-slate-500 text-sm mt-1">Connect your first server to start managing it</p>
+            <p className="text-slate-500 text-sm mt-1">Click <strong>Connect Server</strong> above to add your first node</p>
+            <div className="mt-6 max-w-md mx-auto text-left text-xs text-slate-500 space-y-2">
+              <p className="font-semibold text-slate-400">Quick start:</p>
+              <p>1. Ensure the target server has SSH access (port 22 or custom)</p>
+              <p>2. Click <strong>Connect Server</strong> and enter IP, username, and password/key</p>
+              <p>3. Or use the <strong>Docker Test Lab</strong> for local testing:</p>
+              <code className="block p-2 bg-black/40 rounded-lg text-emerald-400 mt-1">docker compose -f docker-compose.yml up -d</code>
+            </div>
           </div>
         ) : (servers || []).map((server, i) => (
           <motion.div

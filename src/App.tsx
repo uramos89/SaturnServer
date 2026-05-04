@@ -2167,7 +2167,7 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
       {/* Server Selector */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-2">Live Monitor:</span>
-        {(servers || []).length === 0 && <span className="text-[10px] text-slate-600 italic">No servers connected</span>}
+        {(servers || []).length === 0 && <span className="text-[10px] text-slate-600 italic">No servers — connect one via Managed Nodes</span>}
         {(servers || []).map(s => (
           <button
             key={s.id}
@@ -2307,7 +2307,7 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {(servers || []).slice(0, 4).map(s => <ServerCard key={s.id} server={s} onClick={() => { setSelectedServer(s); setServerDetailTab('summary'); setActiveTab('servers'); }} />)}
-              {(servers || []).length === 0 && <div className="col-span-full p-12 border border-dashed border-white/10 rounded-2xl text-center"><Server size={24} className="text-slate-600 mx-auto mb-2" /><p className="text-[10px] font-black uppercase text-slate-600">No servers registered</p></div>}
+              {(servers || []).length === 0 && <div className="col-span-full p-8 border border-dashed border-white/10 rounded-2xl text-center"><Server size={24} className="text-slate-600 mx-auto mb-2" /><p className="text-[10px] font-black uppercase text-slate-600">No servers registered</p><p className="text-[9px] text-slate-500 mt-2">Connect a server via SSH to enable remote management</p></div>}
             </div>
           </section>
         </div>
