@@ -1292,8 +1292,8 @@ const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: 
               <input type="text" value={newServerIp} onChange={e => setNewServerIp(e.target.value)} placeholder="e.g. 192.168.1.100" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
             </div>
             <div className="w-24">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Port</label>
-              <input type="text" value={newServerPort} onChange={e => setNewServerPort(e.target.value)} placeholder="22" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none text-center" />
+              <label className="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-2 block">Port</label>
+              <input type="text" value={newServerPort} onChange={e => setNewServerPort(e.target.value)} placeholder="22" className="w-full bg-black border border-orange-500/30 rounded-xl px-4 py-3 text-sm text-orange-400 focus:border-orange-500 outline-none text-center font-bold" />
             </div>
           </div>
           <div>
@@ -2442,8 +2442,8 @@ export default function App() {
           <div className="grid grid-cols-2 gap-4">
             <div><label className="text-[9px] font-black uppercase text-slate-500 block mb-1">Username</label>
               <input type="text" value={configUser} onChange={e => setConfigUser(e.target.value)} placeholder={selectedServer?.username || 'ubuntu'} className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs outline-none focus:border-orange-500" /></div>
-            <div><label className="text-[9px] font-black uppercase text-slate-500 block mb-1">Port</label>
-              <input type="text" value={configPort} onChange={e => setConfigPort(e.target.value)} placeholder="22" className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs outline-none focus:border-orange-500 text-center" /></div>
+            <div><label className="text-[9px] font-black uppercase text-orange-500 block mb-1">Port</label>
+              <input type="text" value={configPort} onChange={e => setConfigPort(e.target.value)} placeholder="22" className="w-full bg-black/60 border border-orange-500/30 rounded-lg px-3 py-2 text-xs text-orange-400 outline-none focus:border-orange-500 text-center" /></div>
           </div>
           <div><label className="text-[9px] font-black uppercase text-slate-500 block mb-1">New Password</label>
             <input type="password" value={configPass} onChange={e => setConfigPass(e.target.value)} placeholder="Leave empty to keep current" className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs outline-none focus:border-orange-500" /></div>
