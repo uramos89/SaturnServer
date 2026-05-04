@@ -2236,10 +2236,12 @@ let _neuralResultCache: any = null;
 
 
   const ServerDetailView = () => {
-    const [tabData, setTabData] = useState<any>(null);
+    const [tabData, setTabData] = useState<Record<string, any>>({});
     const [loadingTab, setLoadingTab] = useState(false);
     const [syncingServer, setSyncingServer] = useState(false);
     const [lastRefresh, setLastRefresh] = useState(0);
+    const currentTabData = tabData[serverDetailTab];
+    const setCurrentTabData = (data: any) => setTabData(prev => ({ ...prev, [serverDetailTab]: data }));
 
     const handleRefreshServer = async (silent = false) => {
       if (!selectedServer) return;
@@ -2267,12 +2269,14 @@ let _neuralResultCache: any = null;
 
     useEffect(() => {
       if (!selectedServer || serverDetailTab === 'summary' || serverDetailTab === 'terminal') return;
+      // Skip fetch if data already cached for this tab
+      if (tabData[serverDetailTab]) return;
       const fetchTab = async () => {
         setLoadingTab(true);
         try {
           const res = await api(`/api/admin/servers/${selectedServer.id}/${serverDetailTab}`);
           const data = await res.json();
-          setTabData(data);
+          setCurrentTabData(data);
         } catch (e) {
           console.error(e);
         }
@@ -2299,10 +2303,10 @@ let _neuralResultCache: any = null;
     ];
     
     const renderTabData = () => {
-      if (loadingTab) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching {serverDetailTab} telemetry...</div>;
-      if (!tabData) return null;
+      if (loadingTab && !currentTabData) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest flex flex-col items-center gap-4"><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-8 h-8 border-2 border-slate-700 border-t-orange-500 rounded-full" /> Fetching {serverDetailTab} telemetry...</div>;
+      if (!currentTabData) return null;
       
-      const dataArray = Array.isArray(tabData.data) ? tabData.data : (Array.isArray(tabData) ? tabData : [tabData]);
+      const dataArray = Array.isArray(currentTabData.data) ? currentTabData.data : (Array.isArray(currentTabData) ? currentTabData : [currentTabData]);
       
       if (dataArray.length === 0) return <div className="p-12 text-center text-slate-500 italic uppercase text-[10px] font-black tracking-widest">No data available for {serverDetailTab}</div>;
 
@@ -2352,14 +2356,14 @@ let _neuralResultCache: any = null;
           {serverDetailTab === 'summary' && <ServerSummaryTab />}
           {serverDetailTab === 'config' && <ServerConfigTab selectedServer={selectedServer} />}
           {serverDetailTab === 'terminal' && <TerminalTab />}
-          {serverDetailTab === 'processes' && <ProcessesTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          {serverDetailTab === 'network' && <NetworkTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          {serverDetailTab === 'firewall' && <FirewallTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          {serverDetailTab === 'tasks' && <TasksTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          {serverDetailTab === 'users' && <UsersTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          {serverDetailTab === 'packages' && <PackagesTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          {serverDetailTab === 'webserver' && <WebserverTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
-          { serverDetailTab === 'health' && <HealthTab loadingTab={loadingTab} tabData={tabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'processes' && <ProcessesTab loadingTab={loadingTab} tabData={currentTabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'network' && <NetworkTab loadingTab={loadingTab} tabData={currentTabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'firewall' && <FirewallTab loadingTab={loadingTab} tabData={currentTabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'tasks' && <TasksTab loadingTab={loadingTab} tabData={currentTabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'users' && <UsersTab loadingTab={loadingTab} tabData={currentTabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'packages' && <PackagesTab loadingTab={loadingTab} tabData={currentTabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          {serverDetailTab === 'webserver' && <WebserverTab loadingTab={loadingTab} tabData={currentTabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
+          { serverDetailTab === 'health' && <HealthTab loadingTab={loadingTab} tabData={currentTabData} selectedServer={selectedServer} handleRefreshServer={handleRefreshServer} />}
           { serverDetailTab === 'thresholds' && <ThresholdsTab selectedServer={selectedServer} />}
           { serverDetailTab !== 'summary' && serverDetailTab !== 'terminal' && serverDetailTab !== 'processes' && serverDetailTab !== 'network' && serverDetailTab !== 'firewall' && serverDetailTab !== 'tasks' && serverDetailTab !== 'users' && serverDetailTab !== 'packages' && serverDetailTab !== 'webserver' && serverDetailTab !== 'health' && serverDetailTab !== 'thresholds' && renderTabData()}
         </div>
