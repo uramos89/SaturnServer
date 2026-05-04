@@ -7,13 +7,14 @@
 
 ## 📋 Hallazgos a Remediación
 
-| ID | Hallazgo | Severidad | Causa | Tipo |
-|---|---|---|---|---|
-| H-001 | Path traversal aceptado (200 OK) en `/api/audit` y `/api/contextp/files` | 🟡 Media | Endpoints aceptan parámetros `path` sin validar contenido | Backend |
-| H-002 | AI acepta incidentes destructivos (`delete_server`, `shutdown`, `format_disk`) sin cuestionar | 🟡 Media | `/api/neural/rca` no filtra dominios peligrosos | Backend |
-| H-003 | UI muestra datos falsos tras manipular localStorage ("HACKER", "superadmin") | 🟡 Media | Estado de UI se sincroniza con localStorage sin validar | Frontend |
-| H-004 | Panel Admin no tiene inputs detectables por test automatizado | ℹ️ Info | Selectores no estándar, falta accesibilidad | Frontend |
-| H-005 | Sin servidores SSHH conectados, la terminal del AdminDashboard no es accesible | ℹ️ Info | No hay nodos seed en DB production | Infra |
+| ID | Hallazgo | Severidad | Causa | Tipo | Estado |
+|---|---|---|---|---|---|
+| H-001 | Path traversal aceptado (200 OK) en `/api/audit` y `/api/contextp/files` | 🟡 Media | Endpoints aceptan parámetros `path` sin validar contenido | Backend | ✅ Resuelto US-001 |
+| H-002 | AI acepta incidentes destructivos (`delete_server`, `shutdown`, `format_disk`) sin cuestionar | 🟡 Media | `/api/neural/rca` no filtra dominios peligrosos | Backend | ✅ Resuelto US-002 |
+| H-003 | UI muestra datos falsos tras manipular localStorage ("HACKER", "superadmin") | 🟡 Media | Estado de UI se sincroniza con localStorage sin validar | Frontend | ✅ Resuelto US-003 |
+| H-004 | Identity Vault crashea con ErrorBoundary (B-011) | 🔴 Alta | `setCloudCreds(data)` sin `Array.isArray()` | Frontend | ✅ Resuelto hotfix |
+| H-005 | Panel Admin sin inputs detectables por test automatizado | ℹ️ Info | Selectores no estándar, falta accesibilidad | Frontend | 📝 Pendiente |
+| H-006 | Sin servidores SSH conectados, la terminal del AdminDashboard no es accesible | ℹ️ Info | No hay nodos seed en DB production | Infra | ✅ Resuelto US-004 |
 
 ---
 
