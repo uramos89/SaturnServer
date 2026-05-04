@@ -1620,9 +1620,14 @@ const ContextPView = () => {
   const [selectedFile, setSelectedFile] = useState<any>(null);
   const [fileContent, setFileContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    api('/api/contextp/files').then(res => res.json()).then(setTree).catch(console.error);
+    setError('');
+    api('/api/contextp/files')
+      .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+      .then(data => { setTree(Array.isArray(data) ? data : []); })
+      .catch(err => { console.error(err); setError('Could not load ContextP files. Ensure backend is running.'); });
   }, []);
 
   const loadFile = async (f: any) => {
@@ -1649,9 +1654,11 @@ const ContextPView = () => {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div className="lg:col-span-1 bg-black/40 border border-white/5 rounded-2xl p-4 overflow-y-auto max-h-[600px] custom-scrollbar">
+          {error && <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[10px] font-mono mb-3">{error}</div>}
           {(tree || []).map((node: any, i: number) => (
             <TreeNode key={i} node={node} onSelectFile={loadFile} selectedFile={selectedFile} />
           ))}
+          {(tree || []).length === 0 && !error && <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest text-center py-8">No ContextP files available. Check backend directory structure.</p>}
         </div>
         <div className="lg:col-span-3 bg-black/60 border border-white/5 rounded-2xl overflow-hidden flex flex-col h-[600px]">
           {!selectedFile ? (
