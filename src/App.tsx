@@ -1184,7 +1184,9 @@ const ServerCard = ({ server, onClick }: { server: ManagedServer, onClick: () =>
     e.stopPropagation();
     if (!confirm(`Delete server ${server.name} (${server.ip})? This cannot be undone.`)) return;
     setDeleting(true);
-    await api(`/api/servers/${server.id}`, { method: 'DELETE' });
+    try {
+      await api(`/api/servers/${server.id}`, { method: 'DELETE' });
+    } catch {}
     setDeleting(false);
     window.location.reload();
   };
