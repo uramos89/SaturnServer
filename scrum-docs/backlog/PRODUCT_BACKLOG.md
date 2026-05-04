@@ -182,9 +182,9 @@ AWS/GCP/Azure scan, Identity Proxy.
 |---|---|---|---|---|---|
 | TD-002 | Refactor: unificar nomenclatura frontend-backend | 🟡 Media | 5 | ✅ Done (Sprint 13) | Estandarizar camelCase vs snake_case |
 | TD-003 | Tests automatizados | 🟡 Media | 8 | ✅ Done (Sprint 16) | Playwright E2E + 11 tests unitarios existentes |
-| TD-004 | Error handling consistente | 🟡 Media | 3 | 📝 Pendiente | Unificar formato de errores en respuestas API |
-| TD-005 | SSE (Server-Sent Events) | 🔵 Baja | 3 | 📝 Pendiente | Implementar SSE como alternativa a Socket.io |
-| TD-006 | Windows parity completo | 🟡 Media | 8 | ⚠️ Parcial | 5 skills Windows listas, faltan algunas |
+| TD-004 | Error handling consistente | 🟡 Media | 3 | ✅ Completo | Unificar formato de errores en respuestas API — 14 routes migradas a formato estandarizado {success, error, code, status} |
+| TD-005 | SSE (Server-Sent Events) | 🔵 Baja | 3 | ✅ Completo | SSE endpoint + useSSE hook + toggle Socket.io/SSE en Dashboard |
+| TD-006 | Windows parity completo | 🟡 Media | 8 | ✅ Completo | 2 skills YAML nuevas (Service Manager + Event Log Reader), DB seed actualizado |
 
 ---
 
