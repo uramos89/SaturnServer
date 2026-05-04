@@ -1522,6 +1522,13 @@ const SkillsView = ({ skills, setSkills }: { skills: any[], setSkills: any }) =>
           </button>
         </div>
       </div>
+      {(skills || []).length === 0 ? (
+        <div className="col-span-full p-12 border border-dashed border-white/10 rounded-2xl text-center">
+          <Brain size={32} className="text-slate-600 mx-auto mb-4" />
+          <p className="text-xs font-black uppercase text-slate-500 tracking-widest">No skills in library</p>
+          <p className="text-[10px] text-slate-600 mt-2">Import a skill from the repository or generate one with AI</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {(skills || []).map((s: any) => (
           <div key={s.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 hover:border-orange-500/30 transition-all group flex flex-col">
@@ -1568,6 +1575,7 @@ const SkillsView = ({ skills, setSkills }: { skills: any[], setSkills: any }) =>
           </div>
         ))}
       </div>
+      )}
       <AnimatePresence>
         {showImport && <ImportSkillModal onClose={() => setShowImport(false)} onSuccess={() => { setShowImport(false); handleSyncSkills(); }} />}
         {selectedSource && <SkillSourceModal skill={selectedSource} onClose={() => setSelectedSource(null)} />}
