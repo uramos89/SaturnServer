@@ -1232,9 +1232,11 @@ const ServerCard = ({ server, onClick }: { server: ManagedServer, onClick: () =>
 
 const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) => {
   const [newServerIp, setNewServerIp] = useState('');
+  const [newServerPort, setNewServerPort] = useState('22');
   const [newServerUser, setNewServerUser] = useState('ubuntu');
   const [newServerKey, setNewServerKey] = useState('');
   const [newServerPassword, setNewServerPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [addingServer, setAddingServer] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -1315,7 +1317,12 @@ const AddNodeModal = ({ onClose, onSuccess }: { onClose: () => void, onSuccess: 
           </div>
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Or SSH Password (if no key)</label>
-            <input type="password" value={newServerPassword} onChange={e => setNewServerPassword(e.target.value)} placeholder="••••••••" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-orange-500 outline-none" />
+            <div className="relative">
+              <input type={showPass ? "text" : "password"} value={newServerPassword} onChange={e => setNewServerPassword(e.target.value)} placeholder="••••••••" className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 pr-10 text-sm text-white focus:border-orange-500 outline-none" />
+              <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
+                {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           <div className="flex gap-4 mt-8">
             <button onClick={onClose} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors">Cancel</button>
