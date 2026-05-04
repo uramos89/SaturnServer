@@ -102,11 +102,19 @@ export function createContextpRouter(db: Database.Database): Router {
     }
   });
 
+  // ── Path safety helper ──
+  function isPathSafe(requestedPath: string): boolean {
+    if (!requestedPath) return false;
+    const decoded = decodeURIComponent(requestedPath);
+    const blocked = ["..", "file:", "/proc/", "/etc/", "/sys/", "/dev/", "/root/"];
+    return !blocked.some(b => decoded.includes(b));
+  }
+
   // GET /api/contextp/read
   router.get("/contextp/read", (req: Request, res: Response) => {
     const filePath = req.query.path as string;
-    if (!filePath || filePath.includes(".."))
-      return res.status(400).json({ success: false, error: "Invalid path", code: "VALIDATION_ERROR", status: 400 });
+    if (!isPathSafe(filePath))
+      return res.status(400).json({ success: false, error: "Invalid path", code: "INVALID_PATH", status: 400 });
     try {
       const content = fs.readFileSync(filePath, "utf8");
       res.json({ content });

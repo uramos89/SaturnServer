@@ -1926,8 +1926,30 @@ export default function App() {
 
   const [user, setUser] = useState<UserData | null>(() => {
     const saved = localStorage.getItem('saturn-user');
+    const token = localStorage.getItem('saturn-token');
+    if (saved && !token) return null; // No token = no user
     return saved ? JSON.parse(saved) : null;
   });
+
+  // ── Validate saved token against server ──
+  useEffect(() => {
+    const validateSession = async () => {
+      const token = localStorage.getItem('saturn-token');
+      if (!token) return;
+      try {
+        const res = await fetch('/api/servers', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('saturn-token');
+          localStorage.removeItem('saturn-user');
+          localStorage.removeItem('saturn-refresh-token');
+          setUser(null);
+        }
+      } catch { /* Network error - keep saved state */ }
+    };
+    validateSession();
+  }, []);
 
   useEffect(() => {
     const checkStatus = async () => {

@@ -402,9 +402,22 @@ Real-time SSH Metrics (${sshConn.host}):
     }
   });
 
+  // ── Destructive incident check ──
+  const DESTRUCTIVE_PATTERNS = ["delete", "shutdown", "format", "drop ", "rm ", "wipe", "destroy", "truncate", "kill ", "reboot"];
+
+  function isDestructiveIncident(incident: any): boolean {
+    const text = `${incident?.title || ""} ${incident?.description || ""}`.toLowerCase();
+    return DESTRUCTIVE_PATTERNS.some(p => text.includes(p));
+  }
+
   // ── POST /api/neural/rca — Root Cause Analysis ─────────────────
   router.post("/neural/rca", async (req: Request, res: Response) => {
     const { incident, server, metrics } = req.body;
+    if (isDestructiveIncident(incident)) {
+      return res.status(400).json({
+        success: false, error: "Destructive incident type rejected", code: "DESTRUCTIVE_DOMAIN", status: 400
+      });
+    }
     const prompt = `Analyze this infrastructure incident and determine root cause.
 
 SERVER: ${server?.name || "unknown"} (${server?.os || "unknown"})
