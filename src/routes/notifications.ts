@@ -55,7 +55,7 @@ export function createNotificationsRouter(db: Database.Database): Router {
   // POST /api/telegram/set-webhook
   router.post("/telegram/set-webhook", async (req: Request, res: Response) => {
     const { botToken } = req.body;
-    if (!botToken) return res.status(400).json({ error: "botToken required" });
+    if (!botToken) return res.status(400).json({ success: false, error: "botToken required", code: "VALIDATION_ERROR", status: 400 });
     try {
       const axios = (await import("axios")).default;
       const baseUrl = process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
@@ -67,14 +67,14 @@ export function createNotificationsRouter(db: Database.Database): Router {
       );
       res.json({ success: result.data.ok, description: result.data.description });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ success: false, error: e.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
   // POST /api/telegram/test
   router.post("/telegram/test", async (req: Request, res: Response) => {
     const { botToken, chatId } = req.body;
-    if (!botToken || !chatId) return res.status(400).json({ error: "botToken and chatId required" });
+    if (!botToken || !chatId) return res.status(400).json({ success: false, error: "botToken and chatId required", code: "VALIDATION_ERROR", status: 400 });
     try {
       const { sendTelegramMessage } = await import("../services/telegram-service.js");
       const result = await sendTelegramMessage(
@@ -84,7 +84,7 @@ export function createNotificationsRouter(db: Database.Database): Router {
       );
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ success: false, error: e.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 

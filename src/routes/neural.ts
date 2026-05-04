@@ -18,7 +18,7 @@ export function createNeuralRouter(
   // POST /api/neural/generate-script
   router.post("/neural/generate-script", async (req: Request, res: Response) => {
     const { prompt, os, context } = req.body;
-    if (!prompt) return res.status(400).json({ error: "prompt is required" });
+    if (!prompt) return res.status(400).json({ success: false, error: "prompt is required", code: "VALIDATION_ERROR", status: 400 });
 
     const osType: OSType = os === "windows" ? "windows" : "linux";
     const sr = ScriptGenerator.generate({
@@ -58,14 +58,14 @@ export function createNeuralRouter(
   router.post("/neural/generate-skill", async (req: Request, res: Response) => {
     const { contexp, skill_actual } = req.body;
     if (!contexp || !contexp.proposito) {
-      return res.status(400).json({ error: "contexp.proposito is required" });
+      return res.status(400).json({ success: false, error: "contexp.proposito is required", code: "VALIDATION_ERROR", status: 400 });
     }
 
     try {
       const aegisSkill = db
         .prepare("SELECT * FROM skills WHERE id = 'skill-aegis-architect'")
         .get() as any;
-      if (!aegisSkill) return res.status(404).json({ error: "Aegis Architect skill not found" });
+      if (!aegisSkill) return res.status(404).json({ success: false, error: "Aegis Architect skill not found", code: "NOT_FOUND", status: 404 });
 
       const skillDef = fs.readFileSync(aegisSkill.path, "utf8");
 
@@ -122,7 +122,7 @@ export function createNeuralRouter(
       res.json({ success: true, skillId, skill: newSkill, metadata: result.metadata_generacion });
     } catch (error: any) {
       console.error("[AEGIS] Error generating skill:", error.message);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -130,18 +130,18 @@ export function createNeuralRouter(
   router.post("/neural/execute", async (req: Request, res: Response) => {
     const { prompt, serverId } = req.body;
     if (!prompt || !serverId)
-      return res.status(400).json({ error: "prompt and serverId are required" });
+      return res.status(400).json({ success: false, error: "prompt and serverId are required", code: "VALIDATION_ERROR", status: 400 });
 
     try {
       const server = db.prepare("SELECT * FROM servers WHERE id = ?").get(serverId) as any;
-      if (!server) return res.status(404).json({ error: "Server not found" });
+      if (!server) return res.status(404).json({ success: false, error: "Server not found", code: "SERVER_NOT_FOUND", status: 404 });
 
       const osType: OSType = server.os === "windows" ? "windows" : "linux";
 
       const conn = db
         .prepare("SELECT * FROM ssh_connections WHERE serverId = ?")
         .get(serverId) as any;
-      if (!conn) return res.status(400).json({ error: "No SSH connection for this server" });
+      if (!conn) return res.status(400).json({ success: false, error: "No SSH connection for this server", code: "NO_SSH", status: 400 });
 
       const key = `${conn.username}@${conn.host}:${conn.port}`;
       try {
@@ -238,7 +238,7 @@ export function createNeuralRouter(
         exitCode: execResult.code,
       });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ success: false, error: e.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -249,11 +249,11 @@ export function createNeuralRouter(
       .prepare("SELECT * FROM incidents WHERE id = ?")
       .get(incidentId) as any;
 
-    if (!incident) return res.status(404).json({ error: "Incident not found" });
+    if (!incident) return res.status(404).json({ success: false, error: "Incident not found", code: "NOT_FOUND", status: 404 });
 
     const server = db.prepare("SELECT * FROM servers WHERE id = ?").get(incident.serverId) as any;
 
-    if (!incident || !server) return res.status(404).json({ error: "Not found" });
+    if (!incident || !server) return res.status(404).json({ success: false, error: "Not found", code: "NOT_FOUND", status: 404 });
 
     try {
       let realTimeMetrics = "";
@@ -334,7 +334,7 @@ Real-time SSH Metrics (${sshConn.host}):
       res.json({ success: true, obpaId, analysis: aiResponse });
     } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -342,7 +342,7 @@ Real-time SSH Metrics (${sshConn.host}):
   router.post("/neural/feedback", (req: Request, res: Response) => {
     const { skill_id, incident_id, rating, comment } = req.body;
     if (!skill_id || !rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ error: "skill_id and rating (1-5) are required" });
+      return res.status(400).json({ success: false, error: "skill_id and rating (1-5) are required", code: "VALIDATION_ERROR", status: 400 });
     }
     const feedbackId = `fb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     db.prepare(
@@ -459,7 +459,7 @@ Respond with JSON:
   router.get("/neural/predict/:metric", async (req: Request, res: Response) => {
     const { metric } = req.params;
     if (!["cpu", "memory", "disk"].includes(metric)) {
-      return res.status(400).json({ error: "Metric must be cpu, memory, or disk" });
+      return res.status(400).json({ success: false, error: "Metric must be cpu, memory, or disk", code: "VALIDATION_ERROR", status: 400 });
     }
     
     try {

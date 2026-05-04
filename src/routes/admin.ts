@@ -44,7 +44,7 @@ export function createAdminRouter(
     if (userCount.c <= 1) {
       return res
         .status(400)
-        .json({ error: "Cannot delete the last admin user" });
+        .json({ success: false, error: "Cannot delete the last admin user", code: "VALIDATION_ERROR", status: 400 });
     }
     db.prepare("DELETE FROM users WHERE id = ?").run(id);
     logAudit(db, "USER", "USER_DELETED", `User ${id} deleted`, {});
@@ -66,7 +66,7 @@ export function createAdminRouter(
   router.post("/create-user", validate(UserCreateSchema), (req: Request, res: Response) => {
     const { username, password, role } = req.body;
     if (!username || !password) {
-      return res.status(400).json({ error: "Username and password required" });
+      return res.status(400).json({ success: false, error: "Username and password required", code: "VALIDATION_ERROR", status: 400 });
     }
 
     const id = crypto.randomUUID();
@@ -92,7 +92,7 @@ export function createAdminRouter(
 
       res.json({ success: true, id });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -112,7 +112,7 @@ export function createAdminRouter(
     const cycle = db
       .prepare("SELECT * FROM obpa_cycles WHERE id = ?")
       .get(obpaId) as any;
-    if (!cycle) return res.status(404).json({ error: "Cycle not found" });
+    if (!cycle) return res.status(404).json({ success: false, error: "Cycle not found", code: "NOT_FOUND", status: 404 });
 
     if (approved) {
       db.prepare("UPDATE obpa_cycles SET status = 'approved' WHERE id = ?").run(
@@ -223,7 +223,7 @@ export function createAdminRouter(
       .prepare("SELECT id FROM users WHERE username = ?")
       .get(username) as any;
     if (existing) {
-      return res.status(409).json({ error: "User already exists" });
+      return res.status(409).json({ success: false, error: "User already exists", code: "USER_EXISTS", status: 409 });
     }
     const id = `user-${Date.now()}`;
     const salt = crypto.randomBytes(16).toString("hex");

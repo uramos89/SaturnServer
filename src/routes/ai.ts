@@ -58,7 +58,7 @@ export function createAiRouter(db: Database.Database): Router {
   router.post("/ai/providers/configure", (req: Request, res: Response) => {
     const { providerId, model, apiKey, endpoint, name } = req.body;
     if (!providerId || !model) {
-      return res.status(400).json({ error: "providerId and model are required" });
+      return res.status(400).json({ success: false, error: "providerId and model are required", code: "VALIDATION_ERROR", status: 400 });
     }
     const id = `ai-${providerId}-${Date.now()}`;
     const createdAt = new Date().toISOString();
@@ -142,7 +142,7 @@ export function createAiRouter(db: Database.Database): Router {
         res.json({ success: true, message: `✅ ${providerId} responded (${trimmed.slice(0, 50)}...)` });
       }
     } catch (e: any) {
-      return res.status(500).json({ error: e.message?.slice(0, 300) || "Connection failed" });
+      return res.status(500).json({ success: false, error: e.message?.slice(0, 300) || "Connection failed", code: "CONNECTION_ERROR", status: 500 });
     }
   });
 

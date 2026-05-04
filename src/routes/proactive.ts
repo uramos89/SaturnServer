@@ -52,7 +52,7 @@ export function createProactiveRouter(db: Database.Database): Router {
     const activity = db
       .prepare("SELECT * FROM proactive_activities WHERE id = ?")
       .get(req.params.id) as any;
-    if (!activity) return res.status(404).json({ error: "Activity not found" });
+    if (!activity) return res.status(404).json({ success: false, error: "Activity not found", code: "NOT_FOUND", status: 404 });
     const newState = activity.enabled ? 0 : 1;
     db.prepare("UPDATE proactive_activities SET enabled = ? WHERE id = ?").run(newState, req.params.id);
     res.json({ success: true, enabled: newState === 1 });

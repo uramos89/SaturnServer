@@ -121,10 +121,10 @@ export function createAuthRouter(db: Database.Database): Router {
   // ── Refresh Token ──────────────────────────────────────────────────
   router.post("/refresh", (req: Request, res: Response) => {
     const { refreshToken } = req.body;
-    if (!refreshToken) return res.status(401).json({ error: "Refresh token required" });
+    if (!refreshToken) return res.status(401).json({ success: false, error: "Refresh token required", code: "TOKEN_REQUIRED", status: 401 });
 
     if (!refreshTokens.has(refreshToken)) {
-      return res.status(401).json({ error: "Invalid refresh token" });
+      return res.status(401).json({ success: false, error: "Invalid refresh token", code: "INVALID_TOKEN", status: 401 });
     }
 
     try {
@@ -136,7 +136,7 @@ export function createAuthRouter(db: Database.Database): Router {
 
       // Verify user still exists
       const user = db.prepare("SELECT * FROM users WHERE id = ?").get(decoded.id) as any;
-      if (!user) return res.status(401).json({ error: "User not found" });
+      if (!user) return res.status(401).json({ success: false, error: "User not found", code: "USER_NOT_FOUND", status: 401 });
 
       // Issue new tokens
       const newToken = jwt.sign(
@@ -154,7 +154,7 @@ export function createAuthRouter(db: Database.Database): Router {
       res.json({ success: true, token: newToken, refreshToken: newRefreshToken });
     } catch {
       refreshTokens.delete(refreshToken);
-      return res.status(401).json({ error: "Invalid or expired refresh token" });
+      return res.status(401).json({ success: false, error: "Invalid or expired refresh token", code: "TOKEN_EXPIRED", status: 401 });
     }
   });
 
@@ -178,7 +178,7 @@ export function createAuthRouter(db: Database.Database): Router {
         .json({ success: false, error: "Username required and password must be a string of at least 8 characters", code: "VALIDATION_ERROR", status: 400 });
     }
     const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(username) as any;
-    if (existing) return res.status(409).json({ error: "User already exists" });
+    if (existing) return res.status(409).json({ success: false, error: "User already exists", code: "USER_EXISTS", status: 409 });
 
     const id = `user-${Date.now()}`;
     const hash = bcrypt.hashSync(password, BCRYPT_ROUNDS);

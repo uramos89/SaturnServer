@@ -21,7 +21,7 @@ export function createCloudRouter(db: Database.Database): Router {
   router.post("/credentials/import", async (req: Request, res: Response) => {
     const { name, provider, type, content, metadata } = req.body;
     if (!name || !provider || !content)
-      return res.status(400).json({ error: "Missing fields" });
+      return res.status(400).json({ success: false, error: "Missing fields", code: "VALIDATION_ERROR", status: 400 });
 
     const id = crypto.randomUUID();
     const vaultPath = path.join(VAULT_BASE, provider, `${id}.age`);
@@ -64,13 +64,13 @@ export function createCloudRouter(db: Database.Database): Router {
   router.post("/cloud/scan", async (req: Request, res: Response) => {
     const { credId } = req.body;
     const cred = db.prepare("SELECT * FROM cloud_credentials WHERE id = ?").get(credId) as any;
-    if (!cred) return res.status(404).json({ error: "Credential not found" });
+    if (!cred) return res.status(404).json({ success: false, error: "Credential not found", code: "CRED_NOT_FOUND", status: 404 });
 
     let credentials;
     try {
       credentials = decryptCredential(cred.encrypted_path);
     } catch (error: any) {
-      return res.status(500).json({ error: `Vault decryption failed: ${error.message}` });
+      return res.status(500).json({ success: false, error: "Vault decryption failed:  ${error.message}` });
     }
 
     let discovered: any[] = [];
@@ -158,7 +158,7 @@ export function createCloudRouter(db: Database.Database): Router {
           break;
         }
         default:
-          return res.status(400).json({ error: `Unsupported provider: ${cred.provider}` });
+          return res.status(400).json({ success: false, error: "Unsupported provider:  ${cred.provider}` });
       }
 
       const insertServer = db.prepare(
@@ -175,7 +175,7 @@ export function createCloudRouter(db: Database.Database): Router {
       res.json({ success: true, discovered: discovered.length, instances: discovered });
     } catch (error: any) {
       logAudit(db, "SYSTEM", "CLOUD_SCAN_ERROR", `Error scanning ${cred.provider}: ${error.message}`, {});
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -183,11 +183,11 @@ export function createCloudRouter(db: Database.Database): Router {
   router.post("/cloud/ssm-exec", async (req: Request, res: Response) => {
     const { credId, instanceId, command } = req.body;
     if (!credId || !instanceId || !command) {
-      return res.status(400).json({ error: "credId, instanceId, and command are required" });
+      return res.status(400).json({ success: false, error: "credId, instanceId, and command are required", code: "VALIDATION_ERROR", status: 400 });
     }
 
     const cred = db.prepare("SELECT * FROM cloud_credentials WHERE id = ?").get(credId) as any;
-    if (!cred) return res.status(404).json({ error: "Credential not found" });
+    if (!cred) return res.status(404).json({ success: false, error: "Credential not found", code: "CRED_NOT_FOUND", status: 404 });
 
     try {
       const credentials = decryptCredential(cred.encrypted_path);
@@ -205,17 +205,17 @@ export function createCloudRouter(db: Database.Database): Router {
 
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
   // POST /api/cloud/ssm-instances
   router.post("/cloud/ssm-instances", async (req: Request, res: Response) => {
     const { credId } = req.body;
-    if (!credId) return res.status(400).json({ error: "credId is required" });
+    if (!credId) return res.status(400).json({ success: false, error: "credId is required", code: "VALIDATION_ERROR", status: 400 });
 
     const cred = db.prepare("SELECT * FROM cloud_credentials WHERE id = ?").get(credId) as any;
-    if (!cred) return res.status(404).json({ error: "Credential not found" });
+    if (!cred) return res.status(404).json({ success: false, error: "Credential not found", code: "CRED_NOT_FOUND", status: 404 });
 
     try {
       const credentials = decryptCredential(cred.encrypted_path);
@@ -229,7 +229,7 @@ export function createCloudRouter(db: Database.Database): Router {
 
       res.json({ success: true, instances });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 

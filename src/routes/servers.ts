@@ -71,11 +71,11 @@ export function createServersRouter(
 
     // SSRF Protection
     if (host && !validateHost(host)) {
-      return res.status(400).json({ error: "Host not allowed for security reasons", code: "SSRF_BLOCKED" });
+      return res.status(400).json({ success: false, error: "Host not allowed for security reasons", code: "SSRF_BLOCKED", status: 400 });
     }
 
     if (!host || !username) {
-      return res.status(400).json({ error: "Host and username are required" });
+      return res.status(400).json({ success: false, error: "Host and username are required", code: "VALIDATION_ERROR", status: 400 });
     }
 
     const config: SSHConnectionConfig = { host, port, username };
@@ -96,7 +96,7 @@ export function createServersRouter(
         } else {
           return res
             .status(400)
-            .json({ error: "No authentication method provided and no default SSH key found" });
+            .json({ success: false, error: "No authentication method provided and no default SSH key found", code: "AUTH_ERROR", status: 400 });
         }
       }
 
@@ -152,7 +152,7 @@ export function createServersRouter(
       }
 
       if (!testResult.success) {
-        return res.status(401).json({ error: testResult.message });
+        return res.status(401).json({ success: false, error: testResult.message, code: "AUTH_ERROR", status: 401 });
       }
 
       const metrics = testResult.metrics!;
@@ -223,17 +223,17 @@ export function createServersRouter(
         message: `Connected to ${metrics.hostname}`,
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
   // POST /api/ssh/disconnect
   router.post("/ssh/disconnect", async (req: Request, res: Response) => {
     const { serverId } = req.body;
-    if (!serverId) return res.status(400).json({ error: "serverId required" });
+    if (!serverId) return res.status(400).json({ success: false, error: "serverId required", code: "VALIDATION_ERROR", status: 400 });
 
     const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(serverId) as any;
-    if (!conn) return res.status(404).json({ error: "Connection not found" });
+    if (!conn) return res.status(404).json({ success: false, error: "Connection not found", code: "NOT_FOUND", status: 404 });
 
     const key = `${conn.username}@${conn.host}:${conn.port}`;
     try {
@@ -281,7 +281,7 @@ export function createServersRouter(
   router.delete("/servers/:id", (req: Request, res: Response) => {
     const { id } = req.params;
     const server = db.prepare("SELECT * FROM servers WHERE id = ?").get(id) as any;
-    if (!server) return res.status(404).json({ error: "Server not found" });
+    if (!server) return res.status(404).json({ success: false, error: "Server not found", code: "SERVER_NOT_FOUND", status: 404 });
 
     db.prepare("DELETE FROM ssh_connections WHERE serverId = ?").run(id);
     db.prepare("DELETE FROM threshold_configs WHERE serverId = ?").run(id);
@@ -339,7 +339,7 @@ export function createServersRouter(
   router.post("/servers/:id/refresh", async (req: Request, res: Response) => {
     const { id } = req.params;
     const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-    if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+    if (!conn) return res.status(404).json({ success: false, error: "No SSH connection for this server", code: "NO_SSH", status: 404 });
 
     try {
       const key = `${conn.username}@${conn.host}:${conn.port}`;
@@ -391,7 +391,7 @@ export function createServersRouter(
       res.json({ success: true, metrics });
     } catch (error: any) {
       db.prepare("UPDATE servers SET status = 'offline' WHERE id = ?").run(id);
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -400,10 +400,10 @@ export function createServersRouter(
     const { id } = req.params;
     const { command } = req.body;
 
-    if (!command) return res.status(400).json({ error: "Command required" });
+    if (!command) return res.status(400).json({ success: false, error: "Command required", code: "VALIDATION_ERROR", status: 400 });
 
     const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-    if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+    if (!conn) return res.status(404).json({ success: false, error: "No SSH connection for this server", code: "NO_SSH", status: 404 });
 
     try {
       const key = `${conn.username}@${conn.host}:${conn.port}`;
@@ -443,7 +443,7 @@ export function createServersRouter(
 
       res.json({ success: true, ...result });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -461,10 +461,10 @@ export function createServersRouter(
     const { id } = req.params;
     const { script } = req.body;
 
-    if (!script) return res.status(400).json({ error: "Script required" });
+    if (!script) return res.status(400).json({ success: false, error: "Script required", code: "VALIDATION_ERROR", status: 400 });
 
     const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as any;
-    if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+    if (!conn) return res.status(404).json({ success: false, error: "No SSH connection for this server", code: "NO_SSH", status: 404 });
 
     try {
       const key = `${conn.username}@${conn.host}:${conn.port}`;
@@ -487,7 +487,7 @@ export function createServersRouter(
 
       res.json({ success: true, ...result });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -528,7 +528,7 @@ export function createServersRouter(
     const { lines, service } = req.query;
     try {
       const conn = db.prepare("SELECT * FROM ssh_connections WHERE serverId = ?").get(id) as SshConnectionDb | undefined;
-      if (!conn) return res.status(404).json({ error: "No SSH connection for this server" });
+      if (!conn) return res.status(404).json({ success: false, error: "No SSH connection for this server", code: "NO_SSH", status: 404 });
 
       const server = db.prepare("SELECT os FROM servers WHERE id = ?").get(id) as ServerDb | undefined;
       const osType = (server?.os === "windows" ? "windows" : "linux") as OSType;
@@ -546,7 +546,7 @@ export function createServersRouter(
 
       res.json({ logs: result.stdout });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ success: false, error: error.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 

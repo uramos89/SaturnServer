@@ -17,7 +17,7 @@ export function createThresholdsRouter(db: Database.Database): Router {
     const { thresholds } = req.body;
 
     if (!Array.isArray(thresholds)) {
-      return res.status(400).json({ error: "thresholds must be an array" });
+      return res.status(400).json({ success: false, error: "thresholds must be an array", code: "VALIDATION_ERROR", status: 400 });
     }
 
     db.prepare("DELETE FROM threshold_configs WHERE serverId = ?").run(id);

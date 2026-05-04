@@ -54,7 +54,7 @@ export function createContextpRouter(db: Database.Database): Router {
       ];
       res.json(tree);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ success: false, error: e.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -98,7 +98,7 @@ export function createContextpRouter(db: Database.Database): Router {
         message: `${synced} entries synced to contextp_entries`,
       });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ success: false, error: e.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -106,12 +106,12 @@ export function createContextpRouter(db: Database.Database): Router {
   router.get("/contextp/read", (req: Request, res: Response) => {
     const filePath = req.query.path as string;
     if (!filePath || filePath.includes(".."))
-      return res.status(400).json({ error: "Invalid path" });
+      return res.status(400).json({ success: false, error: "Invalid path", code: "VALIDATION_ERROR", status: 400 });
     try {
       const content = fs.readFileSync(filePath, "utf8");
       res.json({ content });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ success: false, error: e.message, code: "INTERNAL_ERROR", status: 500 });
     }
   });
 
@@ -148,7 +148,7 @@ export function createContextpRouter(db: Database.Database): Router {
   router.get("/contextp/contract/:name", (req: Request, res: Response) => {
     const { name } = req.params;
     const content = getContractContent(name.toUpperCase().replace(/-/g, "_"));
-    if (!content) return res.status(404).json({ error: "Contract not found" });
+    if (!content) return res.status(404).json({ success: false, error: "Contract not found", code: "NOT_FOUND", status: 404 });
     res.json({ name, content });
   });
 
@@ -174,7 +174,7 @@ export function createContextpRouter(db: Database.Database): Router {
   router.post("/contextp/audit", (req: Request, res: Response) => {
     const { id, date, type, domain, title, detail } = req.body;
     if (!id || !type || !domain || !title) {
-      return res.status(400).json({ error: "id, type, domain, and title are required" });
+      return res.status(400).json({ success: false, error: "id, type, domain, and title are required", code: "VALIDATION_ERROR", status: 400 });
     }
     const success = writeAuditLog({
       id,
