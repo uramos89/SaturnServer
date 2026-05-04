@@ -4,7 +4,7 @@
 > **Descripción:** Plataforma autónoma de administración de servidores (Linux & Windows) impulsada por IA.
 > **Stack:** Node.js, Express, React, Vite, Tailwind, Better-SQLite3, Google Gemini
 >
-> **Última actualización:** 2026-05-03
+> **Última actualización:** 2026-05-04
 
 ---
 
@@ -188,6 +188,135 @@ AWS/GCP/Azure scan, Identity Proxy.
 
 ---
 
+## 📦 SPRINT 17 — Security Headers + Fixes (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| P2-005 | Security Headers (HSTS, X-XSS-Protection, Permissions-Policy) | EP-10 | 3 | ✅ Done |
+| — | Fixes: auth TDZ, ContextP sync, mass assignment, XSS stored | — | 5 | ✅ Done |
+
+## 📦 SPRINT 18 — Auditoría Destructiva + Test Lab (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| — | Test Lab Docker (4 contenedores SSH) | — | 8 | ✅ Done |
+| — | Pentest militar: 150+ ataques, 94% score | EP-08 | 8 | ✅ Done |
+| — | STRIDE threat model (6 módulos, 17 amenazas) | EP-08 | 5 | ✅ Done |
+
+## 📦 SPRINT 19 — Security Remediation (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| P0-001 | Body parser limit + typeof validation | EP-10 | 3 | ✅ Done |
+| P0-002 | SSRF blocklist (metadata, hex, decimal, privadas) | EP-10 | 5 | ✅ Done |
+| P0-003 | SyntaxError handler (protocol smuggling) | EP-10 | 2 | ✅ Done |
+| P1-004 | Body limit 1MB middleware | EP-10 | 1 | ✅ Done |
+| P2-005 | Helmet HSTS + XSS-Protection + Permissions | EP-10 | 2 | ✅ Done |
+| — | 641 ataques auditados, 0 criticals | — | — | ✅ Done |
+
+## 📦 SPRINT 20 — E2E Validation + SSRF (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| — | SSRF over-blocking fix (permite IPs privadas, bloquea metadata) | EP-10 | 3 | ✅ Done |
+| — | Playwright E2E tests (3/3 pasan) | TD-003 | 5 | ✅ Done |
+| — | Server detail panel (config, eliminar nodo, SSH port) | — | 5 | ✅ Done |
+
+## 📦 SPRINT 21 — Compliance ISO 27001/NIST/OWASP (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| — | SATURN SECURITY SUITE v1.0 (SAST/SCA/DAST/FUZZ/PENTEST) | EP-08 | 8 | ✅ Done |
+| — | Security Gate criteria (GO/NO-GO) | EP-08 | 3 | ✅ Done |
+| — | Mapping NIST 800-53, OWASP Top 10, ISO 27001, MITRE ATT&CK | EP-08 | 5 | ✅ Done |
+
+## 📦 SPRINT 22 — Enterprise Compliance (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| PRO-SEC-TESTING-01 | Testing procedure (SAST/SCA/DAST/Fuzz/Pentest) | EP-08 | 5 | ✅ Done |
+| PRO-SEC-PENTEST-01 | Pentesting procedure (PTES 5 fases) | EP-08 | 3 | ✅ Done |
+| CHK-SEC-RELEASE-01 | Release checklist (15 mandatory points) | EP-08 | 3 | ✅ Done |
+| REG-SEC-VULN-01 | Vulnerability registry (8 closed, 0 active) | EP-08 | 2 | ✅ Done |
+| POL-SEC-SSDLC-01 | SSDLC policy | EP-08 | 3 | ✅ Done |
+| — | CI/CD ready: automatic pipeline gates | — | 3 | ✅ Done |
+
+## 📦 SPRINT 23 — Competitive Analysis + CI/CD (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| — | Comparative analysis Saturn vs 9 platforms | — | 5 | ✅ Done |
+| — | Gap analysis (lo único de Saturn vs lo que falta) | — | 5 | ✅ Done |
+| — | CI/CD pipeline script | — | 3 | ✅ Done |
+
+## 📦 SPRINT 24 — Roadmap Autonomía + AIOps (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| — | AIOps Comparative: Dynatrace Davis, Datadog Watchdog, Watsonx, NebulaOps | — | 5 | ✅ Done |
+| — | Autonomous Infrastructure Maturity Model (Niveles 0-5) | — | 3 | ✅ Done |
+| — | Roadmap 3 fases: Lite → Semi-Autonomous → Autonomous | — | 3 | ✅ Done |
+
+## 📦 SPRINT 25 — Prometheus + Grafana (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| — | /api/metrics endpoint (Prometheus exposition format) | EP-13 | 5 | ✅ Done |
+| — | 9 métricas: servers, online, cpu, mem, disk, incidents, skills, users, audit | EP-13 | 3 | ✅ Done |
+| — | Grafana dashboard (gauges CPU/RAM/Disk + stats) | EP-13 | 5 | ✅ Done |
+| — | Prometheus scrape config (target UP ✅) | EP-13 | 3 | ✅ Done |
+| — | Roadmap Nivel 4+ documentado | — | 3 | ✅ Done |
+
+## 📦 SPRINT 26 — ML Anomaly Detection (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| — | Python anomaly-engine.py (IsolationForest, scikit-learn) | EP-06 | 8 | ✅ Done |
+| — | POST /api/neural/anomaly endpoint | EP-06 | 5 | ✅ Done |
+| — | ML Engine entrenado con 1000 muestras sintéticas | EP-06 | 5 | ✅ Done |
+| — | Fallback threshold-based | EP-06 | 2 | ✅ Done |
+
+## 📦 SPRINT 27 — Root Cause Analysis + Prophet (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| — | POST /api/neural/rca: Root Cause Analysis con LLM | EP-06 | 8 | ✅ Done |
+| — | GET /api/neural/predict/:metric: Predicción con Prophet | EP-06 | 8 | ✅ Done |
+| — | Python prediction-engine.py (time-series forecasting) | EP-06 | 5 | ✅ Done |
+| — | Fallback estadístico (tendencia basada en históricos) | EP-06 | 3 | ✅ Done |
+
+## 📦 SPRINT 28 — Frontend Fixes + Server Detail (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| — | Server detail panel: Config tab (SSH + thresholds) | — | 5 | ✅ Done |
+| — | Delete server with try/catch | — | 2 | ✅ Done |
+| — | Port field orange highlight | — | 1 | ✅ Done |
+| — | Fix encryptCredential import (ESM) | — | 2 | ✅ Done |
+| — | Fix AddNodeModal port state + password toggle | — | 3 | ✅ Done |
+
+## 📦 SPRINT 29 — Frontend Remediation (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| B-001 | `E.map is not a function` — Safe array fallbacks | — | 3 | ✅ Done |
+| B-002 | `r.filter is not a function` — Safe array fallbacks | — | 2 | ✅ Done |
+| B-003 | ContextP tab no accesible — Error handling + empty state | — | 2 | ✅ Done |
+| B-004 | Notifications con 3 errores JS — Fixed | — | 3 | ✅ Done |
+| B-005 | Administration con 11 errores JS — Fixed | — | 3 | ✅ Done |
+| B-006 | Skills sin contenido real — Empty state message | — | 2 | ✅ Done |
+| B-007 | Terminal pobre — History up/down + persistence | — | 5 | ✅ Done |
+| B-008 | Resultados desaparecen — Tab data cache | — | 3 | ✅ Done |
+
+## 📦 SPRINT 30 — Session Security (Completado ✅)
+
+| ID | Título | Feature Ref | Esfuerzo | Estado |
+|---|---|---|---|---|
+| B-009 | Session timeout por inactividad (15 min) | EP-10 | 5 | ✅ Done |
+| B-010 | Bloqueo de IP tras intentos fallidos (5 intentos, 5 min) | EP-10 | 5 | ✅ Done |
+
+---
+
 ## 📊 Resumen de Brechas del README
 
 Según el gap analysis (`scrum/releases/GAP_ANALYSIS.md`), de las ~30 features del README:
@@ -198,5 +327,16 @@ Según el gap analysis (`scrum/releases/GAP_ANALYSIS.md`), de las ~30 features d
 | ⚠️ Parcial | 3 |
 | ❌ No implementado | 10 |
 | **Total** | **30** |
+
+## 📊 Sprint Metrics (2026-05-04)
+
+| Métrica | Valor |
+|---|---|
+| Sprints completados | 30 |
+| Bugs corregidos (Sprint 29-30) | 10 (B-001 a B-010) |
+| Push a GitHub | ✅ Último commit: `137640e` B-008 Results persistence |
+| Build | ✅ Compila sin errores |
+
+> Próximo sprint: Sprint 31 — Pendiente definir basado en backlog técnico.
 
 Las 10 brechas están distribuidas en los Sprints 7-10 arriba.
