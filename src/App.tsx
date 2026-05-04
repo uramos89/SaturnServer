@@ -389,7 +389,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
           model: selectedModel,
           apiKey: apiKey || undefined,
           endpoint: endpoint || undefined,
-          name: providers.find(p => p.id === selectedProvider)?.name
+          name: (providers || []).find(p => p.id === selectedProvider)?.name
         })
       });
       const data = await res.json();
@@ -502,7 +502,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
     }
   };
 
-  const provider = providers.find(p => p.id === selectedProvider);
+  const provider = (providers || []).find(p => p.id === selectedProvider);
 
   // Group providers by tier
   const tierOrder = ['frontier', 'hyperscaler', 'aggregator', 'inference', 'value', 'asia', 'specialized', 'selfhosted'];
@@ -517,7 +517,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
     selfhosted: 'Self-Hosted / Local'
   };
   const groupedProviders = tierOrder
-    .map(tier => ({ tier, label: tierLabels[tier], items: providers.filter(p => p.tier === tier) }))
+    .map(tier => ({ tier, label: tierLabels[tier], items: (providers || []).filter(p => p.tier === tier) }))
     .filter(g => g.items.length > 0);
 
   if (adminSaved) {
@@ -1497,7 +1497,8 @@ const SkillsView = ({ skills, setSkills }: { skills: any[], setSkills: any }) =>
     setSyncingSkills(true);
     try {
       const res = await api('/api/skills');
-      setSkills(await res.json());
+      const data = await res.json();
+      setSkills(Array.isArray(data) ? data : []);
     } catch {} finally {
       setSyncingSkills(false);
     }
@@ -1878,12 +1879,15 @@ export default function App() {
         setSshConnections(Array.isArray(sshData) ? sshData : []);
         const cData = await cRes.json();
         setCloudCreds(Array.isArray(cData) ? cData : []);
-        setSkills(await skRes.json());
-        setProactiveActivities(await pRes.json());
-        setContextPFiles(await cpRes.json());
-        const configs = await rRes.json();
-        setRemediationConfigs(configs);
-        setGlobalConfig(configs.find((c: any) => c.serverId === 'global') || { mode: 'auto', threshold: 0.7 });
+        const skillsData = await skRes.json();
+        setSkills(Array.isArray(skillsData) ? skillsData : []);
+        const pData = await pRes.json();
+        setProactiveActivities(Array.isArray(pData) ? pData : []);
+        const cpData = await cpRes.json();
+        setContextPFiles(Array.isArray(cpData) ? cpData : []);
+        const rData = await rRes.json();
+        setRemediationConfigs(Array.isArray(rData) ? rData : []);
+        setGlobalConfig((configs || []).find((c: any) => c.serverId === 'global') || { mode: 'auto', threshold: 0.7 });
       } catch {} finally { setLoading(false); }
     };
     fetchData();
@@ -1940,8 +1944,8 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
       });
       const res = await api('/api/remediation/config');
       const configs = await res.json();
-      setRemediationConfigs(configs);
-      if (!serverId || serverId === 'global') setGlobalConfig(configs.find((c: any) => c.serverId === 'global'));
+      setRemediationConfigs(Array.isArray(configs) ? configs : []);
+      if (!serverId || serverId === 'global') setGlobalConfig((configs || []).find((c: any) => c.serverId === 'global'));
     } catch {}
   };
 
@@ -1955,7 +1959,7 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
       if (res.ok) {
         // Refetch incidents
         const iRes = await api('/api/incidents');
-        setIncidents(await iRes.json());
+        const incidentsData = await iRes.json(); setIncidents(Array.isArray(incidentsData) ? incidentsData : []);
       }
     } catch (e) {
       console.error("Failed to analyze incident", e);
@@ -1969,7 +1973,7 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
       const res = await api(`/api/incidents/${incidentId}/resolve`, { method: 'POST' });
       if (res.ok) {
         const iRes = await api('/api/incidents');
-        setIncidents(await iRes.json());
+        const incidentsData = await iRes.json(); setIncidents(Array.isArray(incidentsData) ? incidentsData : []);
       }
     } catch (e) {
       console.error("Failed to resolve incident", e);
@@ -1986,7 +1990,7 @@ const handleLogin = (u: UserData, token?: string, refreshToken?: string) => {
 
   // ── Live Metrics Dashboard ────────────────────────────────────────
   const selectedForDashboard = dashboardServerId
-    ? servers.find(s => s.id === dashboardServerId) || null
+    ? (servers || []).find(s => s.id === dashboardServerId) || null
     : servers.length > 0 ? servers[0] : null;
 
   // Re-subscribe when dashboard server changes
@@ -2228,7 +2232,7 @@ let _neuralResultCache: any = null;
 
       <AnimatePresence>
         {showAddServer && <AddNodeModal onClose={() => setShowAddServer(false)} onSuccess={() => {
-          api('/api/servers').then(r => r.json()).then(setServers);
+          api('/api/servers').then(r => r.json()).then(d => setServers(Array.isArray(d) ? d : []));
         }} />}
       </AnimatePresence>
     </div>
@@ -2334,7 +2338,7 @@ let _neuralResultCache: any = null;
 
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl"><div className="flex items-center gap-4"><button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl"><ChevronLeft className="" size={18} /></button><div><div className="flex items-center gap-2 mb-1"><h2 className="text-sm font-black uppercase tracking-widest">{selectedServer?.name}</h2><div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer?.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} /></div><p className="text-[10px] font-medium text-slate-500 uppercase">{selectedServer?.ip} • {selectedServer?.os}</p></div></div><div className="flex items-center gap-3"><button onClick={() => handleRefreshServer(false)} disabled={syncingServer} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-white/10 transition-colors disabled:opacity-50"><RefreshCw size={14} className={syncingServer ? "animate-spin" : ""} /> Sync</button><select value={remediationConfigs.find(c => c.serverId === selectedServer?.id)?.mode || 'global'} onChange={(e) => handleUpdateRemediationMode(selectedServer!.id, e.target.value)} className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none cursor-pointer"><option value="global">Mode: Global</option><option value="auto">Mode: Auto</option><option value="skill">Mode: Skill</option><option value="manual">Mode: Manual</option></select></div></div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-black/40 border border-white/5 p-6 rounded-2xl"><div className="flex items-center gap-4"><button onClick={() => setSelectedServer(null)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-xl"><ChevronLeft className="" size={18} /></button><div><div className="flex items-center gap-2 mb-1"><h2 className="text-sm font-black uppercase tracking-widest">{selectedServer?.name}</h2><div className={cn("w-2 h-2 rounded-full animate-pulse", selectedServer?.status === 'online' ? "bg-emerald-500" : "bg-rose-500")} /></div><p className="text-[10px] font-medium text-slate-500 uppercase">{selectedServer?.ip} • {selectedServer?.os}</p></div></div><div className="flex items-center gap-3"><button onClick={() => handleRefreshServer(false)} disabled={syncingServer} className="flex items-center gap-2 px-4 py-2 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-xl hover:bg-white/10 transition-colors disabled:opacity-50"><RefreshCw size={14} className={syncingServer ? "animate-spin" : ""} /> Sync</button><select value={(remediationConfigs || []).find(c => c.serverId === selectedServer?.id)?.mode || 'global'} onChange={(e) => handleUpdateRemediationMode(selectedServer!.id, e.target.value)} className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase text-orange-500 outline-none cursor-pointer"><option value="global">Mode: Global</option><option value="auto">Mode: Auto</option><option value="skill">Mode: Skill</option><option value="manual">Mode: Manual</option></select></div></div>
         <div className="flex items-center gap-1 overflow-x-auto pb-2 custom-scrollbar">
           {tabs.map(t => {
             const Icon = t.icon;
@@ -2383,7 +2387,7 @@ let _neuralResultCache: any = null;
       setLoading(true);
       try {
         const res = await api(`/api/thresholds/${selectedServer?.id}`);
-        setConfigs(await res.json());
+        const cfgData = await res.json(); setConfigs(Array.isArray(cfgData) ? cfgData : []);
       } catch (e) { console.error(e); }
       setLoading(false);
     };
@@ -2414,7 +2418,7 @@ let _neuralResultCache: any = null;
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {metrics.map(m => {
-            const config = configs.find(c => c.metric === m.id) || { value: 80, severity: 'high' };
+            const config = (configs || []).find(c => c.metric === m.id) || { value: 80, severity: 'high' };
             return (
               <div key={m.id} className="p-6 rounded-2xl bg-black/40 border border-white/5 space-y-4">
                 <div className="flex items-center justify-between">
@@ -3248,7 +3252,7 @@ let _neuralResultCache: any = null;
       try {
         const res = await api('/api/proactive');
         const data = await res.json();
-        setProactiveActivities(data);
+        setProactiveActivities(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error(e);
       }
@@ -3433,7 +3437,7 @@ let _neuralResultCache: any = null;
         const data = await res.json();
         if (data.success) {
           setDiscoveredInstances(data.instances || []);
-          api('/api/servers').then(r => r.json()).then(setServers).catch(() => {});
+          api('/api/servers').then(r => r.json()).then(d => setServers(Array.isArray(d) ? d : [])).catch(() => {});
         } else {
           alert(`Scan failed: ${data.error}`);
         }
@@ -3716,7 +3720,7 @@ let _neuralResultCache: any = null;
         .catch(() => {});
     }, [aiConfig]);
 
-    const settingsProvider = availableProviders.find(p => p.id === settingsProviderId);
+    const settingsProvider = (availableProviders || []).find(p => p.id === settingsProviderId);
 
     const handleSaveAi = async () => {
       if (!localAiConfig) return;
@@ -3816,7 +3820,7 @@ let _neuralResultCache: any = null;
                 onChange={(e) => {
                   setSettingsProviderId(e.target.value);
                   setSettingsModel('');
-                  const prov = availableProviders.find(p => p.id === e.target.value);
+                  const prov = (availableProviders || []).find(p => p.id === e.target.value);
                   if (prov && prov.models.length > 0) setSettingsModel(prov.models[0]);
                 }}
                 className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-orange-500 transition-colors"

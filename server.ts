@@ -617,13 +617,21 @@ async function startServer() {
     next();
   });
 
+  // ── Trust proxy for accurate IP detection ──
+  app.set('trust proxy', 1);
+
   const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 1000,
+    windowMs: 60 * 1000,
+    max: 500,
     message: {
-      error: "Too many requests from this IP, please try again after 15 minutes",
+      error: "Too many requests from this IP, please try again after 1 minute",
     },
+    keyGenerator: (req) => {
+      return req.ip || req.connection?.remoteAddress || 'unknown';
+    }
   });
+
+  // Apply rate limiter to API routes (not static assets)
   app.use("/api/", globalLimiter);
 
   const loginLimiter = rateLimit({
