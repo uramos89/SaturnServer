@@ -3547,7 +3547,7 @@ let _neuralResultCache: any = null;
       try {
         const res = await api('/api/credentials');
         const data = await res.json();
-        setCloudCreds(data);
+        setCloudCreds(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error(e);
       }
