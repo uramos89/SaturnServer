@@ -189,9 +189,9 @@ export function createServersRouter(
       );
 
       const connId = `ssh-${serverId}`;
-      const encKey = require("../lib/server-helpers.js") as typeof import("../lib/server-helpers.js");
-      const encryptedKeyVal = privateKey ? encKey.encryptCredential(privateKey) : null;
-      const encryptedPassVal = password ? encKey.encryptCredential(password) : null;
+      // Already imported at top
+      const encryptedKeyVal = privateKey ? encryptCredential(privateKey) : null;
+      const encryptedPassVal = password ? encryptCredential(password) : null;
 
       db.prepare(
         `INSERT OR REPLACE INTO ssh_connections 
