@@ -300,6 +300,39 @@ export function createServersRouter(
     res.json({ success: true, message: `Server ${server.name} deleted` });
   });
 
+  // ── PUT /api/servers/:id/config — Update server configuration ────
+  router.put("/servers/:id/config", (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { username, password, privateKey, port, thresholds } = req.body;
+    
+    // Update SSH credentials
+    if (username || password || privateKey || port) {
+      const fields: string[] = [];
+      const values: any[] = [];
+      if (username) { fields.push("username = ?"); values.push(username); }
+      if (password) { fields.push("encryptedPassword = ?"); values.push(password); }
+      if (privateKey) { fields.push("encryptedKey = ?"); values.push(privateKey); }
+      if (port) { fields.push("port = ?"); values.push(parseInt(port as string)); }
+      values.push(id);
+      if (fields.length > 0) {
+        db.prepare(`UPDATE ssh_connections SET ${fields.join(", ")} WHERE serverId = ?`).run(...values);
+      }
+    }
+    
+    // Update thresholds
+    if (Array.isArray(thresholds)) {
+      db.prepare("DELETE FROM threshold_configs WHERE serverId = ?").run(id);
+      const insert = db.prepare("INSERT INTO threshold_configs (serverId, metric, warning, critical) VALUES (?, ?, ?, ?)");
+      for (const t of thresholds) {
+        insert.run(id, t.metric, t.warning, t.critical);
+      }
+    }
+    
+    // Mark connection for refresh
+    db.prepare("UPDATE ssh_connections SET status = 'disconnected' WHERE serverId = ?").run(id);
+    res.json({ success: true, message: "Configuration saved. Reconnect to apply SSH changes." });
+  });
+
   // ── Server Metrics / Refresh / Exec ──────────────────────────────────
 
   // POST /api/servers/:id/refresh
