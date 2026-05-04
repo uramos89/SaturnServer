@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { api } from '../lib/utils';
 import { motion } from "motion/react";
 import {
   Server, Monitor, Users, CalendarClock, Activity, FileText,
@@ -92,10 +93,10 @@ export default function AdminDashboard() {
 
   const stats = {
     total: servers.length,
-    online: servers.filter(s => s.status === "online").length,
-    degraded: servers.filter(s => s.status === "degraded").length,
-    offline: servers.filter(s => s.status === "offline").length,
-    unmanaged: servers.filter(s => s.status === "unmanaged").length,
+    online: (servers || []).filter(s => s.status === "online").length,
+    degraded: (servers || []).filter(s => s.status === "degraded").length,
+    offline: (servers || []).filter(s => s.status === "offline").length,
+    unmanaged: (servers || []).filter(s => s.status === "unmanaged").length,
   };
 
   if (selectedServer) {
@@ -172,7 +173,7 @@ export default function AdminDashboard() {
             <p className="text-slate-400">No servers connected</p>
             <p className="text-slate-500 text-sm mt-1">Connect your first server to start managing it</p>
           </div>
-        ) : servers.map((server, i) => (
+        ) : (servers || []).map((server, i) => (
           <motion.div
             key={server.id}
             initial={{ opacity: 0, y: 10 }}
@@ -200,15 +201,15 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2 text-xs">
                   <Cpu className="w-3 h-3 text-slate-500" />
-                  <span className={server.cpu > 80 ? "text-red-400" : "text-slate-400"}>{server.cpu.toFixed(1)}%</span>
+                  <span className={(server.cpu || 0) > 80 ? "text-red-400" : "text-slate-400"}>{(server.cpu || 0).toFixed(1)}%</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <Memory className="w-3 h-3 text-slate-500" />
-                  <span className={server.memory > 80 ? "text-red-400" : "text-slate-400"}>{server.memory.toFixed(1)}%</span>
+                  <span className={(server.memory || 0) > 80 ? "text-red-400" : "text-slate-400"}>{(server.memory || 0).toFixed(1)}%</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   <Hdd className="w-3 h-3 text-slate-500" />
-                  <span className={server.disk > 80 ? "text-red-400" : "text-slate-400"}>{server.disk.toFixed(1)}%</span>
+                  <span className={(server.disk || 0) > 80 ? "text-red-400" : "text-slate-400"}>{(server.disk || 0).toFixed(1)}%</span>
                 </div>
                 {server.status === "online" && (
                   <button
