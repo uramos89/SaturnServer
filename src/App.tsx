@@ -104,13 +104,13 @@ const LoginView = ({ onLogin, t }: { onLogin: (u: UserData, token?: string, refr
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md immersive-card p-8"
+        className="w-full max-w-md immersive-card p-8 bg-white/5 border border-white/10 ring-1 ring-orange-500/20 shadow-[0_0_30px_rgba(249,115,22,0.15)]"
       >
         <div className="text-center mb-8">
           <div className="w-16 h-16 mx-auto mb-6 rounded-full border-2 border-orange-500 flex items-center justify-center shadow-[0_0_30px_rgba(249,115,22,0.3)]">
             <div className="w-8 h-1.5 bg-orange-500 rounded-full" />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-[0.2em] mb-2 uppercase">SATURN</h1>
+          <h1 className="text-2xl font-black text-white tracking-[0.2em] mb-2 uppercase drop-shadow-[0_0_10px_rgba(249,115,22,0.5)]">SATURN</h1>
           <p className="text-slate-500 text-xs uppercase tracking-widest">Neural Infrastructure Core</p>
         </div>
 
@@ -123,7 +123,7 @@ const LoginView = ({ onLogin, t }: { onLogin: (u: UserData, token?: string, refr
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                className="w-full bg-slate-800/80 border border-orange-500/30 rounded-xl p-3 pl-10 text-xs text-white focus:ring-1 focus:ring-orange-500 outline-none placeholder-gray-500"
                 placeholder="admin"
               />
             </div>
@@ -136,7 +136,7 @@ const LoginView = ({ onLogin, t }: { onLogin: (u: UserData, token?: string, refr
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                className="w-full bg-slate-800/80 border border-orange-500/30 rounded-xl p-3 pl-10 text-xs text-white focus:ring-1 focus:ring-orange-500 outline-none placeholder-gray-500"
                 placeholder="••••••••"
               />
             </div>
@@ -162,7 +162,10 @@ const LoginView = ({ onLogin, t }: { onLogin: (u: UserData, token?: string, refr
 // ── User Manager Component ────────────────────────────────────────────
 const UserManager = ({ t }: { t: (k: string) => string }) => {
   const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    const saved = localStorage.getItem("saturn-user");
+    return saved ? false : true;
+  });
   const [showCreate, setShowCreate] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -690,7 +693,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
                         value={apiKey}
                         onChange={(e) => { setApiKey(e.target.value); }}
                         placeholder={t('onboarding.apiKey.placeholder')}
-                        className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none font-mono"
+                        className="w-full bg-slate-800/80 border border-orange-500/30 rounded-xl p-3 pl-10 text-xs text-white focus:ring-1 focus:ring-orange-500 outline-none placeholder-gray-500 font-mono"
                       />
                     </div>
                     <button
@@ -909,7 +912,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
                   value={adminUsername}
                   onChange={(e) => setAdminUsername(e.target.value)}
                   placeholder="admin"
-                  className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                  className="w-full bg-slate-800/80 border border-orange-500/30 rounded-xl p-3 pl-10 text-xs text-white focus:ring-1 focus:ring-orange-500 outline-none placeholder-gray-500"
                 />
               </div>
             </div>
@@ -947,7 +950,7 @@ const OnboardingWizard = ({ onComplete, t }: { onComplete: () => void, t: (k: st
                   value={adminConfirm}
                   onChange={(e) => setAdminConfirm(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-black/60 border border-white/10 rounded-xl p-3 pl-10 text-xs focus:ring-1 focus:ring-orange-500 outline-none"
+                  className="w-full bg-slate-800/80 border border-orange-500/30 rounded-xl p-3 pl-10 text-xs text-white focus:ring-1 focus:ring-orange-500 outline-none placeholder-gray-500"
                 />
               </div>
             </div>
@@ -1216,7 +1219,7 @@ const ServerCard = ({ server, onClick }: { server: ManagedServer, onClick: () =>
         {server.status}
       </div>
     </div>
-    <h3 className="text-xs font-black uppercase tracking-widest text-white mb-1 truncate">{server.name}</h3>
+    <h3 className="text-xs font-black uppercase tracking-widest text-black mb-1 truncate">{server.name}</h3>
     <p className="text-[10px] text-slate-500 font-mono mb-4">{server.ip}</p>
     <div className="grid grid-cols-2 gap-2">
       <div className="p-2 rounded-lg bg-white/5">
@@ -1666,7 +1669,10 @@ const ContextPView = () => {
 
 const AuditView = () => {
   const [logs, setLogs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    const saved = localStorage.getItem("saturn-user");
+    return saved ? false : true;
+  });
 
   useEffect(() => {
     api('/api/audit')
@@ -1787,7 +1793,10 @@ export default function App() {
   const [remediationConfigs, setRemediationConfigs] = useState<any[]>([]);
   const [globalConfig, setGlobalConfig] = useState<any>({ mode: 'auto', threshold: 0.7 });
   const [globalThresholds, setGlobalThresholds] = useState<Record<string,number>>({ cpu: 90, memory: 85, disk: 85 });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    const saved = localStorage.getItem("saturn-user");
+    return saved ? false : true;
+  });
   const [analyzingIncident, setAnalyzingIncident] = useState<string | null>(null);
 
   // Real-time Metrics Handler
@@ -1841,13 +1850,19 @@ export default function App() {
           api('/api/ai/config'), api('/api/ssh/connections'), api('/api/credentials'), api('/api/skills'),
           api('/api/remediation/config'), api('/api/proactive'), api('/api/contextp/files')
         ]);
-        setServers(await sRes.json());
-        setIncidents(await iRes.json());
-        setAuditLogs(await aRes.json());
-        setNotifications(await nRes.json());
+        const sData = await sRes.json();
+        setServers(Array.isArray(sData) ? sData : []);
+        const iData = await iRes.json();
+        setIncidents(Array.isArray(iData) ? iData : []);
+        const aData = await aRes.json();
+        setAuditLogs(Array.isArray(aData) ? aData : []);
+        const nData = await nRes.json();
+        setNotifications(Array.isArray(nData) ? nData : []);
         setAiConfig(await aiRes.json());
-        setSshConnections(await sshRes.json());
-        setCloudCreds(await cRes.json());
+        const sshData = await sshRes.json();
+        setSshConnections(Array.isArray(sshData) ? sshData : []);
+        const cData = await cRes.json();
+        setCloudCreds(Array.isArray(cData) ? cData : []);
         setSkills(await skRes.json());
         setProactiveActivities(await pRes.json());
         setContextPFiles(await cpRes.json());
@@ -1963,9 +1978,9 @@ export default function App() {
       {/* Top Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title={t('stats.total')} value={servers.length} icon={Server} color="text-blue-500" />
-        <StatCard title={t('stats.online')} value={servers.filter(s => s.status === 'online').length} icon={CheckCircle2} color="text-emerald-500" />
-        <StatCard title={t('stats.incidents')} value={incidents.filter(i => i.status === 'open').length} icon={AlertTriangle} color="text-rose-500" />
-        <StatCard title={t('stats.ssh')} value={sshConnections.filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
+        <StatCard title={t('stats.online')} value={servers&&servers.filter(s => s.status === 'online').length} icon={CheckCircle2} color="text-emerald-500" />
+        <StatCard title={t('stats.incidents')} value={incidents&&incidents.filter(i => i.status === 'open').length} icon={AlertTriangle} color="text-rose-500" />
+        <StatCard title={t('stats.ssh')} value={sshConnections&&sshConnections.filter(c => c.status === 'connected').length} icon={Zap} color="text-orange-500" />
       </div>
 
       {/* Server Selector */}
@@ -2132,6 +2147,9 @@ export default function App() {
     </div>
   );
 
+// ── Neural Result Cache (persists across re-renders) ───────────
+let _neuralResultCache: any = null;
+
   const ServersListView = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -2173,6 +2191,7 @@ export default function App() {
     const [tabData, setTabData] = useState<any>(null);
     const [loadingTab, setLoadingTab] = useState(false);
     const [syncingServer, setSyncingServer] = useState(false);
+    const [lastRefresh, setLastRefresh] = useState(0);
 
     const handleRefreshServer = async (silent = false) => {
       if (!selectedServer) return;
@@ -2485,7 +2504,7 @@ export default function App() {
   const ServerSummaryTab = () => {
     const [prompt, setPrompt] = useState('');
     const [running, setRunning] = useState(false);
-    const [neuralResult, setNeuralResult] = useState<any>(null);
+    const [neuralResult, setNeuralResult] = useState<any>(() => _neuralResultCache);
 
     const handleRunNeural = async () => {
       if (!prompt || !selectedServer) return;
@@ -2498,9 +2517,9 @@ export default function App() {
           body: JSON.stringify({ prompt, serverId: selectedServer.id })
         });
         const data = await res.json();
-        setNeuralResult(data);
+        setNeuralResult(data); _neuralResultCache = data;
       } catch (e: any) {
-        setNeuralResult({ success: false, error: e.message, explanation: 'Failed to execute' });
+        const errResult = { success: false, error: e.message, explanation: 'Failed to execute' }; setNeuralResult(errResult); _neuralResultCache = errResult;
       }
       setRunning(false);
     };
@@ -2540,7 +2559,7 @@ export default function App() {
           <div className="p-6 rounded-2xl bg-orange-500/5 border border-orange-500/10 transition-all">
             <div className="flex items-center gap-2 mb-4">
               <Brain size={16} className="text-orange-500" />
-              <h3 className="text-[10px] font-black uppercase text-orange-500">Neural Engine — Prompt to SSH</h3>
+              <h3 className="text-[10px] font-black uppercase text-orange-500">Neural Engine</h3>
             </div>
             <p className="text-[9px] text-slate-500 mb-4">Ask in natural language. ARES will generate the command, execute it via SSH, and explain the result.</p>
             
@@ -2576,9 +2595,14 @@ export default function App() {
               </button>
             </div>
 
-            {/* Results */}
+            {/* Results - persistent */}
             {neuralResult && (
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 p-4 rounded-xl bg-black/40 border border-orange-500/20">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[9px] font-black uppercase text-orange-400">Last Response</span>
+                  <button onClick={() => { setNeuralResult(null); _neuralResultCache = null; }} className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded text-[8px] text-slate-500 hover:text-white transition-colors">Clear</button>
+                </div>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
                 {/* AI Explanation */}
                 {neuralResult.explanation && (
                   <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/10">
@@ -2621,7 +2645,7 @@ export default function App() {
                     <pre className="text-[11px] font-mono text-rose-300 whitespace-pre-wrap break-all">{neuralResult.error}</pre>
                   </div>
                 )}
-
+                </div>
                 {/* Risks */}
                 {neuralResult.risks && neuralResult.risks.length > 0 && (
                   <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10">
@@ -3137,7 +3161,7 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-orange-500/10 rounded-xl text-orange-500"><HardDrive size={20} /></div>
                 <div>
-                  <h3 className="text-xs font-black uppercase tracking-widest text-white">{row.name || row.device || 'Disk Unit'}</h3>
+                  <h3 className="text-xs font-black uppercase tracking-widest text-black">{row.name || row.device || 'Disk Unit'}</h3>
                   <p className="text-[9px] text-slate-500 uppercase tracking-widest">{row.type || 'Physical'} • {row.size || 'Unknown Size'}</p>
                 </div>
               </div>
@@ -3591,7 +3615,7 @@ export default function App() {
       try {
         const res = await api('/api/notifications');
         const data = await res.json();
-        setWebhooks(data.filter((n: any) => n.type === 'webhook'));
+        setWebhooks(data.filter((n: any) => n && n.type === 'webhook'));
       } catch {}
       setFetchingWebhooks(false);
     };
@@ -3965,7 +3989,10 @@ export default function App() {
 
   const NotificationsView = () => {
     const [notifs, setNotifs] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(() => {
+    const saved = localStorage.getItem("saturn-user");
+    return saved ? false : true;
+  });
 
     useEffect(() => {
       api('/api/notifications')
